@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-label="">
+  <defs>
+    <linearGradient id="hbg" x1="0" y1="0" x2="0.35" y2="1">
+      <stop offset="0%" stop-color="#1a2430"/>
+      <stop offset="55%" stop-color="#101820"/>
+      <stop offset="100%" stop-color="#090D11"/>
+    </linearGradient>
+  </defs>
+  <rect width="1600" height="900" fill="url(#hbg)"/>
+</svg>
