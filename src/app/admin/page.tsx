@@ -9,11 +9,11 @@ import {
   Users,
 } from "lucide-react";
 import { AnalyticsRevenueChart } from "@/components/admin/analytics-revenue-chart";
+import { OrderStatusDonut } from "@/components/admin/dashboard-charts";
 import {
-  CategorySalesBars,
-  OrderStatusDonut,
-  TopProductsBars,
-} from "@/components/admin/dashboard-charts";
+  CategorySalesBreakdown,
+  TopProductsBreakdown,
+} from "@/components/admin/dashboard-breakdown";
 import { DashboardStatCard } from "@/components/admin/dashboard-stat-card";
 import { Badge } from "@/components/ui/badge";
 import { statusColor } from "@/lib/admin/order-status-colors";
@@ -66,7 +66,7 @@ export default async function AdminOverviewPage() {
         </p>
       ) : null}
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <DashboardStatCard
           label="Revenue"
           value={formatCurrency(metrics.revenue)}
@@ -140,11 +140,9 @@ export default async function AdminOverviewPage() {
         </Panel>
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-2">
+      <section className="grid gap-3 lg:grid-cols-2 lg:gap-4">
         <Panel title="Sales by category" caption="Revenue mix across the catalog">
-          <div className="px-2 py-4 sm:px-4">
-            <CategorySalesBars data={metrics.salesByCategory} />
-          </div>
+          <CategorySalesBreakdown data={metrics.salesByCategory} />
         </Panel>
 
         <Panel
@@ -152,13 +150,11 @@ export default async function AdminOverviewPage() {
           caption="Best performers by revenue"
           action={{ href: "/admin/products", label: "Catalog" }}
         >
-          <div className="px-2 py-4 sm:px-4">
-            <TopProductsBars data={metrics.topProducts} />
-          </div>
+          <TopProductsBreakdown data={metrics.topProducts} />
         </Panel>
       </section>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
         <DashboardStatCard
           label="Open quotes"
           value={String(metrics.pendingQuotes)}
@@ -316,10 +312,10 @@ function Panel({
 }) {
   return (
     <section
-      className={`overflow-hidden rounded-sm border border-border-gray bg-white ${className ?? ""}`}
+      className={`min-w-0 overflow-hidden rounded-sm border border-border-gray bg-white ${className ?? ""}`}
     >
-      <div className="flex items-start justify-between gap-3 border-b border-border-gray px-4 py-3.5 sm:px-5">
-        <div>
+      <div className="flex items-start justify-between gap-2 border-b border-border-gray px-3 py-3.5 sm:gap-3 sm:px-5">
+        <div className="min-w-0">
           <h2 className="font-heading text-sm font-semibold uppercase tracking-wide text-dark-charcoal">
             {title}
           </h2>

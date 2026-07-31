@@ -5,12 +5,17 @@ import Link from "next/link";
 import { ChevronDown, X } from "lucide-react";
 import { NAV_CATEGORIES, SITE_CONFIG } from "@/lib/data/seed-data";
 import { cn } from "@/lib/utils";
+import { logout } from "@/lib/actions/auth";
 import { Button } from "@/components/ui/button";
 import { HomeButton } from "@/components/layout/home-button";
 
 export interface MobileNavigationProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Admins get a shortcut into the CRM; the desktop header has no equivalent. */
+  isAdmin?: boolean;
+  /** The utility bar is desktop-only, so auth lives here on small screens. */
+  signedIn?: boolean;
 }
 
 const EXTRA_LINKS = [
@@ -19,10 +24,17 @@ const EXTRA_LINKS = [
   { label: "Resources", href: "/resources" },
   { label: "Bulk Orders", href: "/bulk-orders" },
   { label: "Request a Quote", href: "/quote" },
-  { label: "Sign In / Register", href: "/account" },
 ] as const;
 
-export function MobileNavigation({ open, onOpenChange }: MobileNavigationProps) {
+const panelLinkClass =
+  "block w-full px-4 py-3 text-left text-sm font-medium text-dark-charcoal hover:bg-light-gray";
+
+export function MobileNavigation({
+  open,
+  onOpenChange,
+  isAdmin = false,
+  signedIn = false,
+}: MobileNavigationProps) {
   const panelRef = React.useRef<HTMLDivElement>(null);
   const previouslyFocused = React.useRef<HTMLElement | null>(null);
   const [expanded, setExpanded] = React.useState<string | null>(null);
@@ -177,13 +189,41 @@ export function MobileNavigation({ open, onOpenChange }: MobileNavigationProps) 
               <li key={link.href}>
                 <Link
                   href={link.href}
-                  className="block px-4 py-3 text-sm font-medium text-dark-charcoal hover:bg-light-gray"
+                  className={panelLinkClass}
                   onClick={() => onOpenChange(false)}
                 >
                   {link.label}
                 </Link>
               </li>
             ))}
+            <li>
+              {signedIn ? (
+                <form action={logout} onSubmit={() => onOpenChange(false)}>
+                  <button type="submit" className={panelLinkClass}>
+                    Sign Out
+                  </button>
+                </form>
+              ) : (
+                <Link
+                  href="/login"
+                  className={panelLinkClass}
+                  onClick={() => onOpenChange(false)}
+                >
+                  Sign In / Register
+                </Link>
+              )}
+            </li>
+            {isAdmin ? (
+              <li className="mt-4 border-t border-border-gray pt-4">
+                <Link
+                  href="/admin"
+                  className={panelLinkClass}
+                  onClick={() => onOpenChange(false)}
+                >
+                  Admin Dashboard
+                </Link>
+              </li>
+            ) : null}
           </ul>
         </div>
       </div>

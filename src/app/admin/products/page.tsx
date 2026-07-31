@@ -126,23 +126,23 @@ function AnalyticTab({
       )}
       aria-current={active ? "page" : undefined}
     >
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase tracking-wide text-medium-gray">
             {label}
           </p>
-          <p className="mt-1.5 font-heading text-3xl font-semibold tabular-nums text-dark-charcoal">
+          <p className="mt-1.5 font-heading text-2xl font-semibold tabular-nums text-dark-charcoal sm:text-3xl">
             {count}
           </p>
           <p className="mt-1 text-xs text-medium-gray">{hint}</p>
         </div>
         <span
           className={cn(
-            "flex size-10 shrink-0 items-center justify-center rounded-sm",
+            "flex size-9 shrink-0 items-center justify-center rounded-sm sm:size-10",
             accent,
           )}
         >
-          <Icon className="size-5" aria-hidden="true" />
+          <Icon className="size-4 sm:size-5" aria-hidden="true" />
         </span>
       </div>
       <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-light-gray">
@@ -250,8 +250,9 @@ export default async function AdminProductsPage({
 
   return (
     <div>
-      <div className="sticky top-0 z-20 space-y-5 bg-light-gray pb-0 pt-1">
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {/* Not sticky below lg: it would sit under the sticky admin mobile bar. */}
+      <div className="static z-20 space-y-5 bg-light-gray pb-0 pt-1 lg:sticky lg:top-0">
+        <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <AnalyticTab
             href={buildHref({ ...filterState, tab: "active", stock: "all" })}
             label="Products"

@@ -128,7 +128,7 @@ export function HeroSection({ className }: HeroSectionProps) {
               />
             </div>
 
-            <ul className="mt-6 grid gap-5 sm:grid-cols-3 sm:gap-4">
+            <ul className="mt-6 hidden gap-4 lg:grid lg:grid-cols-3">
               {FEATURES.map(({ title, description, icon: Icon }) => (
                 <li key={title} className="flex items-start gap-3">
                   <Icon

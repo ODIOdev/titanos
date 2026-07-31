@@ -32,9 +32,40 @@
   --font-sans: var(--font-inter);
 }
 
+/* Registered as a utility so variants (e.g. `max-lg:`) can target it. */
+@utility scrollbar-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Dashboard on small screens: content still swipes, no scrollbar takes up space. */
+@media (max-width: 1023px) {
+  .admin-shell,
+  .admin-shell * {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .admin-shell::-webkit-scrollbar,
+  .admin-shell *::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;
+  }
+
+  html,
+  body {
+    overflow-x: clip;
   }
 
   @media (prefers-reduced-motion: reduce) {

@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
+import { AdminMobileNav } from "@/components/admin/admin-mobile-nav";
 import { AdminPathHeader } from "@/components/admin/admin-path-header";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { isMasterAdmin, isMasterAdminEmail, MASTER_ADMIN_EMAIL } from "@/lib/utils";
@@ -53,11 +54,13 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="flex min-h-screen bg-light-gray">
+    <div className="admin-shell flex min-h-screen overflow-x-clip bg-light-gray">
       <AdminSidebar />
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/* clip, not hidden: hidden would make this a scroll container and break sticky children */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
+        <AdminMobileNav />
         <AdminPathHeader />
-        <main className="flex-1 p-4 sm:p-6">{children}</main>
+        <main className="min-w-0 flex-1 p-4 sm:p-6">{children}</main>
       </div>
     </div>
   );

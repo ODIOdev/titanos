@@ -62,11 +62,11 @@ export async function TrustStrip({ className }: TrustStripProps) {
           </h2>
         </div>
 
-        <ul className="mt-8 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <ul className="mt-8 grid grid-cols-2 gap-3 lg:grid-cols-4">
           {TRUST_ITEMS.map(({ title, description, icon: Icon }) => (
             <li
               key={title}
-              className="rounded-sm border border-white/10 bg-white/[0.04] p-5"
+              className="rounded-sm border border-white/10 bg-white/[0.04] p-4 sm:p-5"
             >
               <span className="flex size-10 items-center justify-center rounded-sm bg-titan-yellow text-dark-charcoal">
                 <Icon className="size-5" aria-hidden="true" />
@@ -82,7 +82,7 @@ export async function TrustStrip({ className }: TrustStripProps) {
         </ul>
 
         {logos.length > 0 ? (
-          <div className="mt-10 border-t border-white/10 pt-8">
+          <div className="mt-10 hidden border-t border-white/10 pt-8 lg:block">
             <div className="mb-5 flex items-center justify-between gap-4">
               <p className="eyebrow-accent">Stocked manufacturers</p>
               <Link

@@ -23,7 +23,7 @@ export function IndustrySolutions({ className }: IndustrySolutionsProps) {
           description="Gear kits and categories tailored to the crews and agencies we outfit every day."
         />
 
-        <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <ul className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
           {INDUSTRY_SOLUTIONS.map((industry) => (
             <li key={industry.slug}>
               <Link
@@ -36,11 +36,11 @@ export function IndustrySolutions({ className }: IndustrySolutionsProps) {
                     alt={industry.name}
                     fill
                     className="object-cover"
-                    sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                    sizes="(max-width: 1024px) 50vw, 25vw"
                   />
                 </div>
-                <div className="flex flex-1 flex-col bg-dark-charcoal p-5">
-                  <h3 className="font-heading text-xl uppercase tracking-wide text-white">
+                <div className="flex flex-1 flex-col bg-dark-charcoal p-4 sm:p-5">
+                  <h3 className="font-heading text-base uppercase tracking-wide text-white sm:text-lg lg:text-xl">
                     {industry.name}
                   </h3>
                   <p className="mt-2 flex-1 text-sm leading-relaxed text-white/70">

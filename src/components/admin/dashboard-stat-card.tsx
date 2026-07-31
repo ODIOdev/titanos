@@ -33,7 +33,7 @@ export function DashboardStatCard({
 }: DashboardStatCardProps) {
   const body = (
     <>
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-2">
         <p className="text-xs font-semibold uppercase tracking-wide text-medium-gray">
           {label}
         </p>
@@ -48,13 +48,15 @@ export function DashboardStatCard({
       </div>
       <p
         className={cn(
-          "mt-3 font-heading text-3xl font-semibold",
+          "mt-3 font-heading text-2xl font-semibold sm:text-3xl",
           alert ? "text-red-700" : "text-dark-charcoal",
         )}
       >
         {value}
       </p>
-      {hint ? <p className="mt-1 text-sm text-medium-gray">{hint}</p> : null}
+      {hint ? (
+        <p className="mt-1 text-xs text-medium-gray sm:text-sm">{hint}</p>
+      ) : null}
     </>
   );
 

@@ -150,7 +150,7 @@ export async function Footer() {
           </div>
         </div>
 
-        <div className="grid gap-x-6 gap-y-7 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:gap-x-6 lg:grid-cols-4">
           {FOOTER_COLUMNS.map((column) => (
             <div key={column.title}>
               <h2 className="font-heading text-sm font-semibold tracking-wide text-white uppercase">
@@ -242,7 +242,7 @@ export async function Footer() {
               ))}
             </ul>
 
-            <ul className="flex flex-wrap items-center justify-start gap-3 sm:justify-end">
+            <ul className="hidden flex-wrap items-center gap-3 lg:flex lg:justify-end">
               {PAYMENT_LOGOS.map((logo) => (
                 <li key={logo.name}>
                   <a

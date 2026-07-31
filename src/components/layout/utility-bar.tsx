@@ -8,7 +8,7 @@ const linkClass =
 
 export function UtilityBar({ signedIn = false }: { signedIn?: boolean }) {
   return (
-    <div className="bg-dark-charcoal text-white">
+    <div className="hidden bg-dark-charcoal text-white lg:block">
       <div className="container-titan flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2 text-xs">
         <p className="border-l-2 border-titan-yellow pl-3 font-medium text-white">
           Free shipping on orders over {formatCurrency(FREE_SHIPPING_THRESHOLD)}

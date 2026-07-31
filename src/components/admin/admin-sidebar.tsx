@@ -2,47 +2,17 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  BadgePercent,
-  ChartColumnBig,
-  ClipboardList,
-  FileText,
-  FolderTree,
-  LayoutDashboard,
-  LogOut,
-  Package,
-  Settings,
-  ShoppingBag,
-  Tags,
-  UserCog,
-  Users,
-  Warehouse,
-} from "lucide-react";
+import { LogOut } from "lucide-react";
 import { logout } from "@/lib/actions/auth";
 import { cn } from "@/lib/utils";
 import { HomeButton } from "@/components/layout/home-button";
-
-const NAV = [
-  { href: "/admin", label: "Overview", icon: LayoutDashboard },
-  { href: "/admin/products", label: "Products", icon: Package },
-  { href: "/admin/categories", label: "Categories", icon: FolderTree },
-  { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
-  { href: "/admin/customers", label: "Customers", icon: Users },
-  { href: "/admin/members", label: "Members", icon: UserCog },
-  { href: "/admin/affiliates", label: "Affiliates", icon: BadgePercent },
-  { href: "/admin/quotes", label: "Quotes", icon: ClipboardList },
-  { href: "/admin/inventory", label: "Inventory", icon: Warehouse },
-  { href: "/admin/brands", label: "Brands", icon: Tags },
-  { href: "/admin/resources", label: "Resources", icon: FileText },
-  { href: "/admin/analytics", label: "Analytics & Reports", icon: ChartColumnBig },
-  { href: "/admin/settings", label: "Settings", icon: Settings },
-] as const;
+import { ADMIN_NAV, isAdminNavActive } from "@/components/admin/admin-nav-items";
 
 export function AdminSidebar() {
   const pathname = usePathname();
 
   return (
-    <aside className="sticky top-0 flex h-screen w-60 shrink-0 flex-col self-start bg-dark-charcoal text-white">
+    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col self-start bg-dark-charcoal text-white lg:flex">
       <div className="border-b border-white/10 px-5 py-5">
         <Link href="/admin" className="block">
           <p className="font-heading text-xl font-semibold uppercase tracking-wide text-titan-yellow">
@@ -53,9 +23,8 @@ export function AdminSidebar() {
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto p-3" aria-label="Admin">
-        {NAV.map(({ href, label, icon: Icon }) => {
-          const active =
-            href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
+        {ADMIN_NAV.map(({ href, label, icon: Icon }) => {
+          const active = isAdminNavActive(href, pathname);
           return (
             <Link
               key={href}

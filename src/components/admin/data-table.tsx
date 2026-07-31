@@ -27,7 +27,7 @@ export function DataTable({
         className,
       )}
     >
-      <div className="overflow-x-auto">
+      <div className="max-lg:scrollbar-hidden overflow-x-auto">
         <table className="w-full min-w-[640px] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-border-gray bg-light-gray">
@@ -63,7 +63,10 @@ export function DataTable({
                   {cells.map((cell, cellIndex) => (
                     <td
                       key={cellIndex}
-                      className={cn("px-4 py-3 align-middle", columns[cellIndex]?.className)}
+                      className={cn(
+                        "px-4 py-3 align-middle",
+                        columns[cellIndex]?.className,
+                      )}
                     >
                       {cell}
                     </td>

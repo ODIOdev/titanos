@@ -40,7 +40,13 @@ function HeaderLogo() {
   );
 }
 
-export function MainHeader() {
+export function MainHeader({
+  isAdmin = false,
+  signedIn = false,
+}: {
+  isAdmin?: boolean;
+  signedIn?: boolean;
+}) {
   const [scrolled, setScrolled] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
@@ -109,7 +115,12 @@ export function MainHeader() {
         </div>
       </header>
 
-      <MobileNavigation open={mobileOpen} onOpenChange={setMobileOpen} />
+      <MobileNavigation
+        open={mobileOpen}
+        onOpenChange={setMobileOpen}
+        isAdmin={isAdmin}
+        signedIn={signedIn}
+      />
     </>
   );
 }

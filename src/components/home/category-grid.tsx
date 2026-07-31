@@ -34,16 +34,14 @@ export function CategoryGrid({ className }: CategoryGridProps) {
     >
       <div className="container-titan">
         <SectionHeader
-          eyebrow="Industry solutions"
           title="Shop by industry"
-          description="Gear, spec guidance, and bulk pricing matched to the way your crews work."
           titleId="shop-by-industry-heading"
           href="/shop"
           linkLabel="View all"
           className="mb-5"
         />
 
-        <ul className="grid grid-cols-4 gap-2 sm:gap-3 lg:gap-4">
+        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
           {departments.map((department) => (
             <li key={department.slug}>
               <CategoryCard

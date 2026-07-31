@@ -126,7 +126,7 @@ export default async function AdminAnalyticsPage() {
         title="Top products"
         caption={`${unitsSold} units sold across the best performers.`}
       >
-        <div className="overflow-x-auto">
+        <div className="max-lg:scrollbar-hidden overflow-x-auto">
           <table className="w-full min-w-[36rem] text-sm">
             <thead className="border-b border-border-gray bg-light-gray/60">
               <tr className="text-left text-xs font-semibold uppercase tracking-wide text-medium-gray">
