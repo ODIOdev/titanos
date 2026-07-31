@@ -52,11 +52,23 @@ function writeRecentSearch(query: string) {
 
 export interface SearchBarProps {
   className?: string;
+  inputClassName?: string;
+  inputId?: string;
+  variant?: "default" | "onDark";
+  size?: "md" | "lg";
   autoFocus?: boolean;
   onNavigate?: () => void;
 }
 
-export function SearchBar({ className, autoFocus, onNavigate }: SearchBarProps) {
+export function SearchBar({
+  className,
+  inputClassName,
+  inputId = "site-search",
+  variant = "default",
+  size = "md",
+  autoFocus,
+  onNavigate,
+}: SearchBarProps) {
   const router = useRouter();
   const containerRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -200,6 +212,10 @@ export function SearchBar({ className, autoFocus, onNavigate }: SearchBarProps) 
     }
   }
 
+  const isOnDark = variant === "onDark";
+  const isLarge = size === "lg";
+  const suggestionsId = `${inputId}-suggestions`;
+
   return (
     <div ref={containerRef} className={cn("relative w-full", className)}>
       <form
@@ -209,23 +225,45 @@ export function SearchBar({ className, autoFocus, onNavigate }: SearchBarProps) 
           goToSearch(query);
         }}
       >
-        <label htmlFor="site-search" className="sr-only">
+        <label htmlFor={inputId} className="sr-only">
           Search products
         </label>
         <div className="relative">
           <Search
-            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-medium-gray"
+            className={cn(
+              "pointer-events-none absolute top-1/2 -translate-y-1/2",
+              isLarge ? "left-3.5 size-4" : "left-3 size-4",
+              isOnDark
+                ? isLarge
+                  ? "text-dark-charcoal"
+                  : "text-titan-yellow"
+                : "text-medium-gray",
+            )}
+            strokeWidth={isLarge ? 2.25 : 2}
             aria-hidden="true"
           />
           <input
             ref={inputRef}
-            id="site-search"
+            id={inputId}
             type="search"
             value={query}
             autoFocus={autoFocus}
             autoComplete="off"
             placeholder="Search safety gear, boots, signs…"
-            className="h-10 w-full rounded-sm border border-border-gray bg-white py-2 pl-10 pr-10 text-sm text-near-black placeholder:text-medium-gray focus-visible:border-dark-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow/40"
+            className={cn(
+              "w-full rounded-sm border py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow/40",
+              "[&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none",
+              isLarge ? "h-11 pl-10 pr-10 text-sm" : "h-10 pl-10 pr-10 text-sm",
+              isOnDark
+                ? cn(
+                    "border border-white/25 bg-near-black/70 text-white placeholder:text-white/55 backdrop-blur-sm focus-visible:border-titan-yellow",
+                    isLarge &&
+                      "border-titan-yellow bg-[#f3f4f5] text-near-black placeholder:text-medium-gray focus-visible:ring-titan-yellow/50",
+                    !isLarge && "h-12",
+                  )
+                : "border-border-gray bg-white text-near-black placeholder:text-medium-gray focus-visible:border-dark-charcoal",
+              inputClassName,
+            )}
             onChange={(event) => {
               setQuery(event.target.value);
               setOpen(true);
@@ -233,14 +271,22 @@ export function SearchBar({ className, autoFocus, onNavigate }: SearchBarProps) 
             onFocus={() => setOpen(true)}
             onKeyDown={onKeyDown}
             aria-expanded={open}
-            aria-controls="search-suggestions"
+            aria-controls={suggestionsId}
             aria-autocomplete="list"
             role="combobox"
           />
           {query ? (
             <button
               type="button"
-              className="absolute right-2 top-1/2 inline-flex size-6 -translate-y-1/2 items-center justify-center rounded-sm text-medium-gray hover:bg-light-gray hover:text-dark-charcoal"
+              className={cn(
+                "absolute top-1/2 inline-flex -translate-y-1/2 items-center justify-center rounded-sm",
+                isLarge ? "right-2 size-7" : "right-2 size-6",
+                isOnDark
+                  ? isLarge
+                    ? "text-medium-gray hover:bg-black/5 hover:text-dark-charcoal"
+                    : "text-white/70 hover:bg-white/10 hover:text-white"
+                  : "text-medium-gray hover:bg-light-gray hover:text-dark-charcoal",
+              )}
               aria-label="Clear search"
               onClick={() => {
                 setQuery("");
@@ -256,7 +302,7 @@ export function SearchBar({ className, autoFocus, onNavigate }: SearchBarProps) 
 
       {(showRecent || showResults) && (
         <div
-          id="search-suggestions"
+          id={suggestionsId}
           role="listbox"
           className="absolute left-0 right-0 top-[calc(100%+0.35rem)] z-50 overflow-hidden rounded-sm border border-border-gray bg-white shadow-md"
         >

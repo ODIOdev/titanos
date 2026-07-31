@@ -23,37 +23,30 @@ export function CategoryCard({
   return (
     <Link
       href={destination}
+      aria-label={`Shop ${name}`}
       className={cn(
-        "group block overflow-hidden rounded-sm border border-border-gray bg-white transition-[border-color,box-shadow] duration-200 hover:border-dark-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow",
+        "group relative block overflow-hidden rounded-sm border border-border-gray bg-near-black transition-[border-color,box-shadow] duration-200 hover:border-titan-yellow hover:shadow-[0_14px_32px_rgba(15,15,15,0.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow focus-visible:ring-offset-2",
         className,
       )}
-      aria-label={`Shop ${name}`}
     >
-      <div className="relative aspect-square overflow-hidden bg-light-gray">
+      <div className="relative aspect-[3/2]">
+        {/* Banner artwork carries the industry name, so the link is labelled instead. */}
         <Image
           src={imageUrl}
-          alt={name}
+          alt=""
           fill
-          className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 16vw"
+          className="object-contain"
+          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 22vw"
         />
       </div>
-      <div className="border-t border-border-gray bg-white px-3 py-3 sm:px-4">
-        <h3 className="font-heading text-sm uppercase tracking-wide text-dark-charcoal sm:text-base">
-          {name}
-        </h3>
-        <span className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-medium-gray transition-colors group-hover:text-dark-charcoal sm:text-sm">
-          Shop Now
-          <ArrowRight
-            className="size-3.5 transition-transform group-hover:translate-x-0.5"
-            aria-hidden="true"
-          />
-        </span>
-        <span
-          className="mt-3 block h-0.5 w-8 origin-left scale-x-100 bg-titan-yellow transition-transform duration-200 group-hover:scale-x-150"
-          aria-hidden="true"
-        />
-      </div>
+
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-end gap-1.5 bg-gradient-to-t from-near-black/85 via-near-black/40 to-transparent px-2.5 pb-2 pt-10 font-heading text-[0.625rem] uppercase tracking-wide text-white transition-colors duration-200 group-hover:text-titan-yellow sm:px-3 sm:text-xs"
+      >
+        Shop now
+        <ArrowRight className="size-3.5" />
+      </span>
     </Link>
   );
 }

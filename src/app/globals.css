@@ -6,6 +6,8 @@
   --near-black: #090d11;
   --white: #ffffff;
   --light-gray: #f5f6f7;
+  /* One step darker than light-gray, for sections that sit between two light bands. */
+  --muted-gray: #eaecef;
   --medium-gray: #6b7280;
   --border-gray: #e5e7eb;
   --success-green: #15803d;
@@ -19,6 +21,7 @@
   --color-dark-charcoal: var(--dark-charcoal);
   --color-near-black: var(--near-black);
   --color-light-gray: var(--light-gray);
+  --color-muted-gray: var(--muted-gray);
   --color-medium-gray: var(--medium-gray);
   --color-border-gray: var(--border-gray);
   --color-success-green: var(--success-green);
@@ -170,5 +173,78 @@
 
   .animate-fade-up-delay-2 {
     animation: titan-fade-up 550ms ease-out 220ms both;
+  }
+
+  @keyframes titan-loader-pulse {
+    0%,
+    100% {
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% {
+      transform: scale(0.92);
+      opacity: 0.75;
+    }
+  }
+
+  @keyframes titan-loader-sweep {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(300%);
+    }
+  }
+
+  @keyframes titan-preloader-out {
+    to {
+      opacity: 0;
+      visibility: hidden;
+    }
+  }
+
+  .animate-loader-pulse {
+    animation: titan-loader-pulse 1.4s ease-in-out infinite;
+  }
+
+  .animate-loader-sweep {
+    animation: titan-loader-sweep 1.15s ease-in-out infinite;
+  }
+
+  /* Safety net: the splash clears itself even if hydration never finishes. */
+  .animate-preloader-failsafe {
+    animation: titan-preloader-out 400ms ease-out 5s forwards;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-loader-pulse,
+    .animate-loader-sweep {
+      animation: none;
+    }
+  }
+
+  @keyframes titan-marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  /* Track must hold exactly two copies of the content for the loop to be seamless. */
+  .animate-marquee {
+    animation: titan-marquee var(--marquee-duration, 40s) linear infinite;
+  }
+
+  .marquee-viewport:hover .animate-marquee,
+  .marquee-viewport:focus-within .animate-marquee {
+    animation-play-state: paused;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-marquee {
+      animation: none;
+    }
   }
 }

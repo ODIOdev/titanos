@@ -1,7 +1,28 @@
+import Image from "next/image";
 import Link from "next/link";
+import { ArrowRight, Headphones, Shield, Truck } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
+import { SearchBar } from "@/components/layout/search-bar";
 import { SITE_CONFIG } from "@/lib/data/seed-data";
 import { cn } from "@/lib/utils";
+
+const FEATURES = [
+  {
+    title: "Premium Quality",
+    description: "Built tough. Built to protect.",
+    icon: Shield,
+  },
+  {
+    title: "Fast Shipping",
+    description: "When you need it. Where you need it.",
+    icon: Truck,
+  },
+  {
+    title: "Expert Support",
+    description: "Real people. Real solutions.",
+    icon: Headphones,
+  },
+] as const;
 
 export type HeroSectionProps = {
   className?: string;
@@ -11,57 +32,125 @@ export function HeroSection({ className }: HeroSectionProps) {
   return (
     <section
       className={cn(
-        "relative isolate overflow-hidden bg-near-black",
+        "relative isolate flex min-h-[min(100svh,52rem)] flex-col overflow-hidden bg-near-black",
         className,
       )}
       aria-labelledby="hero-heading"
     >
       <div className="absolute inset-0 -z-10" aria-hidden="true">
-        <div className="absolute inset-0 bg-[linear-gradient(135deg,#101820_0%,#090d11_55%,#15202c_100%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_70%_40%,rgba(245,196,0,0.08),transparent_55%)]" />
-        <div className="absolute inset-y-0 right-0 hidden w-1/2 bg-[linear-gradient(90deg,transparent,rgba(16,24,32,0.35))] lg:block" />
-        <div className="absolute bottom-0 left-0 h-1 w-full bg-titan-yellow" />
+        <Image
+          src="/images/hero/hero-jobsite.png"
+          alt=""
+          fill
+          priority
+          sizes="100vw"
+          className="object-cover object-[68%_center]"
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(9,13,17,0.92)_0%,rgba(9,13,17,0.78)_38%,rgba(9,13,17,0.35)_62%,rgba(9,13,17,0.2)_100%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(9,13,17,0.45)_0%,transparent_28%,transparent_72%,rgba(9,13,17,0.7)_100%)]" />
       </div>
 
-      <div className="container-titan">
-        <div className="flex min-h-[28rem] max-w-3xl flex-col justify-center py-16 sm:min-h-[32rem] sm:py-20 lg:min-h-[34rem] lg:py-24">
-          <p className="eyebrow-accent animate-fade-up">
-            {SITE_CONFIG.name}
-          </p>
-          <p className="animate-fade-up-delay mt-3 font-heading text-xs uppercase tracking-[0.18em] text-white/70 sm:text-sm">
-            Built for work. Designed for safety.
-          </p>
-          <h1
-            id="hero-heading"
-            className="animate-fade-up-delay mt-4 font-heading text-4xl uppercase leading-[1.05] tracking-wide text-white sm:text-5xl lg:text-6xl"
-          >
-            Protecting people.
-            <span className="mt-1 block text-titan-yellow">
-              Powering progress.
-            </span>
-          </h1>
-          <p className="animate-fade-up-delay-2 mt-5 max-w-xl text-base leading-relaxed text-white/80 sm:text-lg">
-            Professional safety gear, workwear, footwear, signage, and
-            traffic-control products — ready for your crew and jobsite.
-          </p>
-          <div className="animate-fade-up-delay-2 mt-8 flex flex-wrap gap-3">
+      <div className="container-titan relative flex flex-1 flex-col justify-center py-12 sm:py-14 lg:py-16">
+        <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(20rem,1fr)] lg:gap-12 xl:gap-16">
+          <div className="max-w-3xl">
             <Link
-              href="/shop"
-              className={cn(buttonVariants({ variant: "primary", size: "lg" }))}
+              href="/"
+              className="animate-fade-up inline-block"
+              aria-label={SITE_CONFIG.name}
             >
-              Shop All Products
+              <Image
+                src="/images/logo/logo-landscape.png"
+                alt={SITE_CONFIG.name}
+                width={763}
+                height={247}
+                className="h-20 w-auto object-contain sm:h-24 lg:h-28 xl:h-32"
+                priority
+              />
             </Link>
-            <Link
-              href="/quote"
-              className={cn(
-                buttonVariants({ variant: "outlineInverse", size: "lg" }),
-              )}
+
+            <p className="animate-fade-up-delay mt-8 font-heading text-xs font-semibold uppercase tracking-[0.22em] text-titan-yellow sm:mt-10 sm:text-sm">
+              Keeping detours safe.
+            </p>
+
+            <h1
+              id="hero-heading"
+              className="animate-fade-up-delay mt-3 font-heading text-[2.65rem] font-bold uppercase leading-[0.95] tracking-wide text-white sm:text-6xl lg:text-7xl"
             >
-              Request a Quote
-            </Link>
+              Protecting
+              <span className="block">People.</span>
+              <span className="mt-1 block text-titan-yellow">
+                Powering Progress.
+              </span>
+            </h1>
+
+            <p className="animate-fade-up-delay-2 mt-5 max-w-xl text-base leading-relaxed text-white/85 sm:text-lg">
+              Professional safety gear and traffic control solutions for
+              <span className="mt-1 block font-medium text-titan-yellow">
+                every road, every crew, every time.
+              </span>
+            </p>
+
+            <div className="animate-fade-up-delay-2 mt-9 flex flex-wrap gap-3">
+              <Link
+                href="/shop"
+                className={cn(
+                  buttonVariants({ variant: "primary", size: "lg" }),
+                )}
+              >
+                Shop All Products
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </Link>
+              <Link
+                href="/quote"
+                className={cn(
+                  buttonVariants({ variant: "outlineInverse", size: "lg" }),
+                  "border-titan-yellow text-titan-yellow hover:border-titan-yellow hover:bg-titan-yellow/10",
+                )}
+              >
+                Request a Quote
+              </Link>
+            </div>
           </div>
+
+          <aside className="animate-fade-up-delay-2 w-full max-w-xl justify-self-start lg:max-w-none lg:justify-self-end">
+            <div className="relative bg-near-black/90 p-6 shadow-[0_24px_48px_rgba(0,0,0,0.55)] backdrop-blur-xl ring-1 ring-titan-yellow sm:p-8">
+              <p className="font-heading text-sm font-semibold uppercase tracking-[0.2em] text-titan-yellow sm:text-base">
+                Find gear fast
+              </p>
+              <p className="mt-3 max-w-md text-base leading-relaxed text-white sm:text-lg">
+                Search hard hats, vests, boots, signs, and traffic control.
+              </p>
+              <SearchBar
+                className="mt-5"
+                variant="onDark"
+                size="lg"
+                inputId="hero-search"
+              />
+            </div>
+
+            <ul className="mt-6 grid gap-5 sm:grid-cols-3 sm:gap-4">
+              {FEATURES.map(({ title, description, icon: Icon }) => (
+                <li key={title} className="flex items-start gap-3">
+                  <Icon
+                    className="mt-0.5 size-5 shrink-0 text-titan-yellow"
+                    strokeWidth={1.75}
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <p className="font-heading text-xs font-semibold uppercase tracking-[0.14em] text-white">
+                      {title}
+                    </p>
+                    <p className="mt-1 text-sm leading-snug text-white/70">
+                      {description}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </aside>
         </div>
       </div>
     </section>
   );
 }
+

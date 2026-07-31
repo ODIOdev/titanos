@@ -21,6 +21,7 @@ export type AddToCartButtonProps = {
     | "image_url"
   >;
   quantity?: number;
+  variantId?: string | null;
   label?: string;
   className?: string;
   size?: ButtonProps["size"];
@@ -31,6 +32,7 @@ export type AddToCartButtonProps = {
 export function AddToCartButton({
   product,
   quantity = 1,
+  variantId = null,
   label = "Add to Cart",
   className,
   size = "md",
@@ -60,6 +62,7 @@ export function AddToCartButton({
         image_url: product.image_url,
       },
       quantity,
+      variant_id: variantId,
     });
 
     const message = `Added ${quantity} × ${product.name} to cart.`;

@@ -1,57 +1,56 @@
 import { CategoryCard } from "@/components/home/category-card";
 import { SectionHeader } from "@/components/shared/section-header";
 import {
-  HOMEPAGE_CATEGORY_SLUGS,
-  SEED_CATEGORIES,
-} from "@/lib/data/seed-data";
+  DEPARTMENT_OPTIONS,
+  departmentImagePath,
+} from "@/lib/data/catalog-options";
 import { cn } from "@/lib/utils";
-
-const DISPLAY_NAMES: Record<string, string> = {
-  "hard-hats": "Hard Hats",
-  "safety-vests": "Safety Vests",
-  "work-boots": "Work Boots",
-  "traffic-cones": "Traffic Control",
-  "street-signs": "Street Signs",
-  barricades: "Barricades",
-};
 
 export type CategoryGridProps = {
   className?: string;
 };
 
+/** Homepage tile wording, where it differs from the admin Department label. */
+const TILE_LABELS: Record<string, string> = {
+  "safety-equipment": "Construction",
+  "traffic-control": "Roadway & Traffic",
+  "foot-wear": "Work Boots",
+  signage: "Street Signs",
+};
+
+/** Homepage browse strip — synced with admin Department options. */
 export function CategoryGrid({ className }: CategoryGridProps) {
-  const categories = HOMEPAGE_CATEGORY_SLUGS.map((slug) => {
-    const seed = SEED_CATEGORIES.find((c) => c.slug === slug);
-    return {
-      slug,
-      name: DISPLAY_NAMES[slug] ?? seed?.name ?? slug,
-      imageUrl: seed?.image_url ?? `/images/categories/${slug}.svg`,
-      href: `/shop/${slug}`,
-    };
-  });
+  const departments = DEPARTMENT_OPTIONS.map((d) => ({
+    slug: d.slug,
+    name: TILE_LABELS[d.slug] ?? d.label,
+    imageUrl: departmentImagePath(d.slug),
+    href: `/shop?department=${encodeURIComponent(d.value)}`,
+  }));
 
   return (
     <section
-      className={cn("section-y bg-white", className)}
-      aria-labelledby="shop-by-category-heading"
+      className={cn("bg-white py-8 sm:py-10", className)}
+      aria-labelledby="shop-by-industry-heading"
     >
       <div className="container-titan">
         <SectionHeader
-          eyebrow="Browse catalog"
-          title="Shop by category"
-          titleId="shop-by-category-heading"
+          eyebrow="Industry solutions"
+          title="Shop by industry"
+          description="Gear, spec guidance, and bulk pricing matched to the way your crews work."
+          titleId="shop-by-industry-heading"
           href="/shop"
           linkLabel="View all"
+          className="mb-5"
         />
 
-        <ul className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 xl:grid-cols-6">
-          {categories.map((category) => (
-            <li key={category.slug}>
+        <ul className="grid grid-cols-4 gap-2 sm:gap-3 lg:gap-4">
+          {departments.map((department) => (
+            <li key={department.slug}>
               <CategoryCard
-                name={category.name}
-                slug={category.slug}
-                imageUrl={category.imageUrl}
-                href={category.href}
+                name={department.name}
+                slug={department.slug}
+                imageUrl={department.imageUrl}
+                href={department.href}
               />
             </li>
           ))}

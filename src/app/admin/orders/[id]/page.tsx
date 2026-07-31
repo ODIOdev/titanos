@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   OrderNotesForm,
@@ -25,9 +24,6 @@ export default async function AdminOrderDetailPage({
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
-        <Link href="/admin/orders" className="text-sm text-medium-gray hover:text-dark-charcoal">
-          ← Orders
-        </Link>
         <h2 className="font-heading text-xl font-semibold uppercase tracking-wide">
           {order.order_number}
         </h2>

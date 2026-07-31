@@ -1,4 +1,5 @@
 import type { ProductFilters } from "@/types";
+import { resolveDepartmentParam } from "@/lib/data/catalog-options";
 
 export type ShopSearchParams = {
   [key: string]: string | string[] | undefined;
@@ -36,10 +37,15 @@ export function parseShopFilters(
   const rating = first(searchParams.rating);
   const page = first(searchParams.page);
   const availability = first(searchParams.availability);
+  // Support legacy ?group= links from the mega-menu.
+  const department =
+    resolveDepartmentParam(first(searchParams.department)) ??
+    resolveDepartmentParam(first(searchParams.group));
 
   return {
     category: first(searchParams.category),
     brand: first(searchParams.brand),
+    department,
     minPrice: minPrice ? Number(minPrice) : undefined,
     maxPrice: maxPrice ? Number(maxPrice) : undefined,
     productType: first(searchParams.productType),
@@ -59,6 +65,8 @@ export function toFilterQuery(
   searchParams: ShopSearchParams,
 ): Record<string, string | undefined> {
   const keys = [
+    "department",
+    "group",
     "category",
     "brand",
     "minPrice",
@@ -77,6 +85,16 @@ export function toFilterQuery(
   for (const key of keys) {
     const value = first(searchParams[key]);
     if (value) result[key] = value;
+  }
+  // Prefer canonical department over legacy group in pagination links.
+  if (result.department || result.group) {
+    const resolved =
+      resolveDepartmentParam(result.department) ??
+      resolveDepartmentParam(result.group);
+    if (resolved) {
+      result.department = resolved;
+      delete result.group;
+    }
   }
   return result;
 }

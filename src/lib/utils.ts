@@ -53,3 +53,54 @@ export function generateQuoteNumber(): string {
   const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
   return `QT-${stamp}-${rand}`;
 }
+
+/** Accepts Titan roles (`admin`) and existing project roles (`Administrator`). */
+export function isAdminRole(role: string | null | undefined): boolean {
+  if (!role) return false;
+  const normalized = role.trim().toLowerCase();
+  return normalized === "admin" || normalized === "administrator";
+}
+
+export type CatalogStatus = "active" | "draft" | "archived";
+
+/** Canonical master admin email for Titan CRM at /admin. */
+export const MASTER_ADMIN_EMAIL = "admin@gmail.com";
+
+export function getCatalogStatus(product: {
+  active: boolean;
+  metadata?: Record<string, unknown> | null;
+}): CatalogStatus {
+  if (product.active) return "active";
+  const raw = product.metadata?.status;
+  if (raw === "draft") return "draft";
+  return "archived";
+}
+
+export function catalogStatusToFlags(status: CatalogStatus): {
+  active: boolean;
+  metadataStatus: CatalogStatus;
+} {
+  return {
+    active: status === "active",
+    metadataStatus: status,
+  };
+}
+
+export function isMasterAdminEmail(email: string | null | undefined): boolean {
+  return email?.trim().toLowerCase() === MASTER_ADMIN_EMAIL;
+}
+
+/**
+ * Master admin → Titan /admin CRM only (products, inventory, profits).
+ * Customers → /account only. Never swap these.
+ */
+export function isMasterAdmin(profile: {
+  role?: string | null;
+  is_owner?: boolean | null;
+  email?: string | null;
+} | null | undefined): boolean {
+  if (!profile) return false;
+  if (isMasterAdminEmail(profile.email)) return true;
+  if (profile.is_owner === true && isAdminRole(profile.role)) return true;
+  return false;
+}

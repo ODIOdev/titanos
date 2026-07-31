@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Oswald } from "next/font/google";
 import { AppProviders } from "@/components/providers/app-providers";
+import { SitePreloader } from "@/components/layout/site-preloader";
 import { SITE_CONFIG } from "@/lib/data/seed-data";
 import { absoluteUrl } from "@/lib/utils";
 import "./globals.css";
@@ -77,6 +78,7 @@ export default function RootLayout({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(orgJsonLd) }}
         />
+        <SitePreloader />
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

@@ -1,23 +1,29 @@
+import Image from "next/image";
 import Link from "next/link";
 import { SITE_CONFIG } from "@/lib/data/seed-data";
+import { HomeButton } from "@/components/layout/home-button";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-light-gray">
-      <header className="border-b border-border-gray bg-white">
-        <div className="container-titan flex h-16 items-center">
-          <Link
-            href="/"
-            className="font-heading text-xl font-semibold uppercase tracking-wide text-dark-charcoal"
-          >
-            {SITE_CONFIG.name}
-          </Link>
-        </div>
-      </header>
-      <main className="flex flex-1 items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md rounded-sm border border-border-gray bg-white p-6 shadow-sm sm:p-8">
-          {children}
-        </div>
+      <main className="flex flex-1 flex-col items-center justify-center px-4 py-10 sm:py-12">
+        <Link
+          href="/"
+          className="mb-4 inline-flex items-center justify-center sm:mb-5"
+          aria-label={SITE_CONFIG.name}
+        >
+          <Image
+            src="/images/logo/logo-landscape-auth.png"
+            alt={SITE_CONFIG.name}
+            width={1470}
+            height={500}
+            className="h-auto w-[min(100%,20rem)] object-contain sm:w-[24rem] lg:w-[28rem]"
+            priority
+            unoptimized
+          />
+        </Link>
+        <HomeButton className="mb-8 sm:mb-10" />
+        {children}
       </main>
       <footer className="py-6 text-center text-xs text-medium-gray">
         © {new Date().getFullYear()} {SITE_CONFIG.name}

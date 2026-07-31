@@ -21,13 +21,7 @@ export default async function AdminCategoryDetailPage({ params }: PageProps) {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <Link
-            href="/admin/categories"
-            className="text-xs font-semibold uppercase tracking-wide text-medium-gray hover:text-dark-charcoal"
-          >
-            ← Categories
-          </Link>
-          <h2 className="mt-2 font-heading text-2xl uppercase tracking-wide text-dark-charcoal">
+          <h2 className="font-heading text-2xl uppercase tracking-wide text-dark-charcoal">
             {category.name}
           </h2>
           <p className="mt-1 text-sm text-medium-gray">

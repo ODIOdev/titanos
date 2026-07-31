@@ -2,10 +2,26 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { CategoryFormInput, ProductFormInput } from "@/lib/validations";
-import { categoryFormSchema, productFormSchema } from "@/lib/validations";
+import type {
+  CategoryFormInput,
+  ProductFormInput,
+  BrandFormInput,
+  MemberFormInput,
+} from "@/lib/validations";
+import {
+  categoryFormSchema,
+  productFormSchema,
+  brandFormSchema,
+  memberFormSchema,
+} from "@/lib/validations";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
-import { generateOrderNumber, slugify } from "@/lib/utils";
+import {
+  DEFAULT_MAINTENANCE_HEADLINE,
+  DEFAULT_MAINTENANCE_MESSAGE,
+  MAINTENANCE_SETTINGS_KEY,
+} from "@/lib/data/maintenance";
+import { absoluteUrl, generateOrderNumber, isMasterAdmin, isMasterAdminEmail, slugify } from "@/lib/utils";
+import type { CatalogStatus } from "@/lib/utils";
 import type { Database } from "@/types/database";
 import type { OrderStatus, QuoteStatus } from "@/types";
 
@@ -42,16 +58,20 @@ async function requireAdmin(): Promise<
       };
     }
 
+    if (isMasterAdminEmail(user.email)) {
+      return { ok: true, userId: user.id };
+    }
+
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role")
+      .select("role, is_owner, email")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
-    if (!profile || profile.role !== "admin") {
+    if (!isMasterAdmin(profile)) {
       return {
         ok: false,
-        result: { success: false, message: "Admin access required." },
+        result: { success: false, message: "Master admin access required." },
       };
     }
 
@@ -64,7 +84,13 @@ async function requireAdmin(): Promise<
   }
 }
 
-function mapProductPayload(input: ProductFormInput) {
+function mapProductPayload(
+  input: ProductFormInput,
+  existingMetadata?: Record<string, unknown> | null,
+) {
+  const status = (input.catalogStatus ??
+    (input.active ? "active" : "archived")) as CatalogStatus;
+  const active = status === "active";
   return {
     name: input.name,
     slug: input.slug || slugify(input.name),
@@ -76,17 +102,42 @@ function mapProductPayload(input: ProductFormInput) {
     price: input.price,
     compare_at_price: input.compareAtPrice ?? null,
     cost: input.cost ?? null,
-    inventory_quantity: input.inventoryQuantity,
+    inventory_quantity: input.hasMultipleSizes
+      ? (input.variants ?? [])
+          .filter((row) => row.color.trim() && row.size.trim())
+          .reduce((sum, row) => sum + (row.qty || 0), 0)
+      : input.inventoryQuantity,
     low_stock_threshold: input.lowStockThreshold ?? 10,
     weight: input.weight ?? null,
     shipping_class: input.shippingClass || null,
-    active: input.active ?? true,
+    active,
     featured: input.featured ?? false,
     bestseller: input.bestseller ?? false,
     product_type: input.productType || null,
+    department: input.department || null,
     ansi_class: input.ansiClass || null,
-    color: input.color || null,
+    color: input.hasMultipleSizes
+      ? (input.variants ?? []).find((row) => row.color.trim())?.color || null
+      : input.color || null,
     size: input.size || null,
+    metadata: {
+      ...(existingMetadata ?? {}),
+      status,
+      ...(input.tag ? { tag: input.tag } : { tag: null }),
+      hasMultipleSizes: Boolean(input.hasMultipleSizes),
+      variants: input.hasMultipleSizes
+        ? (input.variants ?? []).filter(
+            (row) => row.color.trim() && row.size.trim(),
+          )
+        : [],
+      certifications: (input.certifications ?? [])
+        .filter((row) => row.name.trim())
+        .map((row) =>
+          row.value.trim()
+            ? `${row.name.trim()}: ${row.value.trim()}`
+            : row.name.trim(),
+        ),
+    },
   };
 }
 
@@ -133,7 +184,95 @@ export async function createCategory(raw: CategoryFormInput): Promise<ActionResu
   }
 }
 
-export async function createProduct(raw: ProductFormInput): Promise<ActionResult> {
+export async function updateCategory(
+  id: string,
+  raw: CategoryFormInput,
+): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.result;
+
+  const parsed = categoryFormSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: parsed.error.issues[0]?.message ?? "Invalid category data.",
+    };
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+    const payload = {
+      name: parsed.data.name,
+      slug: parsed.data.slug || slugify(parsed.data.name),
+      description: parsed.data.description || null,
+      image_url: parsed.data.imageUrl || null,
+      sort_order: parsed.data.sortOrder ?? 0,
+      active: parsed.data.active ?? true,
+    };
+
+    const { error } = await supabase
+      .from("categories")
+      .update(payload)
+      .eq("id", id);
+
+    if (error) throw error;
+
+    revalidatePath("/admin/categories");
+    revalidatePath(`/admin/categories/${id}`);
+    revalidatePath(`/admin/categories/${id}/edit`);
+    revalidatePath("/shop");
+    return { success: true, message: "Category updated.", id };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to update category.",
+    };
+  }
+}
+
+export async function deleteCategory(id: string): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    if (!isSupabaseConfigured()) {
+      revalidatePath("/admin/categories");
+      return {
+        success: true,
+        message: "Category deleted (demo). Connect Supabase to persist.",
+      };
+    }
+    return auth.result;
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const { error: productError } = await supabase
+      .from("products")
+      .update({ category_id: null })
+      .eq("category_id", id);
+    if (productError) throw productError;
+
+    const { error } = await supabase.from("categories").delete().eq("id", id);
+    if (error) throw error;
+
+    revalidatePath("/admin/categories");
+    revalidatePath("/admin/products");
+    revalidatePath("/shop");
+    return { success: true, message: "Category deleted." };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to delete category.",
+    };
+  }
+}
+
+export async function createProduct(
+  raw: ProductFormInput,
+  images: { url: string; altText?: string; isPrimary?: boolean }[] = [],
+): Promise<ActionResult> {
   const auth = await requireAdmin();
   if (!auth.ok) return auth.result;
 
@@ -153,8 +292,17 @@ export async function createProduct(raw: ProductFormInput): Promise<ActionResult
 
     if (error) throw error;
 
+    if (images.length > 0) {
+      await syncProductImages(data.id, images);
+    }
+    await syncProductSpecifications(
+      data.id,
+      parsed.data.specifications ?? [],
+    );
+
     revalidatePath("/admin/products");
-    revalidatePath("/products");
+    revalidatePath("/admin/categories");
+    revalidatePath("/shop");
     return { success: true, message: "Product created.", id: data.id };
   } catch (err) {
     return {
@@ -167,6 +315,7 @@ export async function createProduct(raw: ProductFormInput): Promise<ActionResult
 export async function updateProduct(
   id: string,
   raw: ProductFormInput,
+  images?: { url: string; altText?: string; isPrimary?: boolean }[],
 ): Promise<ActionResult> {
   const auth = await requireAdmin();
   if (!auth.ok) return auth.result;
@@ -179,21 +328,368 @@ export async function updateProduct(
   try {
     const { createServiceClient } = await import("@/lib/supabase/admin");
     const supabase = createServiceClient();
+    const { data: existing } = await supabase
+      .from("products")
+      .select("metadata")
+      .eq("id", id)
+      .maybeSingle();
+    const existingMetadata =
+      existing?.metadata && typeof existing.metadata === "object"
+        ? (existing.metadata as Record<string, unknown>)
+        : {};
     const { error } = await supabase
       .from("products")
-      .update(mapProductPayload(parsed.data))
+      .update(mapProductPayload(parsed.data, existingMetadata))
       .eq("id", id);
 
     if (error) throw error;
 
+    if (images) {
+      await syncProductImages(id, images);
+    }
+    await syncProductSpecifications(id, parsed.data.specifications ?? []);
+
     revalidatePath("/admin/products");
     revalidatePath(`/admin/products/${id}`);
-    revalidatePath("/products");
+    revalidatePath("/admin/categories");
+    revalidatePath("/shop");
     return { success: true, message: "Product updated.", id };
   } catch (err) {
     return {
       success: false,
       message: err instanceof Error ? err.message : "Failed to update product.",
+    };
+  }
+}
+
+export async function deleteProduct(id: string): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    if (!isSupabaseConfigured()) {
+      revalidatePath("/admin/products");
+      return {
+        success: true,
+        message: "Product deleted (demo). Connect Supabase to persist.",
+      };
+    }
+    return auth.result;
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+    const { error } = await supabase.from("products").delete().eq("id", id);
+    if (error) throw error;
+
+    revalidatePath("/admin/products");
+    revalidatePath("/admin/inventory");
+    revalidatePath("/admin/categories");
+    revalidatePath("/shop");
+    return { success: true, message: "Product deleted." };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to delete product.",
+    };
+  }
+}
+
+async function syncProductSpecifications(
+  productId: string,
+  specifications: { name: string; value: string }[],
+) {
+  const { createServiceClient } = await import("@/lib/supabase/admin");
+  const supabase = createServiceClient();
+  await supabase
+    .from("product_specifications")
+    .delete()
+    .eq("product_id", productId);
+
+  const rows = specifications
+    .map((spec) => ({
+      name: spec.name.trim(),
+      value: spec.value.trim(),
+    }))
+    .filter((spec) => spec.name.length > 0);
+
+  if (rows.length === 0) return;
+
+  const { error } = await supabase.from("product_specifications").insert(
+    rows.map((spec, index) => ({
+      product_id: productId,
+      name: spec.name,
+      value: spec.value,
+      sort_order: index,
+    })),
+  );
+  if (error) throw error;
+}
+
+async function syncProductImages(
+  productId: string,
+  images: { url: string; altText?: string; isPrimary?: boolean }[],
+) {
+  const { createServiceClient } = await import("@/lib/supabase/admin");
+  const supabase = createServiceClient();
+
+  await supabase.from("product_images").delete().eq("product_id", productId);
+
+  const persistable = images.filter(
+    (img) =>
+      img.url &&
+      !img.url.startsWith("data:") &&
+      !img.url.startsWith("blob:"),
+  );
+
+  if (persistable.length === 0) return;
+
+  const rows = persistable.map((img, index) => ({
+    product_id: productId,
+    url: img.url,
+    alt_text: img.altText || null,
+    sort_order: index,
+    is_primary: img.isPrimary ?? index === 0,
+  }));
+
+  const { error } = await supabase.from("product_images").insert(rows);
+  if (error) throw error;
+}
+
+export async function uploadProductImage(formData: FormData): Promise<{
+  success: boolean;
+  message: string;
+  url?: string;
+}> {
+  return uploadCatalogImage(formData, "products");
+}
+
+export async function uploadCategoryImage(formData: FormData): Promise<{
+  success: boolean;
+  message: string;
+  url?: string;
+}> {
+  return uploadCatalogImage(formData, "categories");
+}
+
+export async function uploadBrandLogo(formData: FormData): Promise<{
+  success: boolean;
+  message: string;
+  url?: string;
+}> {
+  return uploadCatalogImage(formData, "brands");
+}
+
+export async function uploadMemberAvatar(formData: FormData): Promise<{
+  success: boolean;
+  message: string;
+  url?: string;
+}> {
+  return uploadCatalogImage(formData, "members");
+}
+
+export async function createBrand(raw: BrandFormInput): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.result;
+
+  const parsed = brandFormSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: parsed.error.issues[0]?.message ?? "Invalid brand data.",
+    };
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+    const payload = {
+      name: parsed.data.name,
+      slug: parsed.data.slug || slugify(parsed.data.name),
+      description: parsed.data.description || null,
+      logo_url: parsed.data.logoUrl || null,
+      website: parsed.data.website || null,
+      active: parsed.data.active ?? true,
+    };
+
+    const { data, error } = await supabase
+      .from("brands")
+      .insert(payload)
+      .select("id")
+      .single();
+
+    if (error) throw error;
+
+    revalidatePath("/admin/brands");
+    revalidatePath("/brands");
+    revalidatePath("/shop");
+    return { success: true, message: "Brand created.", id: data.id };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to create brand.",
+    };
+  }
+}
+
+export async function updateBrand(
+  id: string,
+  raw: BrandFormInput,
+): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.result;
+
+  const parsed = brandFormSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: parsed.error.issues[0]?.message ?? "Invalid brand data.",
+    };
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+    const payload = {
+      name: parsed.data.name,
+      slug: parsed.data.slug || slugify(parsed.data.name),
+      description: parsed.data.description || null,
+      logo_url: parsed.data.logoUrl || null,
+      website: parsed.data.website || null,
+      active: parsed.data.active ?? true,
+    };
+
+    const { error } = await supabase.from("brands").update(payload).eq("id", id);
+
+    if (error) throw error;
+
+    revalidatePath("/admin/brands");
+    revalidatePath(`/admin/brands/${id}`);
+    revalidatePath(`/admin/brands/${id}/edit`);
+    revalidatePath("/brands");
+    revalidatePath("/shop");
+    return { success: true, message: "Brand updated.", id };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to update brand.",
+    };
+  }
+}
+
+export async function deleteBrand(id: string): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    if (!isSupabaseConfigured()) {
+      revalidatePath("/admin/brands");
+      return {
+        success: true,
+        message: "Brand deleted (demo). Connect Supabase to persist.",
+      };
+    }
+    return auth.result;
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const { error: productError } = await supabase
+      .from("products")
+      .update({ brand_id: null })
+      .eq("brand_id", id);
+    if (productError) throw productError;
+
+    const { error } = await supabase.from("brands").delete().eq("id", id);
+    if (error) throw error;
+
+    revalidatePath("/admin/brands");
+    revalidatePath("/admin/products");
+    revalidatePath("/brands");
+    revalidatePath("/shop");
+    return { success: true, message: "Brand deleted." };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to delete brand.",
+    };
+  }
+}
+
+async function uploadCatalogImage(
+  formData: FormData,
+  folder: "products" | "categories" | "brands" | "members",
+): Promise<{
+  success: boolean;
+  message: string;
+  url?: string;
+}> {
+  const file = formData.get("file");
+  if (!(file instanceof File)) {
+    return { success: false, message: "No file provided." };
+  }
+
+  const allowed = [
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "image/svg+xml",
+  ];
+  if (!allowed.includes(file.type)) {
+    return { success: false, message: "Use JPG, PNG, WEBP, GIF, or SVG." };
+  }
+  if (file.size > 8 * 1024 * 1024) {
+    return { success: false, message: "Image must be 8 MB or smaller." };
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+
+  const auth = await requireAdmin();
+
+  if (auth.ok) {
+    try {
+      const { createServiceClient } = await import("@/lib/supabase/admin");
+      const supabase = createServiceClient();
+      const path = `${folder}/${filename}`;
+
+      const { error } = await supabase.storage
+        .from("product-images")
+        .upload(path, buffer, {
+          contentType: file.type,
+          upsert: false,
+        });
+
+      if (error) throw error;
+
+      const { data } = supabase.storage.from("product-images").getPublicUrl(path);
+      return { success: true, message: "Image uploaded.", url: data.publicUrl };
+    } catch {
+      // Fall through to local public/uploads for local/dev without storage.
+    }
+  }
+
+  try {
+    const { mkdir, writeFile } = await import("node:fs/promises");
+    const path = await import("node:path");
+    const dir = path.join(process.cwd(), "public", "uploads", folder);
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, filename), buffer);
+    return {
+      success: true,
+      message: auth.ok
+        ? "Image saved locally (storage unavailable)."
+        : "Image saved locally (Supabase not configured).",
+      url: `/uploads/${folder}/${filename}`,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message:
+        err instanceof Error
+          ? err.message
+          : "Upload failed. Configure Supabase Storage or enable local uploads.",
     };
   }
 }
@@ -205,9 +701,20 @@ export async function archiveProduct(id: string): Promise<ActionResult> {
   try {
     const { createServiceClient } = await import("@/lib/supabase/admin");
     const supabase = createServiceClient();
+    const { data: existing } = await supabase
+      .from("products")
+      .select("metadata")
+      .eq("id", id)
+      .maybeSingle();
+    const metadata = {
+      ...(existing?.metadata && typeof existing.metadata === "object"
+        ? (existing.metadata as Record<string, unknown>)
+        : {}),
+      status: "archived",
+    };
     const { error } = await supabase
       .from("products")
-      .update({ active: false })
+      .update({ active: false, metadata })
       .eq("id", id);
 
     if (error) throw error;
@@ -223,6 +730,58 @@ export async function archiveProduct(id: string): Promise<ActionResult> {
   }
 }
 
+export async function replenishProduct(
+  id: string,
+  amount: number,
+): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.result;
+
+  const qty = Math.floor(Number(amount));
+  if (!Number.isFinite(qty) || qty < 1) {
+    return { success: false, message: "Enter a quantity of at least 1." };
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+    const { data: existing, error: fetchError } = await supabase
+      .from("products")
+      .select("inventory_quantity, name")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (fetchError) throw fetchError;
+    if (!existing) {
+      return { success: false, message: "Product not found." };
+    }
+
+    const nextQty = Math.max(0, Number(existing.inventory_quantity) || 0) + qty;
+    const { error } = await supabase
+      .from("products")
+      .update({ inventory_quantity: nextQty })
+      .eq("id", id);
+
+    if (error) throw error;
+
+    revalidatePath("/admin/products");
+    revalidatePath(`/admin/products/${id}`);
+    revalidatePath("/admin/inventory");
+    revalidatePath("/shop");
+    return {
+      success: true,
+      message: `Added ${qty} unit${qty === 1 ? "" : "s"} — now ${nextQty} on hand.`,
+      id,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message:
+        err instanceof Error ? err.message : "Failed to replenish inventory.",
+    };
+  }
+}
+
 export async function restoreProduct(id: string): Promise<ActionResult> {
   const auth = await requireAdmin();
   if (!auth.ok) return auth.result;
@@ -230,9 +789,20 @@ export async function restoreProduct(id: string): Promise<ActionResult> {
   try {
     const { createServiceClient } = await import("@/lib/supabase/admin");
     const supabase = createServiceClient();
+    const { data: existing } = await supabase
+      .from("products")
+      .select("metadata")
+      .eq("id", id)
+      .maybeSingle();
+    const metadata = {
+      ...(existing?.metadata && typeof existing.metadata === "object"
+        ? (existing.metadata as Record<string, unknown>)
+        : {}),
+      status: "active",
+    };
     const { error } = await supabase
       .from("products")
-      .update({ active: true })
+      .update({ active: true, metadata })
       .eq("id", id);
 
     if (error) throw error;
@@ -558,6 +1128,1386 @@ export async function saveSiteSettings(formData: FormData): Promise<ActionResult
     return {
       success: false,
       message: err instanceof Error ? err.message : "Failed to save settings.",
+    };
+  }
+}
+
+const RESET_PLATFORM_CONFIRMATION = "RESET";
+
+/** Deletes all catalog/commerce data. Keeps admin accounts and profiles. */
+export async function resetPlatform(
+  confirmation: string,
+): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    if (!isSupabaseConfigured()) {
+      return {
+        success: true,
+        message: "Platform reset (demo). Connect Supabase to persist.",
+      };
+    }
+    return auth.result;
+  }
+
+  if (confirmation.trim() !== RESET_PLATFORM_CONFIRMATION) {
+    return {
+      success: false,
+      message: `Type ${RESET_PLATFORM_CONFIRMATION} to confirm the reset.`,
+    };
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+    const clearAll = async (table: string) => {
+      const { error } = await supabase
+        .from(table)
+        .delete()
+        .neq("id", "00000000-0000-0000-0000-000000000000");
+      if (error) throw new Error(`${table}: ${error.message}`);
+    };
+
+    // Commerce / quotes first (FK-safe order)
+    await clearAll("quote_attachments");
+    await clearAll("quote_items");
+    await clearAll("quotes");
+    await clearAll("coupon_redemptions");
+    await clearAll("order_status_history");
+    await clearAll("order_items");
+    await clearAll("orders");
+    await clearAll("cart_items");
+    await clearAll("carts");
+    await clearAll("wishlist_items");
+    await clearAll("wishlists");
+    await clearAll("reviews");
+    await clearAll("inventory_movements");
+    await clearAll("coupons");
+    await clearAll("newsletter_subscribers");
+    await clearAll("resources");
+
+    // Catalog (child tables cascade from products)
+    await clearAll("products");
+
+    const { error: categoryParentError } = await supabase
+      .from("categories")
+      .update({ parent_id: null })
+      .neq("id", "00000000-0000-0000-0000-000000000000");
+    if (categoryParentError) throw categoryParentError;
+
+    await clearAll("categories");
+    await clearAll("brands");
+
+    // Custom platform settings (tags, etc.) — leave core store config alone
+    const { error: settingsError } = await supabase
+      .from("site_settings")
+      .delete()
+      .in("key", [
+        "catalog_tags",
+        "catalog_primary_tags",
+        "catalog_tags_removed",
+        "catalog_sizes",
+      ]);
+    if (settingsError) throw settingsError;
+
+    revalidatePath("/admin");
+    revalidatePath("/admin/products");
+    revalidatePath("/admin/categories");
+    revalidatePath("/admin/brands");
+    revalidatePath("/admin/orders");
+    revalidatePath("/admin/quotes");
+    revalidatePath("/admin/customers");
+    revalidatePath("/admin/inventory");
+    revalidatePath("/admin/resources");
+    revalidatePath("/admin/settings");
+    revalidatePath("/shop");
+
+    return {
+      success: true,
+      message:
+        "Platform reset. Catalog, orders, quotes, and carts were cleared. Admin accounts were kept.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to reset platform.",
+    };
+  }
+}
+
+export async function importProductsCsv(
+  formData: FormData,
+): Promise<ActionResult & { imported?: number; updated?: number }> {
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    if (!isSupabaseConfigured()) {
+      return {
+        success: true,
+        message: "CSV import acknowledged (demo). Connect Supabase to persist.",
+        imported: 0,
+        updated: 0,
+      };
+    }
+    return auth.result;
+  }
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) {
+    return { success: false, message: "Choose a CSV file to import." };
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    return { success: false, message: "CSV must be 5 MB or smaller." };
+  }
+
+  try {
+    const {
+      parseCsv,
+      parseBool,
+      parseNumber,
+    } = await import("@/lib/admin/products-csv");
+    const text = await file.text();
+    const rows = parseCsv(text);
+    if (rows.length === 0) {
+      return { success: false, message: "CSV has no data rows." };
+    }
+
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const [{ data: categories }, { data: brands }] = await Promise.all([
+      supabase.from("categories").select("id, slug"),
+      supabase.from("brands").select("id, slug"),
+    ]);
+    const categoryBySlug = new Map(
+      (categories ?? []).map((c) => [c.slug.toLowerCase(), c.id]),
+    );
+    const brandBySlug = new Map(
+      (brands ?? []).map((b) => [b.slug.toLowerCase(), b.id]),
+    );
+
+    let imported = 0;
+    let updated = 0;
+
+    for (const row of rows) {
+      const sku = row.sku?.trim();
+      const name = row.name?.trim();
+      if (!sku || !name) continue;
+
+      const slug =
+        row.slug?.trim() ||
+        slugify(name) ||
+        slugify(sku);
+
+      const price = parseNumber(row.price ?? "");
+      if (price == null || price < 0) continue;
+
+      const payload = {
+        sku,
+        name,
+        slug,
+        price,
+        compare_at_price: parseNumber(row.compare_at_price ?? ""),
+        cost: parseNumber(row.cost ?? ""),
+        inventory_quantity: Math.max(
+          0,
+          Math.floor(parseNumber(row.inventory_quantity ?? "") ?? 0),
+        ),
+        low_stock_threshold: Math.max(
+          0,
+          Math.floor(parseNumber(row.low_stock_threshold ?? "") ?? 10),
+        ),
+        active: parseBool(row.active ?? "", true),
+        featured: parseBool(row.featured ?? "", false),
+        bestseller: parseBool(row.bestseller ?? "", false),
+        product_type: row.product_type?.trim() || null,
+        department: row.department?.trim() || null,
+        ansi_class: row.ansi_class?.trim() || null,
+        color: row.color?.trim() || null,
+        size: row.size?.trim() || null,
+        shipping_class: row.shipping_class?.trim() || null,
+        weight: parseNumber(row.weight ?? ""),
+        short_description: row.short_description?.trim() || null,
+        description: row.description?.trim() || null,
+        category_id: row.category_slug
+          ? (categoryBySlug.get(row.category_slug.toLowerCase()) ?? null)
+          : null,
+        brand_id: row.brand_slug
+          ? (brandBySlug.get(row.brand_slug.toLowerCase()) ?? null)
+          : null,
+      };
+
+      const { data: existing } = await supabase
+        .from("products")
+        .select("id")
+        .eq("sku", sku)
+        .maybeSingle();
+
+      if (existing?.id) {
+        const { error } = await supabase
+          .from("products")
+          .update(payload)
+          .eq("id", existing.id);
+        if (error) throw error;
+        updated += 1;
+      } else {
+        const { error } = await supabase.from("products").insert(payload);
+        if (error) throw error;
+        imported += 1;
+      }
+    }
+
+    revalidatePath("/admin/products");
+    revalidatePath("/admin/inventory");
+    revalidatePath("/shop");
+
+    return {
+      success: true,
+      message: `Import complete — ${imported} created, ${updated} updated.`,
+      imported,
+      updated,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "CSV import failed.",
+    };
+  }
+}
+
+async function readCatalogTagsList(
+  supabase: Awaited<
+    ReturnType<typeof import("@/lib/supabase/admin").createServiceClient>
+  >,
+  key: "catalog_tags" | "catalog_primary_tags" = "catalog_tags",
+): Promise<string[]> {
+  const { data } = await supabase
+    .from("site_settings")
+    .select("value")
+    .eq("key", key)
+    .maybeSingle();
+  const value = data?.value as { tags?: unknown } | null;
+  if (!Array.isArray(value?.tags)) return [];
+  return value.tags
+    .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+    .map((t) => t.trim());
+}
+
+export async function createCatalogTag(
+  name: string,
+  source: "catalog" | "custom" = "custom",
+): Promise<ActionResult> {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return { success: false, message: "Tag name is required." };
+  }
+  const tagSource = source === "catalog" ? "catalog" : "custom";
+
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    if (!isSupabaseConfigured()) {
+      const {
+        getDemoCatalogTags,
+        setDemoCatalogTags,
+        getDemoPrimaryCatalogTags,
+        setDemoPrimaryCatalogTags,
+        getDemoRemovedCatalogTags,
+        setDemoRemovedCatalogTags,
+      } = await import("@/lib/data/admin");
+      const { PRODUCT_TAG_OPTIONS } = await import("@/lib/data/catalog-options");
+      setDemoRemovedCatalogTags(
+        getDemoRemovedCatalogTags().filter(
+          (t) => t.toLowerCase() !== trimmed.toLowerCase(),
+        ),
+      );
+      const existing = new Set([
+        ...PRODUCT_TAG_OPTIONS.map((o) => o.value.toLowerCase()),
+        ...getDemoCatalogTags().map((t) => t.toLowerCase()),
+        ...getDemoPrimaryCatalogTags().map((t) => t.toLowerCase()),
+      ]);
+      if (existing.has(trimmed.toLowerCase())) {
+        return { success: false, message: "That tag already exists." };
+      }
+      if (tagSource === "catalog") {
+        setDemoPrimaryCatalogTags([...getDemoPrimaryCatalogTags(), trimmed]);
+      } else {
+        setDemoCatalogTags([...getDemoCatalogTags(), trimmed]);
+      }
+      revalidatePath("/admin/categories");
+      revalidatePath("/admin/products");
+      return {
+        success: true,
+        message: "Tag added (demo). Connect Supabase to persist.",
+      };
+    }
+    return auth.result;
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const { PRODUCT_TAG_OPTIONS } = await import("@/lib/data/catalog-options");
+    const supabase = createServiceClient();
+    const [currentCustom, currentPrimary] = await Promise.all([
+      readCatalogTagsList(supabase, "catalog_tags"),
+      readCatalogTagsList(supabase, "catalog_primary_tags"),
+    ]);
+    const existing = new Set([
+      ...PRODUCT_TAG_OPTIONS.map((o) => o.value.toLowerCase()),
+      ...currentCustom.map((t) => t.toLowerCase()),
+      ...currentPrimary.map((t) => t.toLowerCase()),
+    ]);
+
+    const { data: removedRow } = await supabase
+      .from("site_settings")
+      .select("value")
+      .eq("key", "catalog_tags_removed")
+      .maybeSingle();
+    const removedValue = removedRow?.value as { tags?: unknown } | null;
+    const removed = Array.isArray(removedValue?.tags)
+      ? removedValue.tags
+          .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+          .map((t) => t.trim())
+      : [];
+    const wasRemoved = removed.some(
+      (t) => t.toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (wasRemoved) {
+      await supabase.from("site_settings").upsert(
+        {
+          key: "catalog_tags_removed",
+          value: {
+            tags: removed.filter(
+              (t) => t.toLowerCase() !== trimmed.toLowerCase(),
+            ),
+          },
+        },
+        { onConflict: "key" },
+      );
+    }
+
+    if (existing.has(trimmed.toLowerCase()) && !wasRemoved) {
+      return { success: false, message: "That tag already exists." };
+    }
+
+    if (!existing.has(trimmed.toLowerCase())) {
+      if (tagSource === "catalog") {
+        await writeCatalogTagsList(supabase, [...currentPrimary, trimmed], "catalog_primary_tags");
+      } else {
+        await writeCatalogTagsList(supabase, [...currentCustom, trimmed], "catalog_tags");
+      }
+    }
+
+    revalidatePath("/admin/categories");
+    revalidatePath("/admin/products");
+    return { success: true, message: "Tag added." };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to add tag.",
+    };
+  }
+}
+
+async function writeCatalogTagsList(
+  supabase: Awaited<
+    ReturnType<typeof import("@/lib/supabase/admin").createServiceClient>
+  >,
+  tags: string[],
+  key: "catalog_tags" | "catalog_primary_tags" = "catalog_tags",
+) {
+  const { error } = await supabase.from("site_settings").upsert(
+    { key, value: { tags } },
+    { onConflict: "key" },
+  );
+  if (error) throw error;
+}
+
+/**
+ * Adds a size to the shared catalog list so it is selectable on every product,
+ * not just the one being edited.
+ */
+export async function addCatalogSize(name: string): Promise<ActionResult> {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return { success: false, message: "Size name is required." };
+  }
+  if (trimmed.length > 24) {
+    return { success: false, message: "Size must be 24 characters or fewer." };
+  }
+
+  const { SIZE_OPTIONS } = await import("@/lib/data/catalog-options");
+  const isCanonical = SIZE_OPTIONS.some(
+    (o) => o.value.toLowerCase() === trimmed.toLowerCase(),
+  );
+
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    if (!isSupabaseConfigured()) {
+      const { getDemoCatalogSizes, setDemoCatalogSizes } = await import(
+        "@/lib/data/admin"
+      );
+      const current = getDemoCatalogSizes();
+      const exists =
+        isCanonical ||
+        current.some((s) => s.toLowerCase() === trimmed.toLowerCase());
+      if (exists) {
+        return { success: false, message: "That size already exists." };
+      }
+      setDemoCatalogSizes([...current, trimmed]);
+      revalidatePath("/admin/products");
+      return {
+        success: true,
+        message: "Size added (demo). Connect Supabase to persist.",
+      };
+    }
+    return auth.result;
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const { data } = await supabase
+      .from("site_settings")
+      .select("value")
+      .eq("key", "catalog_sizes")
+      .maybeSingle();
+    const value = data?.value as { sizes?: unknown } | null;
+    const current = Array.isArray(value?.sizes)
+      ? value.sizes
+          .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+          .map((s) => s.trim())
+      : [];
+
+    const exists =
+      isCanonical ||
+      current.some((s) => s.toLowerCase() === trimmed.toLowerCase());
+    if (exists) {
+      return { success: false, message: "That size already exists." };
+    }
+
+    const { error } = await supabase.from("site_settings").upsert(
+      { key: "catalog_sizes", value: { sizes: [...current, trimmed] } },
+      { onConflict: "key" },
+    );
+    if (error) throw error;
+
+    revalidatePath("/admin/products");
+    return { success: true, message: `Size "${trimmed}" added to all products.` };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to add size.",
+    };
+  }
+}
+
+async function remapProductTags(
+  supabase: Awaited<
+    ReturnType<typeof import("@/lib/supabase/admin").createServiceClient>
+  >,
+  fromName: string,
+  toName: string | null,
+) {
+  const { data: products, error } = await supabase
+    .from("products")
+    .select("id, metadata");
+  if (error) throw error;
+
+  const fromKey = fromName.toLowerCase();
+  for (const product of products ?? []) {
+    const raw = product.metadata;
+    const metadata: Record<string, unknown> =
+      raw && typeof raw === "object" && !Array.isArray(raw)
+        ? { ...(raw as Record<string, unknown>) }
+        : {};
+    const current =
+      typeof metadata.tag === "string" ? metadata.tag.trim() : "";
+    if (current.toLowerCase() !== fromKey) continue;
+    metadata.tag = toName;
+    const { error: updateError } = await supabase
+      .from("products")
+      .update({
+        metadata: metadata as import("@/types/database").Json,
+      })
+      .eq("id", product.id);
+    if (updateError) throw updateError;
+  }
+}
+
+export async function renameCatalogTag(
+  oldName: string,
+  newName: string,
+): Promise<ActionResult> {
+  const from = oldName.trim();
+  const to = newName.trim();
+  if (!from || !to) {
+    return { success: false, message: "Tag name is required." };
+  }
+  if (from.toLowerCase() === to.toLowerCase()) {
+    return { success: true, message: "Tag unchanged." };
+  }
+
+  const { PRODUCT_TAG_OPTIONS } = await import("@/lib/data/catalog-options");
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    if (!isSupabaseConfigured()) {
+      const { getDemoCatalogTags, setDemoCatalogTags } = await import(
+        "@/lib/data/admin"
+      );
+      const existing = new Set([
+        ...PRODUCT_TAG_OPTIONS.map((o) => o.value.toLowerCase()),
+        ...getDemoCatalogTags().map((t) => t.toLowerCase()),
+      ]);
+      if (existing.has(to.toLowerCase())) {
+        return { success: false, message: "That tag already exists." };
+      }
+      const current = getDemoCatalogTags();
+      const replaced = current.map((t) =>
+        t.toLowerCase() === from.toLowerCase() ? to : t,
+      );
+      const hadCustom = current.some(
+        (t) => t.toLowerCase() === from.toLowerCase(),
+      );
+      setDemoCatalogTags(hadCustom ? replaced : [...replaced, to]);
+      revalidatePath("/admin/categories");
+      revalidatePath("/admin/products");
+      return {
+        success: true,
+        message: "Tag renamed (demo). Connect Supabase to persist.",
+      };
+    }
+    return auth.result;
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+    const current = await readCatalogTagsList(supabase);
+    const existing = new Set([
+      ...PRODUCT_TAG_OPTIONS.map((o) => o.value.toLowerCase()),
+      ...current.map((t) => t.toLowerCase()),
+    ]);
+    if (existing.has(to.toLowerCase())) {
+      return { success: false, message: "That tag already exists." };
+    }
+
+    let next = current.map((t) =>
+      t.toLowerCase() === from.toLowerCase() ? to : t,
+    );
+    if (
+      !current.some((t) => t.toLowerCase() === from.toLowerCase()) &&
+      !PRODUCT_TAG_OPTIONS.some((o) => o.value.toLowerCase() === from.toLowerCase())
+    ) {
+      next = [...next, to];
+    } else if (
+      !current.some((t) => t.toLowerCase() === from.toLowerCase()) &&
+      PRODUCT_TAG_OPTIONS.some((o) => o.value.toLowerCase() === from.toLowerCase())
+    ) {
+      // Renaming a built-in label used on products — keep custom alias
+      next = [...next, to];
+    }
+
+    await writeCatalogTagsList(supabase, next);
+    await remapProductTags(supabase, from, to);
+
+    revalidatePath("/admin/categories");
+    revalidatePath("/admin/products");
+    return { success: true, message: "Tag renamed." };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to rename tag.",
+    };
+  }
+}
+
+export async function deleteCatalogTag(name: string): Promise<ActionResult> {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return { success: false, message: "Tag name is required." };
+  }
+
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    if (!isSupabaseConfigured()) {
+      const {
+        getDemoCatalogTags,
+        setDemoCatalogTags,
+        getDemoPrimaryCatalogTags,
+        setDemoPrimaryCatalogTags,
+        getDemoRemovedCatalogTags,
+        setDemoRemovedCatalogTags,
+      } = await import("@/lib/data/admin");
+      setDemoCatalogTags(
+        getDemoCatalogTags().filter(
+          (t) => t.toLowerCase() !== trimmed.toLowerCase(),
+        ),
+      );
+      setDemoPrimaryCatalogTags(
+        getDemoPrimaryCatalogTags().filter(
+          (t) => t.toLowerCase() !== trimmed.toLowerCase(),
+        ),
+      );
+      const removed = getDemoRemovedCatalogTags();
+      if (!removed.some((t) => t.toLowerCase() === trimmed.toLowerCase())) {
+        setDemoRemovedCatalogTags([...removed, trimmed]);
+      }
+      revalidatePath("/admin/categories");
+      revalidatePath("/admin/products");
+      return {
+        success: true,
+        message: "Tag removed (demo). Connect Supabase to persist.",
+      };
+    }
+    return auth.result;
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const current = await readCatalogTagsList(supabase, "catalog_tags");
+    const next = current.filter(
+      (t) => t.toLowerCase() !== trimmed.toLowerCase(),
+    );
+    await writeCatalogTagsList(supabase, next, "catalog_tags");
+
+    const primary = await readCatalogTagsList(supabase, "catalog_primary_tags");
+    const nextPrimary = primary.filter(
+      (t) => t.toLowerCase() !== trimmed.toLowerCase(),
+    );
+    await writeCatalogTagsList(supabase, nextPrimary, "catalog_primary_tags");
+
+    const { data: removedRow } = await supabase
+      .from("site_settings")
+      .select("value")
+      .eq("key", "catalog_tags_removed")
+      .maybeSingle();
+    const removedValue = removedRow?.value as { tags?: unknown } | null;
+    const removed = Array.isArray(removedValue?.tags)
+      ? removedValue.tags
+          .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+          .map((t) => t.trim())
+      : [];
+    if (!removed.some((t) => t.toLowerCase() === trimmed.toLowerCase())) {
+      await supabase.from("site_settings").upsert(
+        {
+          key: "catalog_tags_removed",
+          value: { tags: [...removed, trimmed] },
+        },
+        { onConflict: "key" },
+      );
+    }
+
+    await remapProductTags(supabase, trimmed, null);
+
+    revalidatePath("/admin/categories");
+    revalidatePath("/admin/products");
+    return { success: true, message: "Tag removed." };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to remove tag.",
+    };
+  }
+}
+
+export async function updateCustomer(
+  customerId: string,
+  input: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    company?: string;
+    phone?: string;
+    state?: string;
+    postalCode?: string;
+  },
+): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.result;
+
+  const firstName = input.firstName.trim();
+  const lastName = input.lastName.trim();
+  const email = input.email.trim().toLowerCase();
+  if (!firstName || !lastName || !email) {
+    return { success: false, message: "Name and email are required." };
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id, role, email")
+      .eq("id", customerId)
+      .maybeSingle();
+
+    if (!profile || String(profile.role ?? "").toLowerCase() !== "customer") {
+      return { success: false, message: "Customer not found." };
+    }
+
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({
+        first_name: firstName,
+        last_name: lastName,
+        full_name: `${firstName} ${lastName}`.trim(),
+        email,
+        company: input.company?.trim() || null,
+        phone: input.phone?.trim() || null,
+        state: input.state?.trim() || null,
+        postal_code: input.postalCode?.trim() || null,
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq("id", customerId);
+
+    if (profileError) {
+      return { success: false, message: profileError.message };
+    }
+
+    if (email !== String(profile.email ?? "").toLowerCase()) {
+      const { error: authError } = await supabase.auth.admin.updateUserById(
+        customerId,
+        { email },
+      );
+      if (authError) {
+        return {
+          success: false,
+          message: `Profile updated, but email auth sync failed: ${authError.message}`,
+        };
+      }
+    }
+
+    revalidatePath("/admin/customers");
+    revalidatePath(`/admin/customers/${customerId}`);
+    return { success: true, message: "Customer updated." };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to update customer.",
+    };
+  }
+}
+
+export async function deleteCustomer(customerId: string): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.result;
+
+  if (auth.userId === customerId) {
+    return { success: false, message: "You cannot delete your own account." };
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id, role")
+      .eq("id", customerId)
+      .maybeSingle();
+
+    if (!profile || String(profile.role ?? "").toLowerCase() !== "customer") {
+      return { success: false, message: "Customer not found." };
+    }
+
+    const { error } = await supabase.auth.admin.deleteUser(customerId);
+    if (error) {
+      await supabase.from("profiles").delete().eq("id", customerId);
+      if (error.message && !/not found|user not found/i.test(error.message)) {
+        return { success: false, message: error.message };
+      }
+    }
+
+    revalidatePath("/admin/customers");
+    return { success: true, message: "Customer deleted." };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to delete customer.",
+    };
+  }
+}
+
+export async function sendCustomerPasswordReset(
+  customerId: string,
+): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.result;
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("email, role")
+      .eq("id", customerId)
+      .maybeSingle();
+
+    if (
+      !profile?.email ||
+      String(profile.role ?? "").toLowerCase() !== "customer"
+    ) {
+      return { success: false, message: "Customer not found." };
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(profile.email, {
+      redirectTo: absoluteUrl("/auth/callback?next=/account/profile"),
+    });
+    if (error) return { success: false, message: error.message };
+
+    return {
+      success: true,
+      message: `Password reset email sent to ${profile.email}.`,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message:
+        err instanceof Error ? err.message : "Failed to send password reset.",
+    };
+  }
+}
+
+/** Live profiles.role check constraint accepts Customer | Administrator | Support. */
+const MEMBER_ROLE = "Administrator";
+
+type ServiceClient = ReturnType<
+  typeof import("@/lib/supabase/admin").createServiceClient
+>;
+
+/**
+ * Aligns a member's affiliate coupon with their profile: the code they were
+ * given, and the admin discount rate configured on /admin/members.
+ */
+async function syncMemberCoupon(
+  supabase: ServiceClient,
+  memberId: string,
+  promoCode: string | null,
+) {
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("affiliate_coupon_id")
+    .eq("id", memberId)
+    .maybeSingle();
+
+  const couponId = profile?.affiliate_coupon_id;
+  if (!couponId) return;
+
+  const { getPromoDiscountSettings } = await import("@/lib/data/admin");
+  const { adminPercent } = await getPromoDiscountSettings();
+
+  await supabase
+    .from("coupons")
+    .update({
+      ...(promoCode ? { code: promoCode } : {}),
+      discount_type: "percent",
+      discount_value: adminPercent,
+    } as never)
+    .eq("id", couponId);
+}
+
+export async function updatePromoDiscounts(input: {
+  customerPercent: number;
+  adminPercent: number;
+}): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.result;
+
+  // Coupons carry a CHECK (discount_value > 0), so 0% cannot be stored.
+  const inRange = (n: number) => Number.isFinite(n) && n > 0 && n <= 100;
+  if (!inRange(input.customerPercent) || !inRange(input.adminPercent)) {
+    return {
+      success: false,
+      message: "Discounts must be greater than 0% and at most 100%.",
+    };
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const { error } = await supabase.from("site_settings").upsert(
+      [
+        {
+          key: "promo_discounts",
+          value: {
+            customer: input.customerPercent,
+            admin: input.adminPercent,
+          },
+        },
+      ],
+      { onConflict: "key" },
+    );
+    if (error) throw error;
+
+    const { data: updated, error: rpcError } = await supabase.rpc(
+      "apply_affiliate_discounts",
+      {
+        p_customer_percent: input.customerPercent,
+        p_admin_percent: input.adminPercent,
+      },
+    );
+    if (rpcError) throw rpcError;
+
+    const count = Number(updated ?? 0);
+    revalidatePath("/admin/settings");
+    revalidatePath("/admin/members");
+    revalidatePath("/admin/customers");
+    return {
+      success: true,
+      message: `Promo discounts saved. ${count} promo code${
+        count === 1 ? "" : "s"
+      } updated.`,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message:
+        err instanceof Error ? err.message : "Failed to save promo discounts.",
+    };
+  }
+}
+
+export async function setMaintenanceMode(input: {
+  enabled: boolean;
+  headline?: string;
+  message?: string;
+}): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.result;
+
+  const headline =
+    input.headline?.trim() || DEFAULT_MAINTENANCE_HEADLINE;
+  const message = input.message?.trim() || DEFAULT_MAINTENANCE_MESSAGE;
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const { error } = await supabase.from("site_settings").upsert(
+      [
+        {
+          key: MAINTENANCE_SETTINGS_KEY,
+          value: {
+            enabled: input.enabled,
+            headline,
+            message,
+            startedAt: input.enabled ? new Date().toISOString() : null,
+          },
+        },
+      ],
+      { onConflict: "key" },
+    );
+    if (error) throw error;
+
+    // Every storefront route renders the maintenance check in its layout.
+    revalidatePath("/", "layout");
+    revalidatePath("/admin/settings");
+
+    return {
+      success: true,
+      message: input.enabled
+        ? "Site is offline. Visitors now see the maintenance page."
+        : "Site is back online.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message:
+        err instanceof Error
+          ? err.message
+          : "Failed to change maintenance mode.",
+    };
+  }
+}
+
+export async function reviewAffiliateApplication(input: {
+  applicationId: string;
+  decision: "approved" | "declined";
+  note?: string;
+}): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.result;
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const { data: application, error: readError } = await supabase
+      .from("affiliate_applications")
+      .select("id, user_id")
+      .eq("id", input.applicationId)
+      .maybeSingle();
+    if (readError) throw readError;
+    if (!application) {
+      return { success: false, message: "Application not found." };
+    }
+
+    const { error } = await supabase
+      .from("affiliate_applications")
+      .update({
+        status: input.decision,
+        admin_note: input.note?.trim() || null,
+        reviewed_by: auth.userId,
+        reviewed_at: new Date().toISOString(),
+      })
+      .eq("id", application.id);
+    if (error) throw error;
+
+    if (input.decision === "approved") {
+      // Approval must leave the affiliate with a live, shareable code.
+      await supabase.rpc("ensure_affiliate_promo_for_profile", {
+        p_profile_id: application.user_id,
+      });
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("affiliate_coupon_id")
+        .eq("id", application.user_id)
+        .maybeSingle();
+      if (profile?.affiliate_coupon_id) {
+        await supabase
+          .from("coupons")
+          .update({ active: true })
+          .eq("id", profile.affiliate_coupon_id);
+      }
+    }
+
+    revalidatePath("/admin/affiliates");
+    revalidatePath("/admin/customers");
+    revalidatePath("/affiliates");
+
+    return {
+      success: true,
+      message:
+        input.decision === "approved"
+          ? "Affiliate approved. Their code is now active."
+          : "Application declined.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message:
+        err instanceof Error
+          ? err.message
+          : "Failed to update the application.",
+    };
+  }
+}
+
+export async function createMember(
+  raw: MemberFormInput,
+): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.result;
+
+  const parsed = memberFormSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: parsed.error.issues[0]?.message ?? "Invalid member data.",
+    };
+  }
+
+  const password = parsed.data.password?.trim() ?? "";
+  if (password.length < 8) {
+    return {
+      success: false,
+      message: "Password must be at least 8 characters.",
+    };
+  }
+
+  const firstName = parsed.data.firstName.trim();
+  const lastName = parsed.data.lastName.trim();
+  const email = parsed.data.email.trim().toLowerCase();
+  const promoCode = parsed.data.promoCode?.trim().toUpperCase() || null;
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const { data: created, error: authError } =
+      await supabase.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        user_metadata: {
+          first_name: firstName,
+          last_name: lastName,
+          full_name: `${firstName} ${lastName}`.trim(),
+          phone: parsed.data.phone?.trim() || null,
+        },
+      });
+
+    if (authError || !created.user) {
+      return {
+        success: false,
+        message: authError?.message ?? "Failed to create login.",
+      };
+    }
+
+    const memberId = created.user.id;
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({
+        first_name: firstName,
+        last_name: lastName,
+        full_name: `${firstName} ${lastName}`.trim(),
+        email,
+        phone: parsed.data.phone?.trim() || null,
+        date_of_birth: parsed.data.dateOfBirth?.trim() || null,
+        avatar_url: parsed.data.avatarUrl?.trim() || null,
+        role: MEMBER_ROLE,
+        ...(promoCode ? { promo_code: promoCode } : {}),
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq("id", memberId);
+
+    if (profileError) {
+      return {
+        success: false,
+        message: `Login created, but profile update failed: ${profileError.message}`,
+      };
+    }
+
+    await syncMemberCoupon(supabase, memberId, promoCode);
+
+    revalidatePath("/admin/members");
+    return { success: true, message: "Member added.", id: memberId };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to add member.",
+    };
+  }
+}
+
+export async function updateMember(
+  memberId: string,
+  raw: MemberFormInput,
+): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.result;
+
+  const parsed = memberFormSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      success: false,
+      message: parsed.error.issues[0]?.message ?? "Invalid member data.",
+    };
+  }
+
+  const firstName = parsed.data.firstName.trim();
+  const lastName = parsed.data.lastName.trim();
+  const email = parsed.data.email.trim().toLowerCase();
+  const promoCode = parsed.data.promoCode?.trim().toUpperCase() || null;
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id, email")
+      .eq("id", memberId)
+      .maybeSingle();
+
+    if (!profile) {
+      return { success: false, message: "Member not found." };
+    }
+
+    const { error: profileError } = await supabase
+      .from("profiles")
+      .update({
+        first_name: firstName,
+        last_name: lastName,
+        full_name: `${firstName} ${lastName}`.trim(),
+        email,
+        phone: parsed.data.phone?.trim() || null,
+        date_of_birth: parsed.data.dateOfBirth?.trim() || null,
+        avatar_url: parsed.data.avatarUrl?.trim() || null,
+        role: MEMBER_ROLE,
+        ...(promoCode ? { promo_code: promoCode } : {}),
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq("id", memberId);
+
+    if (profileError) {
+      return { success: false, message: profileError.message };
+    }
+
+    await syncMemberCoupon(supabase, memberId, promoCode);
+
+    const password = parsed.data.password?.trim();
+    const emailChanged = email !== String(profile.email ?? "").toLowerCase();
+
+    if (emailChanged || (password && password.length >= 8)) {
+      const { error: authError } = await supabase.auth.admin.updateUserById(
+        memberId,
+        {
+          ...(emailChanged ? { email } : {}),
+          ...(password && password.length >= 8 ? { password } : {}),
+        },
+      );
+      if (authError) {
+        return {
+          success: false,
+          message: `Profile updated, but login sync failed: ${authError.message}`,
+        };
+      }
+    }
+
+    revalidatePath("/admin/members");
+    revalidatePath(`/admin/members/${memberId}`);
+    revalidatePath(`/admin/members/${memberId}/edit`);
+    return { success: true, message: "Member updated.", id: memberId };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to update member.",
+    };
+  }
+}
+
+export async function deleteMember(memberId: string): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.result;
+
+  if (memberId === auth.userId) {
+    return {
+      success: false,
+      message: "You cannot remove your own admin account.",
+    };
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id, email")
+      .eq("id", memberId)
+      .maybeSingle();
+
+    if (!profile) {
+      return { success: false, message: "Member not found." };
+    }
+
+    if (isMasterAdminEmail(profile.email)) {
+      return {
+        success: false,
+        message: "The master admin account cannot be removed.",
+      };
+    }
+
+    const { error } = await supabase.auth.admin.deleteUser(memberId);
+    if (error) {
+      await supabase.from("profiles").delete().eq("id", memberId);
+      if (error.message && !/not found|user not found/i.test(error.message)) {
+        return { success: false, message: error.message };
+      }
+    }
+
+    revalidatePath("/admin/members");
+    return { success: true, message: "Member removed." };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to remove member.",
+    };
+  }
+}
+
+export async function setMemberPassword(
+  memberId: string,
+  newPassword: string,
+): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.result;
+
+  if (newPassword.trim().length < 8) {
+    return {
+      success: false,
+      message: "Password must be at least 8 characters.",
+    };
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("id", memberId)
+      .maybeSingle();
+
+    if (!profile) {
+      return { success: false, message: "Member not found." };
+    }
+
+    const { error } = await supabase.auth.admin.updateUserById(memberId, {
+      password: newPassword.trim(),
+    });
+    if (error) return { success: false, message: error.message };
+
+    return {
+      success: true,
+      message:
+        "Password updated. Previous passwords cannot be viewed or recovered.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to set password.",
+    };
+  }
+}
+
+export async function setCustomerPassword(
+  customerId: string,
+  newPassword: string,
+): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.result;
+
+  if (newPassword.trim().length < 8) {
+    return {
+      success: false,
+      message: "Password must be at least 8 characters.",
+    };
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id, role")
+      .eq("id", customerId)
+      .maybeSingle();
+
+    if (!profile || String(profile.role ?? "").toLowerCase() !== "customer") {
+      return { success: false, message: "Customer not found." };
+    }
+
+    const { error } = await supabase.auth.admin.updateUserById(customerId, {
+      password: newPassword.trim(),
+    });
+    if (error) return { success: false, message: error.message };
+
+    return {
+      success: true,
+      message: "Password updated. Previous passwords cannot be viewed or recovered.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to set password.",
     };
   }
 }

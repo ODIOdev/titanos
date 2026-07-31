@@ -28,14 +28,14 @@ export function IndustrySolutions({ className }: IndustrySolutionsProps) {
             <li key={industry.slug}>
               <Link
                 href={industry.href}
-                className="group flex h-full flex-col overflow-hidden rounded-sm border border-border-gray bg-white transition-[border-color] duration-200 hover:border-dark-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow"
+                className="flex h-full flex-col overflow-hidden rounded-sm border border-border-gray bg-white transition-[border-color] duration-200 hover:border-dark-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow"
               >
                 <div className="relative aspect-[16/10] overflow-hidden bg-dark-charcoal">
                   <Image
                     src={industry.image_url}
                     alt={industry.name}
                     fill
-                    className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                    className="object-cover"
                     sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
                   />
                 </div>
@@ -48,10 +48,7 @@ export function IndustrySolutions({ className }: IndustrySolutionsProps) {
                   </p>
                   <span className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-titan-yellow">
                     Shop Solutions
-                    <ArrowRight
-                      className="size-4 transition-transform group-hover:translate-x-0.5"
-                      aria-hidden="true"
-                    />
+                    <ArrowRight className="size-4" aria-hidden="true" />
                   </span>
                 </div>
               </Link>

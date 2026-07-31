@@ -45,6 +45,27 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
             ? `${products.length} product${products.length === 1 ? "" : "s"} found`
             : "Enter a search term to find safety gear, workwear, and traffic control products."}
         </p>
+        <form
+          action="/search"
+          method="get"
+          role="search"
+          className="mt-5 flex max-w-xl gap-2"
+        >
+          <input
+            type="search"
+            name="q"
+            defaultValue={q}
+            placeholder="Search safety gear, boots, signs…"
+            aria-label="Search products"
+            className="flex h-10 w-full rounded-sm border border-border-gray bg-white px-3 py-2 text-sm text-near-black placeholder:text-medium-gray focus-visible:border-dark-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow/40"
+          />
+          <button
+            type="submit"
+            className={cn(buttonVariants({ variant: "primary" }), "shrink-0")}
+          >
+            Search
+          </button>
+        </form>
       </div>
 
       {!q ? (

@@ -1,11 +1,11 @@
-import Link from "next/link";
 import { HeroSection } from "@/components/home/hero-section";
-import { BenefitsPanel } from "@/components/home/benefits-panel";
 import { CategoryGrid } from "@/components/home/category-grid";
 import { TrustStrip } from "@/components/home/trust-strip";
 import { IndustrySolutions } from "@/components/home/industry-solutions";
 import { BulkOrderCta } from "@/components/home/bulk-order-cta";
 import { NewsletterForm } from "@/components/home/newsletter-form";
+import { ProductCard } from "@/components/products/product-card";
+import { ProductCarousel } from "@/components/products/product-carousel";
 import { ProductGrid } from "@/components/products/product-grid";
 import { SectionHeader } from "@/components/shared/section-header";
 import { getFeaturedProducts, getBestsellerProducts } from "@/lib/data/products";
@@ -19,11 +19,9 @@ export default async function HomePage() {
   return (
     <>
       <HeroSection />
-      <BenefitsPanel />
       <CategoryGrid />
-      <TrustStrip />
 
-      <section className="section-y bg-white">
+      <section className="section-y bg-light-gray">
         <div className="container-titan">
           <SectionHeader
             eyebrow="Top picks"
@@ -36,10 +34,10 @@ export default async function HomePage() {
         </div>
       </section>
 
+      <TrustStrip />
       <IndustrySolutions />
-      <BulkOrderCta />
 
-      <section className="section-y bg-light-gray">
+      <section className="section-y bg-white">
         <div className="container-titan">
           <SectionHeader
             eyebrow="Proven on the job"
@@ -48,10 +46,20 @@ export default async function HomePage() {
             href="/shop?sort=best_selling"
             linkLabel="View bestsellers"
           />
-          <ProductGrid products={bestsellers} />
+          <ProductCarousel label="Bestselling products">
+            {bestsellers.map((product) => (
+              <li
+                key={product.id}
+                className="w-[78%] shrink-0 snap-start sm:w-[calc((100%-1rem)/2)] lg:w-[calc((100%-3rem)/4)]"
+              >
+                <ProductCard product={product} />
+              </li>
+            ))}
+          </ProductCarousel>
         </div>
       </section>
 
+      <BulkOrderCta />
       <NewsletterForm />
     </>
   );

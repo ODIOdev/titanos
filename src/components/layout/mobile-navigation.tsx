@@ -6,6 +6,7 @@ import { ChevronDown, X } from "lucide-react";
 import { NAV_CATEGORIES, SITE_CONFIG } from "@/lib/data/seed-data";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { HomeButton } from "@/components/layout/home-button";
 
 export interface MobileNavigationProps {
   open: boolean;
@@ -115,7 +116,11 @@ export function MobileNavigation({ open, onOpenChange }: MobileNavigationProps) 
           </Button>
         </div>
 
-        <div className="flex-1 overflow-y-auto py-2">
+          <div className="flex-1 overflow-y-auto py-2">
+          <HomeButton
+            className="mx-4 my-2 w-[calc(100%-2rem)] justify-start"
+            onClick={() => onOpenChange(false)}
+          />
           {NAV_CATEGORIES.map((category) => {
             const isOpen = expandedKey === category.label;
             return (

@@ -19,6 +19,7 @@ export type SeedBrand = {
   slug: string
   description: string
   logo_url: string
+  website?: string
   active: boolean
 }
 
@@ -130,6 +131,26 @@ export const BRAND_IDS = {
   carhartt: 'b0000000-0000-4000-8000-000000000004',
   honeywell: 'b0000000-0000-4000-8000-000000000005',
   milwaukee: 'b0000000-0000-4000-8000-000000000006',
+  msaSafety: 'b0000000-0000-4000-8000-000000000007',
+  pyramex: 'b0000000-0000-4000-8000-000000000008',
+  radians: 'b0000000-0000-4000-8000-000000000009',
+  ergodyne: 'b0000000-0000-4000-8000-00000000000a',
+  kleinTools: 'b0000000-0000-4000-8000-00000000000b',
+  cat: 'b0000000-0000-4000-8000-00000000000c',
+  timberlandPro: 'b0000000-0000-4000-8000-00000000000d',
+  redWing: 'b0000000-0000-4000-8000-00000000000e',
+  bullard: 'b0000000-0000-4000-8000-00000000000f',
+  ansell: 'b0000000-0000-4000-8000-000000000010',
+  moldex: 'b0000000-0000-4000-8000-000000000011',
+  pip: 'b0000000-0000-4000-8000-000000000012',
+  mcrSafety: 'b0000000-0000-4000-8000-000000000013',
+  gatewaySafety: 'b0000000-0000-4000-8000-000000000014',
+  plasticade: 'b0000000-0000-4000-8000-000000000015',
+  cortina: 'b0000000-0000-4000-8000-000000000016',
+  mlKishigo: 'b0000000-0000-4000-8000-000000000017',
+  ariat: 'b0000000-0000-4000-8000-000000000018',
+  wolverine: 'b0000000-0000-4000-8000-000000000019',
+  keen: 'b0000000-0000-4000-8000-00000000001a',
 } as const
 
 export const SEED_CATEGORIES: SeedCategory[] = [
@@ -242,7 +263,8 @@ export const SEED_BRANDS: SeedBrand[] = [
     slug: 'titan-safety',
     description:
       'Titan Safety Co. house brand — reliable PPE and traffic control at contractor-friendly prices.',
-    logo_url: '/images/brands/titan-safety.svg',
+    logo_url: '/images/brands/titan-safety.png',
+    website: 'https://titansafetyco.com',
     active: true,
   },
   {
@@ -251,7 +273,8 @@ export const SEED_BRANDS: SeedBrand[] = [
     slug: '3m',
     description:
       'Trusted manufacturer of personal protective equipment, adhesives, and safety solutions.',
-    logo_url: '/images/brands/3m.svg',
+    logo_url: '/images/brands/3m.png',
+    website: 'https://www.3m.com',
     active: true,
   },
   {
@@ -260,7 +283,8 @@ export const SEED_BRANDS: SeedBrand[] = [
     slug: 'dewalt',
     description:
       'Jobsite-tough tools and protective gear engineered for professional tradespeople.',
-    logo_url: '/images/brands/dewalt.svg',
+    logo_url: '/images/brands/dewalt.png',
+    website: 'https://www.dewalt.com',
     active: true,
   },
   {
@@ -269,7 +293,8 @@ export const SEED_BRANDS: SeedBrand[] = [
     slug: 'carhartt',
     description:
       'Durable workwear and footwear built for hard work in demanding environments.',
-    logo_url: '/images/brands/carhartt.svg',
+    logo_url: '/images/brands/carhartt.png',
+    website: 'https://www.carhartt.com',
     active: true,
   },
   {
@@ -278,7 +303,8 @@ export const SEED_BRANDS: SeedBrand[] = [
     slug: 'honeywell',
     description:
       'Industrial safety products spanning head, eye, hand, and fall protection.',
-    logo_url: '/images/brands/honeywell.svg',
+    logo_url: '/images/brands/honeywell.png',
+    website: 'https://www.honeywell.com',
     active: true,
   },
   {
@@ -287,7 +313,208 @@ export const SEED_BRANDS: SeedBrand[] = [
     slug: 'milwaukee',
     description:
       'Performance-driven tools and PPE for professional construction crews.',
-    logo_url: '/images/brands/milwaukee.svg',
+    logo_url: '/images/brands/milwaukee.png',
+    website: 'https://www.milwaukeetool.com',
+    active: true,
+  },
+  {
+    id: BRAND_IDS.msaSafety,
+    name: 'MSA Safety',
+    slug: 'msa-safety',
+    description:
+      'Gas detection, fall protection, and head protection for industrial and fire service teams.',
+    logo_url: '/images/brands/msa-safety.svg',
+    website: 'https://us.msasafety.com',
+    active: true,
+  },
+  {
+    id: BRAND_IDS.pyramex,
+    name: 'Pyramex',
+    slug: 'pyramex',
+    description:
+      'Affordable eye, head, and hearing protection for everyday jobsites.',
+    logo_url: '/images/brands/pyramex.png',
+    website: 'https://www.pyramexsafety.com',
+    active: true,
+  },
+  {
+    id: BRAND_IDS.radians,
+    name: 'Radians',
+    slug: 'radians',
+    description:
+      'PPE and high-visibility apparel designed for industrial and roadway crews.',
+    logo_url: '/images/brands/radians.png',
+    website: 'https://www.radians.com',
+    active: true,
+  },
+  {
+    id: BRAND_IDS.ergodyne,
+    name: 'Ergodyne',
+    slug: 'ergodyne',
+    description:
+      'Work gear for comfort and productivity — gloves, supports, cooling, and hi-vis.',
+    logo_url: '/images/brands/ergodyne.png',
+    website: 'https://www.ergodyne.com',
+    active: true,
+  },
+  {
+    id: BRAND_IDS.kleinTools,
+    name: 'Klein Tools',
+    slug: 'klein-tools',
+    description:
+      'Hand tools and PPE trusted by electricians and trades professionals.',
+    logo_url: '/images/brands/klein-tools.jpg',
+    website: 'https://www.kleintools.com',
+    active: true,
+  },
+  {
+    id: BRAND_IDS.cat,
+    name: 'CAT',
+    slug: 'cat',
+    description:
+      'Rugged work boots and footwear built for construction and industrial use.',
+    logo_url: '/images/brands/cat.svg',
+    website: 'https://www.catfootwear.com',
+    active: true,
+  },
+  {
+    id: BRAND_IDS.timberlandPro,
+    name: 'Timberland PRO',
+    slug: 'timberland-pro',
+    description:
+      'Professional work boots engineered for all-day comfort and durability.',
+    logo_url: '/images/brands/timberland-pro.png',
+    website: 'https://www.timberland.com',
+    active: true,
+  },
+  {
+    id: BRAND_IDS.redWing,
+    name: 'Red Wing',
+    slug: 'red-wing',
+    description:
+      'Heritage work boots known for fit, toughness, and long service life.',
+    logo_url: '/images/brands/red-wing.png',
+    website: 'https://www.redwingshoes.com',
+    active: true,
+  },
+  {
+    id: BRAND_IDS.bullard,
+    name: 'Bullard',
+    slug: 'bullard',
+    description:
+      'Hard hats, firefighter helmets, and thermal imaging for safety-critical work.',
+    logo_url: '/images/brands/bullard.png',
+    website: 'https://www.bullard.com',
+    active: true,
+  },
+  {
+    id: BRAND_IDS.ansell,
+    name: 'Ansell',
+    slug: 'ansell',
+    description:
+      'Industrial gloves and chemical-resistant hand protection.',
+    logo_url: '/images/brands/ansell.png',
+    website: 'https://www.ansell.com',
+    active: true,
+  },
+  {
+    id: BRAND_IDS.moldex,
+    name: 'Moldex',
+    slug: 'moldex',
+    description:
+      'Respirators and hearing protection for industrial environments.',
+    logo_url: '/images/brands/moldex.png',
+    website: 'https://www.moldex.com',
+    active: true,
+  },
+  {
+    id: BRAND_IDS.pip,
+    name: 'PIP',
+    slug: 'pip',
+    description:
+      'Protective Industrial Products — gloves, apparel, and disposable PPE.',
+    logo_url: '/images/brands/pip.png',
+    website: 'https://www.pipusa.com',
+    active: true,
+  },
+  {
+    id: BRAND_IDS.mcrSafety,
+    name: 'MCR Safety',
+    slug: 'mcr-safety',
+    description:
+      'Gloves, eyewear, and clothing for manufacturing and construction.',
+    logo_url: '/images/brands/mcr-safety.png',
+    website: 'https://www.mcrsafety.com',
+    active: true,
+  },
+  {
+    id: BRAND_IDS.gatewaySafety,
+    name: 'Gateway Safety',
+    slug: 'gateway-safety',
+    description:
+      'Protective eyewear and face protection for industrial workplaces.',
+    logo_url: '/images/brands/gateway-safety.png',
+    website: 'https://www.gatewaysafety.com',
+    active: true,
+  },
+  {
+    id: BRAND_IDS.plasticade,
+    name: 'Plasticade',
+    slug: 'plasticade',
+    description:
+      'Traffic control products including cones, barricades, and channelizers.',
+    logo_url: '/images/brands/plasticade.png',
+    website: 'https://www.plasticade.com',
+    active: true,
+  },
+  {
+    id: BRAND_IDS.cortina,
+    name: 'Cortina',
+    slug: 'cortina',
+    description:
+      'Work-zone safety products for traffic control and roadway crews.',
+    logo_url: '/images/brands/cortina.png',
+    website: 'https://www.cortinasafety.com',
+    active: true,
+  },
+  {
+    id: BRAND_IDS.mlKishigo,
+    name: 'ML Kishigo',
+    slug: 'ml-kishigo',
+    description:
+      'High-visibility safety apparel for construction and public works.',
+    logo_url: '/images/brands/ml-kishigo.png',
+    website: 'https://www.mlkishigo.com',
+    active: true,
+  },
+  {
+    id: BRAND_IDS.ariat,
+    name: 'Ariat',
+    slug: 'ariat',
+    description:
+      'Work boots and western-inspired footwear for demanding outdoor jobs.',
+    logo_url: '/images/brands/ariat.png',
+    website: 'https://www.ariat.com',
+    active: true,
+  },
+  {
+    id: BRAND_IDS.wolverine,
+    name: 'Wolverine',
+    slug: 'wolverine',
+    description:
+      'Work boots and outdoor footwear built for tough conditions.',
+    logo_url: '/images/brands/wolverine.png',
+    website: 'https://www.wolverine.com',
+    active: true,
+  },
+  {
+    id: BRAND_IDS.keen,
+    name: 'KEEN Utility',
+    slug: 'keen',
+    description:
+      'Comfort-focused safety toe boots and shoes for long shifts.',
+    logo_url: '/images/brands/keen.jpg',
+    website: 'https://www.keenfootwear.com',
     active: true,
   },
 ]
@@ -300,7 +527,7 @@ export const SEED_BRANDS: SeedBrand[] = [
 export const NAV_CATEGORIES: NavCategory[] = [
   {
     label: 'Safety Equipment',
-    href: '/shop?group=safety-equipment',
+    href: '/shop?department=Safety%20Equipment',
     children: [
       { name: 'Hard Hats', slug: 'hard-hats', href: '/shop/hard-hats' },
       { name: 'Safety Vests', slug: 'safety-vests', href: '/shop/safety-vests' },
@@ -325,7 +552,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
   },
   {
     label: 'Traffic Control',
-    href: '/shop?group=traffic-control',
+    href: '/shop?department=Traffic%20Control',
     children: [
       {
         name: 'Traffic Cones',
@@ -360,8 +587,8 @@ export const NAV_CATEGORIES: NavCategory[] = [
     ],
   },
   {
-    label: 'Footwear',
-    href: '/shop/work-boots',
+    label: 'Foot Wear',
+    href: '/shop?department=Foot%20Wear',
     children: [
       {
         name: 'Steel Toe Boots',
@@ -387,7 +614,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
   },
   {
     label: 'Signage',
-    href: '/shop?group=signage',
+    href: '/shop?department=Signage',
     children: [
       {
         name: 'Road Work Signs',
@@ -423,7 +650,7 @@ export const INDUSTRY_SOLUTIONS: IndustrySolution[] = [
     slug: 'construction',
     description:
       'Hard hats, hi-vis, fall protection, and jobsite PPE for general contractors and trades.',
-    image_url: '/images/industries/construction.svg',
+    image_url: '/images/industries/construction-solutions.jpg',
     href: '/shop?industry=construction',
   },
   {
@@ -431,7 +658,7 @@ export const INDUSTRY_SOLUTIONS: IndustrySolution[] = [
     slug: 'roadway',
     description:
       'Cones, barricades, and construction signs for highway crews and traffic-control contractors.',
-    image_url: '/images/industries/roadway.svg',
+    image_url: '/images/industries/roadway-solutions.jpg',
     href: '/shop?industry=roadway',
   },
   {
@@ -439,7 +666,7 @@ export const INDUSTRY_SOLUTIONS: IndustrySolution[] = [
     slug: 'municipalities',
     description:
       'Street signs, regulatory marking, and fleet PPE for cities, counties, and public works.',
-    image_url: '/images/industries/municipalities.svg',
+    image_url: '/images/industries/municipalities-solutions.jpg',
     href: '/shop?industry=municipalities',
   },
   {
@@ -447,7 +674,7 @@ export const INDUSTRY_SOLUTIONS: IndustrySolution[] = [
     slug: 'warehousing',
     description:
       'Safety vests, gloves, boots, and eye protection for distribution centers and logistics teams.',
-    image_url: '/images/industries/warehousing.svg',
+    image_url: '/images/industries/warehousing-solutions.jpg',
     href: '/shop?industry=warehousing',
   },
 ]

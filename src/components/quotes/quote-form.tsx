@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useFieldArray, useForm, type Resolver } from "react-hook-form";
+import { useFieldArray, useForm, Controller, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
 import { Plus, Trash2, Upload } from "lucide-react";
@@ -11,7 +11,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { ProductAutocomplete } from "@/components/quotes/product-autocomplete";
 import { INDUSTRY_SOLUTIONS } from "@/lib/data/seed-data";
+import { SHIPPING_COUNTRIES, US_STATES } from "@/lib/data/geo";
 import { quoteSchema, type QuoteInput } from "@/lib/validations";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
@@ -40,6 +42,7 @@ export function QuoteForm() {
     register,
     control,
     handleSubmit,
+    setValue,
     formState: { errors, isSubmitting },
     reset,
   } = useForm<QuoteInput>({
@@ -47,11 +50,13 @@ export function QuoteForm() {
     defaultValues: {
       contactName: "",
       company: "",
+      ein: "",
       email: "",
       phone: "",
       industry: "",
       projectName: "",
       requestedDeliveryDate: "",
+      urgency: "standard",
       customProductDescription: "",
       taxExempt: false,
       notes: "",
@@ -61,7 +66,7 @@ export function QuoteForm() {
       shippingState: "",
       shippingPostalCode: "",
       shippingCountry: "US",
-      items: [{ productName: "", sku: "", quantity: 1, notes: "" }],
+      items: [{ productId: "", productName: "", sku: "", quantity: 1, notes: "" }],
     },
   });
 
@@ -132,17 +137,26 @@ export function QuoteForm() {
           Contact details
         </h2>
         <div className="grid gap-4 sm:grid-cols-2">
-          <Input
-            label="Contact name"
-            required
-            error={errors.contactName?.message}
-            {...register("contactName")}
-          />
+          <div className="sm:col-span-2">
+            <Input
+              label="Contact name"
+              required
+              error={errors.contactName?.message}
+              {...register("contactName")}
+            />
+          </div>
           <Input
             label="Company"
             required
             error={errors.company?.message}
             {...register("company")}
+          />
+          <Input
+            label="EIN"
+            hint="XX-XXXXXXX"
+            placeholder="12-3456789"
+            error={errors.ein?.message}
+            {...register("ein")}
           />
           <Input
             label="Email"
@@ -180,6 +194,19 @@ export function QuoteForm() {
             error={errors.requestedDeliveryDate?.message}
             {...register("requestedDeliveryDate")}
           />
+          <Select
+            label="Urgency"
+            required
+            placeholder="Select urgency"
+            options={[
+              { label: "Standard", value: "standard" },
+              { label: "Needed soon", value: "soon" },
+              { label: "Urgent", value: "urgent" },
+              { label: "Emergency / ASAP", value: "emergency" },
+            ]}
+            error={errors.urgency?.message}
+            {...register("urgency")}
+          />
         </div>
         <Textarea
           label="Custom product description"
@@ -199,7 +226,13 @@ export function QuoteForm() {
             variant="outline"
             size="sm"
             onClick={() =>
-              append({ productName: "", sku: "", quantity: 1, notes: "" })
+              append({
+                productId: "",
+                productName: "",
+                sku: "",
+                quantity: 1,
+                notes: "",
+              })
             }
           >
             <Plus aria-hidden="true" />
@@ -237,11 +270,33 @@ export function QuoteForm() {
               </div>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="sm:col-span-2">
-                  <Input
-                    label="Product name"
-                    required
-                    error={errors.items?.[index]?.productName?.message}
-                    {...register(`items.${index}.productName`)}
+                  <Controller
+                    control={control}
+                    name={`items.${index}.productName`}
+                    render={({ field }) => (
+                      <ProductAutocomplete
+                        label="Product name"
+                        required
+                        hint="Search the catalog or type a custom product."
+                        error={errors.items?.[index]?.productName?.message}
+                        value={field.value}
+                        onChange={(next) => {
+                          field.onChange(next);
+                          setValue(`items.${index}.productId`, "");
+                        }}
+                        onBlur={field.onBlur}
+                        name={field.name}
+                        onSelectProduct={(product) => {
+                          field.onChange(product.name);
+                          setValue(`items.${index}.productId`, product.id, {
+                            shouldDirty: true,
+                          });
+                          setValue(`items.${index}.sku`, product.sku ?? "", {
+                            shouldDirty: true,
+                          });
+                        }}
+                      />
+                    )}
                   />
                 </div>
                 <Input
@@ -285,16 +340,21 @@ export function QuoteForm() {
           error={errors.shippingLine2?.message}
           {...register("shippingLine2")}
         />
-        <div className="grid gap-4 sm:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Input
             label="City"
             required
             error={errors.shippingCity?.message}
             {...register("shippingCity")}
           />
-          <Input
+          <Select
             label="State"
             required
+            placeholder="Select state"
+            options={US_STATES.map((state) => ({
+              label: state.label,
+              value: state.value,
+            }))}
             error={errors.shippingState?.message}
             {...register("shippingState")}
           />
@@ -304,12 +364,18 @@ export function QuoteForm() {
             error={errors.shippingPostalCode?.message}
             {...register("shippingPostalCode")}
           />
+          <Select
+            label="Country"
+            required
+            placeholder="Select country"
+            options={SHIPPING_COUNTRIES.map((country) => ({
+              label: country.label,
+              value: country.value,
+            }))}
+            error={errors.shippingCountry?.message}
+            {...register("shippingCountry")}
+          />
         </div>
-        <Input
-          label="Country"
-          error={errors.shippingCountry?.message}
-          {...register("shippingCountry")}
-        />
       </section>
 
       <section className="space-y-4">

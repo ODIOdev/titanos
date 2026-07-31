@@ -41,6 +41,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local product image uploads (dev fallback)
+/public/uploads
+
+# supabase cli scratch state
+/supabase/.temp
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

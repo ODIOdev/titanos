@@ -4,6 +4,15 @@ import {
   SEED_PRODUCTS,
   SITE_CONFIG,
 } from "@/lib/data/seed-data";
+import {
+  PRODUCT_TAG_OPTIONS,
+  SIZE_OPTIONS,
+  departmentForProductType,
+  mergeCatalogOptions,
+  type CatalogOption,
+} from "@/lib/data/catalog-options";
+import { productMatchesQuery, productSearchScore, matchesQuery } from "@/lib/search";
+import { AFFILIATE_ELIGIBILITY_ORDERS } from "@/lib/affiliates/program";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type {
   Brand,
@@ -66,6 +75,8 @@ export type AdminQuote = Quote & {
   expires_at?: string | null;
   shipping_address?: Record<string, unknown> | null;
   requested_delivery_date?: string | null;
+  urgency?: string | null;
+  ein?: string | null;
   tax_exempt?: boolean;
   custom_product_description?: string | null;
   converted_order_id?: string | null;
@@ -77,7 +88,47 @@ export type AdminCustomer = Pick<
 > & {
   orders_count: number;
   total_spent: number;
+  avatar_url?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  promo_code?: string | null;
 };
+
+export type AdminCustomerDetail = AdminCustomer & {
+  avatar_url: string | null;
+  state: string | null;
+  postal_code: string | null;
+  updated_at: string | null;
+  promo_code: string | null;
+  affiliate_discount_percent: number | null;
+  affiliate_coupon_active: boolean | null;
+  orders: AdminOrder[];
+  quotes: AdminQuote[];
+  quotes_count: number;
+};
+
+export type AdminMember = Pick<
+  Profile,
+  "id" | "email" | "first_name" | "last_name" | "company" | "phone" | "role" | "created_at"
+> & {
+  is_owner: boolean;
+  avatar_url: string | null;
+  date_of_birth: string | null;
+  promo_code: string | null;
+};
+
+/** Default affiliate promo discount applied to each role's code. */
+export type PromoDiscountSettings = {
+  customerPercent: number;
+  adminPercent: number;
+};
+
+export const DEFAULT_PROMO_DISCOUNTS: PromoDiscountSettings = {
+  customerPercent: 10,
+  adminPercent: 15,
+};
+
+export { AFFILIATE_ELIGIBILITY_ORDERS };
 
 export type SiteSettingsForm = {
   siteName: string;
@@ -86,6 +137,55 @@ export type SiteSettingsForm = {
   phone: string;
   freeShippingThreshold: number;
 };
+
+export type AdminTag = {
+  name: string;
+  productCount: number;
+  /** Canonical catalog option, custom (site_settings), or only found on products. */
+  source: "catalog" | "custom" | "product";
+};
+
+/** In-memory custom tags for demo mode (no Supabase). */
+let demoCatalogTags: string[] = [];
+/** Admin-created catalog-source tags in demo mode. */
+let demoPrimaryCatalogTags: string[] = [];
+/** Built-in / custom tags removed from the catalog in demo mode. */
+let demoRemovedCatalogTags: string[] = [];
+
+export function getDemoCatalogTags(): string[] {
+  return [...demoCatalogTags];
+}
+
+export function setDemoCatalogTags(tags: string[]) {
+  demoCatalogTags = [...tags];
+}
+
+export function getDemoPrimaryCatalogTags(): string[] {
+  return [...demoPrimaryCatalogTags];
+}
+
+export function setDemoPrimaryCatalogTags(tags: string[]) {
+  demoPrimaryCatalogTags = [...tags];
+}
+
+export function getDemoRemovedCatalogTags(): string[] {
+  return [...demoRemovedCatalogTags];
+}
+
+export function setDemoRemovedCatalogTags(tags: string[]) {
+  demoRemovedCatalogTags = [...tags];
+}
+
+/** In-memory custom sizes for demo mode (no Supabase). */
+let demoCatalogSizes: string[] = [];
+
+export function getDemoCatalogSizes(): string[] {
+  return [...demoCatalogSizes];
+}
+
+export function setDemoCatalogSizes(sizes: string[]) {
+  demoCatalogSizes = [...sizes];
+}
 
 function daysAgo(n: number): string {
   const d = new Date();
@@ -99,6 +199,7 @@ function seedToAdminProduct(p: (typeof SEED_PRODUCTS)[number]): Product {
   const category = SEED_CATEGORIES.find((c) => c.id === p.category_id) ?? null;
   return {
     ...rest,
+    department: departmentForProductType(p.product_type),
     metadata: {
       certifications,
       features,
@@ -314,6 +415,7 @@ const DEMO_CUSTOMERS: AdminCustomer[] = [
     created_at: daysAgo(90),
     orders_count: 5,
     total_spent: 2480.45,
+    promo_code: "JORDAN-0001",
   },
   {
     id: "c0000000-0000-4000-8000-000000000002",
@@ -326,6 +428,7 @@ const DEMO_CUSTOMERS: AdminCustomer[] = [
     created_at: daysAgo(60),
     orders_count: 3,
     total_spent: 1120.0,
+    promo_code: "TAYLOR-0002",
   },
   {
     id: "c0000000-0000-4000-8000-000000000003",
@@ -338,6 +441,7 @@ const DEMO_CUSTOMERS: AdminCustomer[] = [
     created_at: daysAgo(45),
     orders_count: 2,
     total_spent: 689.5,
+    promo_code: "RILEY-0003",
   },
   {
     id: "c0000000-0000-4000-8000-000000000004",
@@ -350,6 +454,7 @@ const DEMO_CUSTOMERS: AdminCustomer[] = [
     created_at: daysAgo(30),
     orders_count: 1,
     total_spent: 214.99,
+    promo_code: "AVERY-0004",
   },
 ];
 
@@ -533,32 +638,46 @@ export async function getAdminProducts(opts?: {
       const supabase = await createClient();
       let query = supabase
         .from("products")
-        .select("*, brand:brands(*), category:categories(*)")
+        .select(
+          "*, brand:brands(*), category:categories(*), images:product_images(*)",
+        )
         .order("name");
 
       if (opts?.active === "active") query = query.eq("active", true);
       if (opts?.active === "archived") query = query.eq("active", false);
-      if (opts?.q) {
-        query = query.or(
-          `name.ilike.%${opts.q}%,sku.ilike.%${opts.q}%,short_description.ilike.%${opts.q}%`,
-        );
-      }
 
       const { data, error } = await query;
       if (error) throw error;
-      if (data?.length) {
-        return data.map((row) => {
+      if (data) {
+        let products = data.map((row) => {
           const r = row as unknown as Product & {
             price: number | string;
             compare_at_price: number | string | null;
           };
+          const images = [...(r.images ?? [])].sort(
+            (a, b) => a.sort_order - b.sort_order,
+          );
+          const primary = images.find((i) => i.is_primary) ?? images[0];
           return {
             ...r,
             price: Number(r.price),
             compare_at_price:
               r.compare_at_price != null ? Number(r.compare_at_price) : null,
+            images,
+            image_url: primary?.url ?? r.image_url ?? null,
           };
         });
+        if (opts?.q?.trim()) {
+          const q = opts.q;
+          products = products
+            .filter((p) => productMatchesQuery(p, q))
+            .sort(
+              (a, b) =>
+                productSearchScore(b, q) - productSearchScore(a, q) ||
+                a.name.localeCompare(b.name),
+            );
+        }
+        return products;
       }
     } catch {
       // Fall through
@@ -568,19 +687,58 @@ export async function getAdminProducts(opts?: {
   let products = SEED_PRODUCTS.map(seedToAdminProduct);
   if (opts?.active === "active") products = products.filter((p) => p.active);
   if (opts?.active === "archived") products = products.filter((p) => !p.active);
-  if (opts?.q) {
-    const q = opts.q.toLowerCase();
-    products = products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.sku.toLowerCase().includes(q) ||
-        (p.short_description?.toLowerCase().includes(q) ?? false),
-    );
+  if (opts?.q?.trim()) {
+    const q = opts.q;
+    products = products
+      .filter((p) => productMatchesQuery(p, q))
+      .sort(
+        (a, b) =>
+          productSearchScore(b, q) - productSearchScore(a, q) ||
+          a.name.localeCompare(b.name),
+      );
   }
   return products;
 }
 
 export async function getAdminProduct(id: string): Promise<Product | null> {
+  if (isSupabaseConfigured()) {
+    try {
+      const { createClient } = await import("@/lib/supabase/server");
+      const supabase = await createClient();
+      const { data, error } = await supabase
+        .from("products")
+        .select(
+          "*, brand:brands(*), category:categories(*), images:product_images(*), specifications:product_specifications(*)",
+        )
+        .eq("id", id)
+        .maybeSingle();
+      if (error) throw error;
+      if (data) {
+        const mapped = data as unknown as Product;
+        const images = [...(mapped.images ?? [])].sort(
+          (a, b) => a.sort_order - b.sort_order,
+        );
+        const specifications = [...(mapped.specifications ?? [])].sort(
+          (a, b) => a.sort_order - b.sort_order,
+        );
+        const primary = images.find((i) => i.is_primary) ?? images[0];
+        return {
+          ...mapped,
+          price: Number(mapped.price),
+          compare_at_price:
+            mapped.compare_at_price != null
+              ? Number(mapped.compare_at_price)
+              : null,
+          images,
+          specifications,
+          image_url: primary?.url ?? mapped.image_url ?? null,
+        };
+      }
+    } catch {
+      // Fall through
+    }
+  }
+
   const products = await getAdminProducts({ active: "all" });
   return products.find((p) => p.id === id) ?? null;
 }
@@ -754,6 +912,7 @@ export async function getAdminBrands(): Promise<Brand[]> {
           slug: b.slug,
           description: b.description,
           logo_url: b.logo_url,
+          website: b.website,
           active: b.active,
         }));
       }
@@ -764,7 +923,10 @@ export async function getAdminBrands(): Promise<Brand[]> {
   return SEED_BRANDS;
 }
 
-export async function getAdminOrders(opts?: { status?: string }): Promise<AdminOrder[]> {
+export async function getAdminOrders(opts?: {
+  status?: string;
+  q?: string;
+}): Promise<AdminOrder[]> {
   if (isSupabaseConfigured()) {
     try {
       const { createClient } = await import("@/lib/supabase/server");
@@ -778,8 +940,8 @@ export async function getAdminOrders(opts?: { status?: string }): Promise<AdminO
       }
       const { data, error } = await query;
       if (error) throw error;
-      if (data?.length) {
-        return (data as unknown as AdminOrder[]).map((o) => ({
+      if (data) {
+        let orders = (data as unknown as AdminOrder[]).map((o) => ({
           ...o,
           subtotal: Number(o.subtotal),
           shipping_amount: Number(o.shipping_amount),
@@ -788,6 +950,29 @@ export async function getAdminOrders(opts?: { status?: string }): Promise<AdminO
           total: Number(o.total),
           shipping_address: (o.shipping_address as Record<string, unknown>) ?? null,
         }));
+        if (opts?.q?.trim()) {
+          const q = opts.q.trim().toLowerCase();
+          orders = orders.filter((o) => {
+            const addr = o.shipping_address as Record<string, unknown> | null;
+            const addressText = addr
+              ? [addr.first_name, addr.last_name, addr.line1, addr.city, addr.company]
+                  .filter((v) => typeof v === "string")
+                  .join(" ")
+              : "";
+            return (
+              matchesQuery(o.order_number, q) ||
+              matchesQuery(o.email, q) ||
+              matchesQuery(o.status, q) ||
+              matchesQuery(addressText, q) ||
+              o.items?.some(
+                (item) =>
+                  matchesQuery(item.product_name, q) ||
+                  matchesQuery(item.sku, q),
+              )
+            );
+          });
+        }
+        return orders;
       }
     } catch {
       // Fall through
@@ -798,7 +983,124 @@ export async function getAdminOrders(opts?: { status?: string }): Promise<AdminO
   if (opts?.status && opts.status !== "all") {
     orders = orders.filter((o) => o.status === opts.status);
   }
+  if (opts?.q?.trim()) {
+    const q = opts.q.trim().toLowerCase();
+    orders = orders.filter((o) => {
+      const addr = o.shipping_address as Record<string, unknown> | null;
+      const addressText = addr
+        ? [addr.first_name, addr.last_name, addr.line1, addr.city, addr.company]
+            .filter((v) => typeof v === "string")
+            .join(" ")
+        : "";
+      return (
+        matchesQuery(o.order_number, q) ||
+        matchesQuery(o.email, q) ||
+        matchesQuery(o.status, q) ||
+        matchesQuery(addressText, q) ||
+        o.items?.some(
+          (item) =>
+            matchesQuery(item.product_name, q) || matchesQuery(item.sku, q),
+        )
+      );
+    });
+  }
   return orders;
+}
+
+/** Order statuses that mean the goods came back or were never shipped. */
+export const RETURN_STATUSES = ["refunded", "cancelled"] as const;
+
+export type AdminOrderReturn = {
+  id: string;
+  order_number: string;
+  email: string;
+  status: string;
+  total: number;
+  created_at: string;
+};
+
+export type AdminReturnsSummary = {
+  refundedCount: number;
+  refundedTotal: number;
+  cancelledCount: number;
+  cancelledTotal: number;
+  /** Shipped or delivered orders, used as the return-rate baseline. */
+  fulfilledCount: number;
+  returnRate: number;
+  recent: AdminOrderReturn[];
+};
+
+function summarizeReturns(
+  rows: AdminOrderReturn[],
+  fulfilledCount: number,
+): AdminReturnsSummary {
+  const refunded = rows.filter((r) => r.status === "refunded");
+  const cancelled = rows.filter((r) => r.status === "cancelled");
+  const sum = (list: AdminOrderReturn[]) =>
+    list.reduce((acc, row) => acc + row.total, 0);
+  const baseline = refunded.length + fulfilledCount;
+
+  return {
+    refundedCount: refunded.length,
+    refundedTotal: sum(refunded),
+    cancelledCount: cancelled.length,
+    cancelledTotal: sum(cancelled),
+    fulfilledCount,
+    returnRate: baseline === 0 ? 0 : (refunded.length / baseline) * 100,
+    recent: rows.slice(0, 5),
+  };
+}
+
+export async function getAdminReturnsSummary(): Promise<AdminReturnsSummary> {
+  if (isSupabaseConfigured()) {
+    try {
+      const { createClient } = await import("@/lib/supabase/server");
+      const supabase = await createClient();
+      const [returned, fulfilled] = await Promise.all([
+        supabase
+          .from("orders")
+          .select("id, order_number, email, status, total, created_at")
+          .in("status", [...RETURN_STATUSES])
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("orders")
+          .select("id", { count: "exact", head: true })
+          .in("status", ["shipped", "delivered"]),
+      ]);
+
+      if (returned.error) throw returned.error;
+      if (returned.data) {
+        return summarizeReturns(
+          returned.data.map((row) => ({
+            id: row.id,
+            order_number: row.order_number,
+            email: row.email,
+            status: row.status,
+            total: Number(row.total),
+            created_at: row.created_at,
+          })),
+          fulfilled.count ?? 0,
+        );
+      }
+    } catch {
+      // Fall through
+    }
+  }
+
+  const returnStatuses = new Set<string>(RETURN_STATUSES);
+  return summarizeReturns(
+    DEMO_ORDERS.filter((o) => returnStatuses.has(o.status)).map((o) => ({
+      id: o.id,
+      order_number: o.order_number,
+      email: o.email,
+      status: o.status,
+      total: Number(o.total),
+      created_at: o.created_at,
+    })),
+    DEMO_ORDERS.filter(
+      (o) => o.status === "shipped" || o.status === "delivered",
+    ).length,
+  );
 }
 
 export async function getAdminOrder(id: string): Promise<AdminOrder | null> {
@@ -833,7 +1135,544 @@ export async function getAdminOrder(id: string): Promise<AdminOrder | null> {
   return DEMO_ORDERS.find((o) => o.id === id) ?? null;
 }
 
-export async function getAdminCustomers(): Promise<AdminCustomer[]> {
+export type AdminAffiliate = {
+  id: string;
+  email: string;
+  first_name: string | null;
+  last_name: string | null;
+  company: string | null;
+  role: string;
+  is_owner: boolean;
+  promo_code: string;
+  discount_percent: number;
+  code_active: boolean;
+  /** Orders placed with this affiliate's code. */
+  uses: number;
+  orders_count: number;
+  total_spent: number;
+  /** Admins share codes immediately; customers unlock after a purchase count. */
+  eligible: boolean;
+  created_at: string;
+};
+
+export type AdminAffiliateSummary = {
+  affiliates: AdminAffiliate[];
+  totalCount: number;
+  eligibleCount: number;
+  totalUses: number;
+  activeCount: number;
+};
+
+function summarizeAffiliates(
+  affiliates: AdminAffiliate[],
+): AdminAffiliateSummary {
+  return {
+    affiliates,
+    totalCount: affiliates.length,
+    eligibleCount: affiliates.filter((a) => a.eligible).length,
+    totalUses: affiliates.reduce((sum, a) => sum + a.uses, 0),
+    activeCount: affiliates.filter((a) => a.code_active).length,
+  };
+}
+
+export type AdminAffiliateApplication = {
+  id: string;
+  user_id: string;
+  status: "pending" | "approved" | "declined";
+  contact_name: string;
+  email: string;
+  phone: string | null;
+  company: string | null;
+  audience: string;
+  motivation: string | null;
+  admin_note: string | null;
+  /** Order count when they applied, kept for context alongside the live count. */
+  orders_at_apply: number;
+  orders_count: number;
+  eligible: boolean;
+  promo_code: string | null;
+  created_at: string;
+  reviewed_at: string | null;
+};
+
+export async function getAdminAffiliateApplications(): Promise<
+  AdminAffiliateApplication[]
+> {
+  if (!isSupabaseConfigured()) return [];
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const { data: applications, error } = await supabase
+      .from("affiliate_applications")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    if (!applications?.length) return [];
+
+    const userIds = applications.map((a) => a.user_id);
+    const [{ data: profiles }, { data: orders }] = await Promise.all([
+      supabase.from("profiles").select("id, promo_code").in("id", userIds),
+      supabase.from("orders").select("user_id, status").in("user_id", userIds),
+    ]);
+
+    const promoById = new Map(
+      (profiles ?? []).map((p) => [p.id, p.promo_code ?? null]),
+    );
+    const ordersById = new Map<string, number>();
+    for (const order of orders ?? []) {
+      if (!order.user_id) continue;
+      if (String(order.status).toLowerCase() === "cancelled") continue;
+      ordersById.set(order.user_id, (ordersById.get(order.user_id) ?? 0) + 1);
+    }
+
+    return applications.map((a) => {
+      const ordersCount = ordersById.get(a.user_id) ?? 0;
+      return {
+        id: a.id,
+        user_id: a.user_id,
+        status:
+          a.status === "approved" || a.status === "declined"
+            ? a.status
+            : ("pending" as const),
+        contact_name: a.contact_name,
+        email: a.email,
+        phone: a.phone,
+        company: a.company,
+        audience: a.audience,
+        motivation: a.motivation,
+        admin_note: a.admin_note,
+        orders_at_apply: a.orders_at_apply,
+        orders_count: ordersCount,
+        eligible: ordersCount >= AFFILIATE_ELIGIBILITY_ORDERS,
+        promo_code: promoById.get(a.user_id) ?? null,
+        created_at: a.created_at,
+        reviewed_at: a.reviewed_at,
+      };
+    });
+  } catch {
+    // Table lands with a migration; the page should still render without it.
+    return [];
+  }
+}
+
+export async function getAdminAffiliates(opts?: {
+  q?: string;
+}): Promise<AdminAffiliateSummary> {
+  if (isSupabaseConfigured()) {
+    try {
+      // Service role: affiliate codes span every profile, including admins.
+      const { createServiceClient } = await import("@/lib/supabase/admin");
+      const supabase = createServiceClient();
+      const [coupons, profiles, orders] = await Promise.all([
+        supabase
+          .from("coupons")
+          .select(
+            "id, code, discount_value, used_count, active, owner_user_id, created_at",
+          )
+          .eq("is_affiliate", true),
+        supabase
+          .from("profiles")
+          .select("id, email, first_name, last_name, company, role, is_owner"),
+        supabase.from("orders").select("user_id, total, status, coupon_code"),
+      ]);
+
+      if (coupons.error) throw coupons.error;
+
+      const profileById = new Map(
+        (profiles.data ?? []).map((profile) => [profile.id, profile]),
+      );
+      const usesByCode = new Map<string, number>();
+      const statsByUser = new Map<string, { count: number; spent: number }>();
+
+      for (const order of orders.data ?? []) {
+        if (String(order.status).toLowerCase() === "cancelled") continue;
+        if (order.coupon_code) {
+          const code = order.coupon_code.toUpperCase();
+          usesByCode.set(code, (usesByCode.get(code) ?? 0) + 1);
+        }
+        if (order.user_id) {
+          const prev = statsByUser.get(order.user_id) ?? { count: 0, spent: 0 };
+          statsByUser.set(order.user_id, {
+            count: prev.count + 1,
+            spent: prev.spent + (Number(order.total) || 0),
+          });
+        }
+      }
+
+      const { isAdminRole } = await import("@/lib/utils");
+
+      let affiliates: AdminAffiliate[] = (coupons.data ?? [])
+        .filter((coupon) => coupon.owner_user_id)
+        .map((coupon) => {
+          const profile = profileById.get(coupon.owner_user_id!);
+          const stats = statsByUser.get(coupon.owner_user_id!);
+          const role = String(profile?.role ?? "customer");
+          const isOwner = profile?.is_owner === true;
+          const ordersCount = stats?.count ?? 0;
+          return {
+            id: coupon.owner_user_id!,
+            email: profile?.email ?? "—",
+            first_name: profile?.first_name ?? null,
+            last_name: profile?.last_name ?? null,
+            company: profile?.company ?? null,
+            role,
+            is_owner: isOwner,
+            promo_code: coupon.code,
+            discount_percent: Number(coupon.discount_value) || 0,
+            code_active: coupon.active !== false,
+            uses: usesByCode.get(coupon.code.toUpperCase()) ?? 0,
+            orders_count: ordersCount,
+            total_spent: stats?.spent ?? 0,
+            eligible:
+              isAdminRole(role) || isOwner
+                ? true
+                : ordersCount >= AFFILIATE_ELIGIBILITY_ORDERS,
+            created_at: coupon.created_at,
+          };
+        })
+        .sort(
+          (a, b) =>
+            b.uses - a.uses ||
+            b.orders_count - a.orders_count ||
+            a.promo_code.localeCompare(b.promo_code),
+        );
+
+      if (opts?.q?.trim()) {
+        const q = opts.q.trim().toLowerCase();
+        affiliates = affiliates.filter(
+          (a) =>
+            matchesQuery(a.promo_code, q) ||
+            matchesQuery(a.email, q) ||
+            matchesQuery(a.first_name, q) ||
+            matchesQuery(a.last_name, q) ||
+            matchesQuery(a.company, q),
+        );
+      }
+
+      return summarizeAffiliates(affiliates);
+    } catch {
+      // Fall through
+    }
+  }
+
+  return summarizeAffiliates([]);
+}
+
+export async function getAdminCustomers(opts?: {
+  q?: string;
+}): Promise<AdminCustomer[]> {
+  if (isSupabaseConfigured()) {
+    try {
+      // Service role: admin CRM must see every customer profile (bypass RLS).
+      const { createServiceClient } = await import("@/lib/supabase/admin");
+      const supabase = createServiceClient();
+      const [{ data: profiles, error: profilesError }, { data: orders }] =
+        await Promise.all([
+          supabase
+            .from("profiles")
+            .select("*")
+            .order("created_at", { ascending: false }),
+          supabase.from("orders").select("user_id, email, total, status"),
+        ]);
+
+      if (profilesError) throw profilesError;
+
+      if (profiles && profiles.length >= 0) {
+        const spentByUser = new Map<string, { count: number; spent: number }>();
+        const spentByEmail = new Map<string, { count: number; spent: number }>();
+
+        for (const order of orders ?? []) {
+          const total = Number(order.total) || 0;
+          const cancelled = String(order.status).toLowerCase() === "cancelled";
+          if (cancelled) continue;
+
+          if (order.user_id) {
+            const prev = spentByUser.get(order.user_id) ?? { count: 0, spent: 0 };
+            spentByUser.set(order.user_id, {
+              count: prev.count + 1,
+              spent: prev.spent + total,
+            });
+          }
+          if (order.email) {
+            const key = String(order.email).toLowerCase();
+            const prev = spentByEmail.get(key) ?? { count: 0, spent: 0 };
+            spentByEmail.set(key, {
+              count: prev.count + 1,
+              spent: prev.spent + total,
+            });
+          }
+        }
+
+        const { isAdminRole } = await import("@/lib/utils");
+
+        let customers = profiles
+          .filter((p) => {
+            const role = String(p.role ?? "").toLowerCase();
+            // Customers page = every non-admin / non-support account
+            if (!role || role === "customer") return true;
+            if (isAdminRole(p.role)) return false;
+            if (role === "support" || role === "staff") return false;
+            return true;
+          })
+          .map((p) => {
+            const byId = spentByUser.get(p.id);
+            const byEmail = spentByEmail.get(String(p.email ?? "").toLowerCase());
+            return {
+              id: p.id,
+              email: p.email,
+              first_name: p.first_name,
+              last_name: p.last_name,
+              company: p.company,
+              phone: p.phone,
+              role: "customer" as Profile["role"],
+              created_at: p.created_at,
+              avatar_url: (p as { avatar_url?: string | null }).avatar_url ?? null,
+              state: (p as { state?: string | null }).state ?? null,
+              postal_code: (p as { postal_code?: string | null }).postal_code ?? null,
+              promo_code: (p as { promo_code?: string | null }).promo_code ?? null,
+              orders_count: byId?.count ?? byEmail?.count ?? 0,
+              total_spent: byId?.spent ?? byEmail?.spent ?? 0,
+            };
+          });
+
+        if (opts?.q?.trim()) {
+          const q = opts.q.trim().toLowerCase();
+          customers = customers.filter(
+            (c) =>
+              matchesQuery(c.email, q) ||
+              matchesQuery(c.company, q) ||
+              matchesQuery(c.phone, q) ||
+              matchesQuery(c.promo_code, q) ||
+              matchesQuery(
+                [c.first_name, c.last_name].filter(Boolean).join(" "),
+                q,
+              ),
+          );
+        }
+        return customers;
+      }
+    } catch {
+      // Fall through to demo only when Supabase is unavailable
+    }
+  }
+  let customers = DEMO_CUSTOMERS;
+  if (opts?.q?.trim()) {
+    const q = opts.q.trim().toLowerCase();
+    customers = customers.filter(
+      (c) =>
+        matchesQuery(c.email, q) ||
+        matchesQuery(c.company, q) ||
+        matchesQuery(c.phone, q) ||
+        matchesQuery(c.promo_code, q) ||
+        matchesQuery([c.first_name, c.last_name].filter(Boolean).join(" "), q),
+    );
+  }
+  return customers;
+}
+
+export async function getAdminCustomer(
+  id: string,
+): Promise<AdminCustomerDetail | null> {
+  if (isSupabaseConfigured()) {
+    try {
+      const { createServiceClient } = await import("@/lib/supabase/admin");
+      const supabase = createServiceClient();
+      const { data: profile, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+
+      if (error) throw error;
+
+      const { isAdminRole } = await import("@/lib/utils");
+      const role = String(profile?.role ?? "").toLowerCase();
+      const isCustomerProfile =
+        profile &&
+        (!role || role === "customer") &&
+        !isAdminRole(profile.role) &&
+        role !== "support" &&
+        role !== "staff";
+
+      if (isCustomerProfile && profile) {
+        const email = String(profile.email ?? "");
+        const [{ data: ordersByUser }, { data: ordersByEmail }, { data: quotesByUser }, { data: quotesByEmail }] =
+          await Promise.all([
+            supabase
+              .from("orders")
+              .select("*, items:order_items(*)")
+              .eq("user_id", id)
+              .order("created_at", { ascending: false }),
+            email
+              ? supabase
+                  .from("orders")
+                  .select("*, items:order_items(*)")
+                  .eq("email", email)
+                  .order("created_at", { ascending: false })
+              : Promise.resolve({ data: [] as never[] }),
+            supabase
+              .from("quotes")
+              .select("*")
+              .eq("user_id", id)
+              .order("created_at", { ascending: false }),
+            email
+              ? supabase
+                  .from("quotes")
+                  .select("*")
+                  .eq("email", email)
+                  .order("created_at", { ascending: false })
+              : Promise.resolve({ data: [] as never[] }),
+          ]);
+
+        const orderMap = new Map<string, AdminOrder>();
+        for (const row of [...(ordersByUser ?? []), ...(ordersByEmail ?? [])]) {
+          const o = row as unknown as AdminOrder;
+          orderMap.set(o.id, {
+            ...o,
+            subtotal: Number(o.subtotal),
+            shipping_amount: Number(o.shipping_amount),
+            tax_amount: Number(o.tax_amount),
+            discount_amount: Number(o.discount_amount),
+            total: Number(o.total),
+            shipping_address:
+              (o.shipping_address as Record<string, unknown>) ?? null,
+          });
+        }
+        const mappedOrders = [...orderMap.values()].sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        );
+
+        const quoteMap = new Map<string, AdminQuote>();
+        for (const row of [...(quotesByUser ?? []), ...(quotesByEmail ?? [])]) {
+          const q = row as AdminQuote;
+          quoteMap.set(q.id, {
+            ...q,
+            total: q.total != null ? Number(q.total) : null,
+            shipping_address:
+              (q.shipping_address as Record<string, unknown>) ?? null,
+          });
+        }
+        const mappedQuotes = [...quoteMap.values()].sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        );
+
+        const activeOrders = mappedOrders.filter(
+          (o) => String(o.status).toLowerCase() !== "cancelled",
+        );
+
+        const promoCode =
+          (profile as { promo_code?: string | null }).promo_code ?? null;
+        let affiliateDiscount: number | null = null;
+        let affiliateActive: boolean | null = null;
+        const couponId = (profile as { affiliate_coupon_id?: string | null })
+          .affiliate_coupon_id;
+        if (couponId) {
+          const { data } = await supabase
+            .from("coupons")
+            .select("discount_value, discount_type, active")
+            .eq("id", couponId)
+            .maybeSingle();
+          const coupon = data as {
+            discount_value: number | string | null;
+            discount_type: string | null;
+            active: boolean | null;
+          } | null;
+          if (coupon) {
+            affiliateDiscount = Number(coupon.discount_value);
+            affiliateActive = Boolean(coupon.active);
+          }
+        }
+
+        return {
+          id: profile.id,
+          email: profile.email,
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          company: profile.company,
+          phone: profile.phone,
+          role: "customer",
+          created_at: profile.created_at,
+          updated_at: (profile as { updated_at?: string | null }).updated_at ?? null,
+          avatar_url: (profile as { avatar_url?: string | null }).avatar_url ?? null,
+          state: (profile as { state?: string | null }).state ?? null,
+          postal_code:
+            (profile as { postal_code?: string | null }).postal_code ?? null,
+          promo_code: promoCode,
+          affiliate_discount_percent: affiliateDiscount,
+          affiliate_coupon_active: affiliateActive,
+          orders_count: activeOrders.length,
+          total_spent: activeOrders.reduce((sum, o) => sum + o.total, 0),
+          quotes_count: mappedQuotes.length,
+          orders: mappedOrders,
+          quotes: mappedQuotes,
+        };
+      }
+    } catch {
+      // Fall through
+    }
+  }
+
+  const demo = DEMO_CUSTOMERS.find((c) => c.id === id);
+  if (!demo) return null;
+
+  const demoOrders = DEMO_ORDERS.filter(
+    (o) => o.email.toLowerCase() === demo.email.toLowerCase(),
+  );
+  const demoQuotes = DEMO_QUOTES.filter(
+    (q) => q.email.toLowerCase() === demo.email.toLowerCase(),
+  );
+
+  return {
+    ...demo,
+    avatar_url: null,
+    state: null,
+    postal_code: null,
+    updated_at: demo.created_at,
+    promo_code: demo.promo_code ?? `JORDAN-${demo.id.slice(-4).toUpperCase()}`,
+    affiliate_discount_percent: 10,
+    affiliate_coupon_active: true,
+    orders: demoOrders,
+    quotes: demoQuotes,
+    quotes_count: demoQuotes.length,
+  };
+}
+
+const DEMO_MEMBERS: AdminMember[] = [
+  {
+    id: "m0000000-0000-4000-8000-000000000001",
+    email: "admin@gmail.com",
+    first_name: "Master",
+    last_name: "Admin",
+    company: "Titan Safety Co.",
+    phone: null,
+    role: "admin",
+    is_owner: true,
+    avatar_url: null,
+    date_of_birth: null,
+    promo_code: null,
+    created_at: daysAgo(365),
+  },
+];
+
+export async function getAdminMembers(opts?: {
+  q?: string;
+}): Promise<AdminMember[]> {
+  const filterMembers = (members: AdminMember[]) => {
+    if (!opts?.q?.trim()) return members;
+    const q = opts.q.trim().toLowerCase();
+    return members.filter(
+      (m) =>
+        matchesQuery(m.email, q) ||
+        matchesQuery(m.company, q) ||
+        matchesQuery(m.role, q) ||
+        matchesQuery([m.first_name, m.last_name].filter(Boolean).join(" "), q),
+    );
+  };
+
   if (isSupabaseConfigured()) {
     try {
       const { createClient } = await import("@/lib/supabase/server");
@@ -841,57 +1680,97 @@ export async function getAdminCustomers(): Promise<AdminCustomer[]> {
       const { data } = await supabase
         .from("profiles")
         .select("*")
-        .eq("role", "customer")
         .order("created_at", { ascending: false });
-      if (data?.length) {
-        return data.map((p) => ({
-          id: p.id,
-          email: p.email,
-          first_name: p.first_name,
-          last_name: p.last_name,
-          company: p.company,
-          phone: p.phone,
-          role: p.role,
-          created_at: p.created_at,
-          orders_count: 0,
-          total_spent: 0,
-        }));
+      if (data) {
+        const { isAdminRole, isMasterAdminEmail } = await import("@/lib/utils");
+        return filterMembers(
+          data
+            .filter(
+              (p) =>
+                isAdminRole(p.role) ||
+                p.is_owner === true ||
+                isMasterAdminEmail(p.email),
+            )
+            .map((p) => ({
+              id: p.id,
+              email: p.email,
+              first_name: p.first_name,
+              last_name: p.last_name,
+              company: p.company,
+              phone: p.phone,
+              role: (isAdminRole(p.role) ? "admin" : "staff") as Profile["role"],
+              is_owner: Boolean(p.is_owner) || isMasterAdminEmail(p.email),
+              avatar_url: p.avatar_url ?? null,
+              date_of_birth: p.date_of_birth ?? null,
+              promo_code: p.promo_code ?? null,
+              created_at: p.created_at,
+            })),
+        );
       }
     } catch {
       // Fall through
     }
   }
-  return DEMO_CUSTOMERS;
+
+  return filterMembers(DEMO_MEMBERS);
 }
 
-export async function getAdminQuotes(opts?: { status?: string }): Promise<AdminQuote[]> {
+export async function getAdminMember(id: string): Promise<AdminMember | null> {
+  const members = await getAdminMembers();
+  return members.find((m) => m.id === id) ?? null;
+}
+
+export async function getAdminQuotes(opts?: {
+  status?: string;
+  q?: string;
+}): Promise<AdminQuote[]> {
+  const filterQuotes = (quotes: AdminQuote[]) => {
+    let next = quotes;
+    if (opts?.status && opts.status !== "all") {
+      next = next.filter((q) => q.status === opts.status);
+    }
+    if (opts?.q?.trim()) {
+      const q = opts.q.trim().toLowerCase();
+      next = next.filter(
+        (row) =>
+          matchesQuery(row.quote_number, q) ||
+          matchesQuery(row.company, q) ||
+          matchesQuery(row.contact_name, q) ||
+          matchesQuery(row.email, q) ||
+          matchesQuery(row.project_name, q) ||
+          matchesQuery(row.status, q),
+      );
+    }
+    return next;
+  };
+
   if (isSupabaseConfigured()) {
     try {
       const { createClient } = await import("@/lib/supabase/server");
       const supabase = await createClient();
-      let query = supabase.from("quotes").select("*").order("created_at", { ascending: false });
+      let query = supabase
+        .from("quotes")
+        .select("*")
+        .order("created_at", { ascending: false });
       if (opts?.status && opts.status !== "all") {
         query = query.eq("status", opts.status);
       }
       const { data, error } = await query;
       if (error) throw error;
-      if (data?.length) {
-        return data.map((q) => ({
+      if (data) {
+        const quotes = data.map((q) => ({
           ...q,
           total: q.total != null ? Number(q.total) : null,
           shipping_address: (q.shipping_address as Record<string, unknown>) ?? null,
         })) as AdminQuote[];
+        return filterQuotes(quotes);
       }
     } catch {
       // Fall through
     }
   }
 
-  let quotes = DEMO_QUOTES;
-  if (opts?.status && opts.status !== "all") {
-    quotes = quotes.filter((q) => q.status === opts.status);
-  }
-  return quotes;
+  return filterQuotes(DEMO_QUOTES);
 }
 
 export async function getAdminQuote(id: string): Promise<AdminQuote | null> {
@@ -959,6 +1838,44 @@ export async function getAdminResources(): Promise<Resource[]> {
   return DEMO_RESOURCES;
 }
 
+function readPercent(value: unknown, fallback: number): number {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0 || n > 100) return fallback;
+  return n;
+}
+
+export async function getPromoDiscountSettings(): Promise<PromoDiscountSettings> {
+  if (isSupabaseConfigured()) {
+    try {
+      const { createClient } = await import("@/lib/supabase/server");
+      const supabase = await createClient();
+      const { data } = await supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "promo_discounts")
+        .maybeSingle();
+      const value = data?.value as
+        | { customer?: unknown; admin?: unknown }
+        | null;
+      if (value) {
+        return {
+          customerPercent: readPercent(
+            value.customer,
+            DEFAULT_PROMO_DISCOUNTS.customerPercent,
+          ),
+          adminPercent: readPercent(
+            value.admin,
+            DEFAULT_PROMO_DISCOUNTS.adminPercent,
+          ),
+        };
+      }
+    } catch {
+      // Fall through
+    }
+  }
+  return DEFAULT_PROMO_DISCOUNTS;
+}
+
 export async function getSiteSettings(): Promise<SiteSettingsForm> {
   if (isSupabaseConfigured()) {
     try {
@@ -988,4 +1905,221 @@ export async function getSiteSettings(): Promise<SiteSettingsForm> {
     phone: SITE_CONFIG.phone,
     freeShippingThreshold: 199,
   };
+}
+
+async function getStoredCatalogTags(): Promise<string[]> {
+  if (isSupabaseConfigured()) {
+    try {
+      const { createClient } = await import("@/lib/supabase/server");
+      const supabase = await createClient();
+      const { data } = await supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "catalog_tags")
+        .maybeSingle();
+      const value = data?.value as { tags?: unknown } | null;
+      if (Array.isArray(value?.tags)) {
+        return value.tags
+          .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+          .map((t) => t.trim());
+      }
+    } catch {
+      // Fall through
+    }
+  }
+  return getDemoCatalogTags();
+}
+
+async function getStoredPrimaryCatalogTags(): Promise<string[]> {
+  if (isSupabaseConfigured()) {
+    try {
+      const { createClient } = await import("@/lib/supabase/server");
+      const supabase = await createClient();
+      const { data } = await supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "catalog_primary_tags")
+        .maybeSingle();
+      const value = data?.value as { tags?: unknown } | null;
+      if (Array.isArray(value?.tags)) {
+        return value.tags
+          .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+          .map((t) => t.trim());
+      }
+    } catch {
+      // Fall through
+    }
+  }
+  return getDemoPrimaryCatalogTags();
+}
+
+async function getRemovedCatalogTags(): Promise<string[]> {
+  if (isSupabaseConfigured()) {
+    try {
+      const { createClient } = await import("@/lib/supabase/server");
+      const supabase = await createClient();
+      const { data } = await supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "catalog_tags_removed")
+        .maybeSingle();
+      const value = data?.value as { tags?: unknown } | null;
+      if (Array.isArray(value?.tags)) {
+        return value.tags
+          .filter((t): t is string => typeof t === "string" && t.trim().length > 0)
+          .map((t) => t.trim());
+      }
+    } catch {
+      // Fall through
+    }
+  }
+  return getDemoRemovedCatalogTags();
+}
+
+function productTagValue(product: Product): string | null {
+  const tag = product.metadata?.tag;
+  return typeof tag === "string" && tag.trim() ? tag.trim() : null;
+}
+
+async function getStoredCatalogSizes(): Promise<string[]> {
+  if (isSupabaseConfigured()) {
+    try {
+      const { createClient } = await import("@/lib/supabase/server");
+      const supabase = await createClient();
+      const { data } = await supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "catalog_sizes")
+        .maybeSingle();
+      const value = data?.value as { sizes?: unknown } | null;
+      if (Array.isArray(value?.sizes)) {
+        return value.sizes
+          .filter((s): s is string => typeof s === "string" && s.trim().length > 0)
+          .map((s) => s.trim());
+      }
+    } catch {
+      // Fall through
+    }
+  }
+  return getDemoCatalogSizes();
+}
+
+/** Every size a product already uses, from the size field and the variant matrix. */
+function productSizeValues(product: Product): string[] {
+  const sizes: string[] = [];
+  if (product.size?.trim()) sizes.push(product.size.trim());
+
+  const variants = product.metadata?.variants;
+  if (Array.isArray(variants)) {
+    for (const row of variants) {
+      const size = (row as { size?: unknown } | null)?.size;
+      if (typeof size === "string" && size.trim()) sizes.push(size.trim());
+    }
+  }
+  return sizes;
+}
+
+/**
+ * Size options for the product form — canonical + admin-added + sizes already in
+ * use. Canonical order is preserved (S…4XL) since sizes do not sort alphabetically.
+ */
+export async function getCatalogSizeOptions(): Promise<CatalogOption[]> {
+  const [products, customSizes] = await Promise.all([
+    getAdminProducts({ active: "all" }),
+    getStoredCatalogSizes(),
+  ]);
+
+  const merged = new Map<string, CatalogOption>();
+  for (const option of SIZE_OPTIONS) {
+    merged.set(option.value.toLowerCase(), option);
+  }
+  for (const size of [...customSizes, ...products.flatMap(productSizeValues)]) {
+    const key = size.toLowerCase();
+    if (!merged.has(key)) merged.set(key, { label: size, value: size });
+  }
+  return Array.from(merged.values());
+}
+
+/** Tag options for the product form — canonical + custom + tags already on products. */
+export async function getCatalogTagOptions(): Promise<CatalogOption[]> {
+  const [products, customTags, primaryTags, removed] = await Promise.all([
+    getAdminProducts({ active: "all" }),
+    getStoredCatalogTags(),
+    getStoredPrimaryCatalogTags(),
+    getRemovedCatalogTags(),
+  ]);
+  const removedKeys = new Set(removed.map((t) => t.toLowerCase()));
+  const fromProducts = products
+    .map(productTagValue)
+    .filter((t): t is string => t != null && !removedKeys.has(t.toLowerCase()));
+  const activeCanonical = [
+    ...PRODUCT_TAG_OPTIONS.filter(
+      (o) => !removedKeys.has(o.value.toLowerCase()),
+    ),
+    ...primaryTags
+      .filter((t) => !removedKeys.has(t.toLowerCase()))
+      .map((t) => ({ label: t, value: t })),
+  ];
+  const activeCustom = customTags.filter(
+    (t) => !removedKeys.has(t.toLowerCase()),
+  );
+  return mergeCatalogOptions(activeCanonical, [...activeCustom, ...fromProducts]);
+}
+
+/** Tag management rows for the Categories page. */
+export async function getAdminTags(): Promise<AdminTag[]> {
+  const [products, customTags, primaryTags, removed] = await Promise.all([
+    getAdminProducts({ active: "all" }),
+    getStoredCatalogTags(),
+    getStoredPrimaryCatalogTags(),
+    getRemovedCatalogTags(),
+  ]);
+  const removedKeys = new Set(removed.map((t) => t.toLowerCase()));
+
+  const counts = new Map<string, number>();
+  for (const product of products) {
+    const tag = productTagValue(product);
+    if (!tag) continue;
+    const key = tag.toLowerCase();
+    if (removedKeys.has(key)) continue;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  const canonical = new Map(
+    [
+      ...PRODUCT_TAG_OPTIONS.map((o) => o.value),
+      ...primaryTags,
+    ]
+      .filter((t) => !removedKeys.has(t.toLowerCase()))
+      .map((t) => [t.toLowerCase(), t] as const),
+  );
+  const custom = new Map(
+    customTags
+      .filter((t) => !removedKeys.has(t.toLowerCase()))
+      .map((t) => [t.toLowerCase(), t]),
+  );
+  const names = new Map<string, string>();
+
+  for (const [key, value] of canonical) names.set(key, value);
+  for (const [key, value] of custom) names.set(key, value);
+  for (const product of products) {
+    const tag = productTagValue(product);
+    if (!tag) continue;
+    const key = tag.toLowerCase();
+    if (removedKeys.has(key)) continue;
+    if (!names.has(key)) names.set(key, tag);
+  }
+
+  return Array.from(names.entries())
+    .map(([key, name]) => {
+      let source: AdminTag["source"] = "product";
+      if (canonical.has(key)) source = "catalog";
+      else if (custom.has(key)) source = "custom";
+      return {
+        name,
+        productCount: counts.get(key) ?? 0,
+        source,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 }

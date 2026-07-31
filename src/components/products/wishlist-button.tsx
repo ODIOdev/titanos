@@ -3,29 +3,12 @@
 import { useEffect, useState } from "react";
 import { Heart } from "lucide-react";
 import { toast } from "sonner";
+import {
+  WISHLIST_CHANGE_EVENT,
+  readWishlist,
+  toggleWishlist,
+} from "@/lib/wishlist";
 import { cn } from "@/lib/utils";
-
-const WISHLIST_STORAGE_KEY = "titan-wishlist";
-
-function readWishlist(): string[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(WISHLIST_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed)
-      ? parsed.filter((id): id is string => typeof id === "string")
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-function writeWishlist(ids: string[]) {
-  if (typeof window === "undefined") return;
-  window.localStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(ids));
-  window.dispatchEvent(new CustomEvent("titan-wishlist-change"));
-}
 
 export type WishlistButtonProps = {
   productId: string;
@@ -51,24 +34,19 @@ export function WishlistButton({
 
     sync();
     window.addEventListener("storage", sync);
-    window.addEventListener("titan-wishlist-change", sync);
+    window.addEventListener(WISHLIST_CHANGE_EVENT, sync);
     return () => {
       window.removeEventListener("storage", sync);
-      window.removeEventListener("titan-wishlist-change", sync);
+      window.removeEventListener(WISHLIST_CHANGE_EVENT, sync);
     };
   }, [productId]);
 
   function toggle() {
-    const current = readWishlist();
-    const next = current.includes(productId)
-      ? current.filter((id) => id !== productId)
-      : [...current, productId];
-
-    writeWishlist(next);
-    setActive(next.includes(productId));
+    const saved = toggleWishlist(productId);
+    setActive(saved);
 
     const label = productName ?? "Product";
-    if (next.includes(productId)) {
+    if (saved) {
       toast.success(`${label} saved to wishlist.`);
     } else {
       toast.message(`${label} removed from wishlist.`);

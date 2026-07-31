@@ -1,7 +1,26 @@
 import { SiteHeader } from "@/components/layout/site-header";
 import { Footer } from "@/components/layout/footer";
+import {
+  MaintenanceAdminBanner,
+  MaintenanceScreen,
+} from "@/components/layout/maintenance-screen";
+import { SupportChat } from "@/components/support/support-chat";
+import { getIsMasterAdmin } from "@/lib/auth/session";
+import { getMaintenanceSettings } from "@/lib/data/maintenance";
 
-export default function ShopLayout({ children }: { children: React.ReactNode }) {
+export default async function ShopLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const maintenance = await getMaintenanceSettings();
+  // Only pay for the auth lookup while the site is actually offline.
+  const adminPreview = maintenance.enabled ? await getIsMasterAdmin() : false;
+
+  if (maintenance.enabled && !adminPreview) {
+    return <MaintenanceScreen settings={maintenance} />;
+  }
+
   return (
     <div className="flex min-h-screen flex-col">
       <a
@@ -10,11 +29,13 @@ export default function ShopLayout({ children }: { children: React.ReactNode }) 
       >
         Skip to main content
       </a>
+      {adminPreview ? <MaintenanceAdminBanner /> : null}
       <SiteHeader />
       <main id="main-content" className="flex-1">
         {children}
       </main>
       <Footer />
+      <SupportChat />
     </div>
   );
 }

@@ -9,6 +9,7 @@ async function getProfile() {
       lastName: "Customer",
       company: "Demo Construction LLC",
       phone: "",
+      avatarUrl: null as string | null,
     };
   }
 
@@ -25,6 +26,7 @@ async function getProfile() {
         lastName: "",
         company: "",
         phone: "",
+        avatarUrl: null as string | null,
       };
     }
 
@@ -40,6 +42,7 @@ async function getProfile() {
       last_name?: string | null;
       company?: string | null;
       phone?: string | null;
+      avatar_url?: string | null;
     } | null;
 
     return {
@@ -60,6 +63,10 @@ async function getProfile() {
         row?.phone ??
         (user.user_metadata?.phone as string | undefined) ??
         "",
+      avatarUrl:
+        row?.avatar_url ??
+        (user.user_metadata?.avatar_url as string | undefined) ??
+        null,
     };
   } catch {
     return {
@@ -68,6 +75,7 @@ async function getProfile() {
       lastName: "",
       company: "",
       phone: "",
+      avatarUrl: null as string | null,
     };
   }
 }
@@ -81,11 +89,12 @@ export default async function ProfilePage() {
         Profile
       </h1>
       <p className="mt-2 text-sm text-medium-gray">
-        Update your contact details for orders and quotes.
+        Update your photo and contact details for orders and quotes.
       </p>
       <div className="mt-8 rounded-sm border border-border-gray bg-white p-6">
         <ProfileForm
           email={profile.email}
+          avatarUrl={profile.avatarUrl}
           defaultValues={{
             firstName: profile.firstName,
             lastName: profile.lastName,

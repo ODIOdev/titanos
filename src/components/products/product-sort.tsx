@@ -17,16 +17,20 @@ const SORT_OPTIONS = [
 export type ProductSortProps = {
   className?: string;
   paramKey?: string;
+  /** "inline" keeps the label beside the control for toolbars. */
+  layout?: "stacked" | "inline";
 };
 
 export function ProductSort({
   className,
   paramKey = "sort",
+  layout = "stacked",
 }: ProductSortProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
+  const selectId = `${paramKey}-select`;
   const current = searchParams.get(paramKey) ?? "featured";
 
   function onChange(value: string) {
@@ -41,6 +45,31 @@ export function ProductSort({
     startTransition(() => {
       router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
     });
+  }
+
+  if (layout === "inline") {
+    return (
+      <div
+        className={cn("flex shrink-0 items-center gap-2", className)}
+        aria-busy={isPending}
+      >
+        <label
+          htmlFor={selectId}
+          className="hidden shrink-0 text-sm text-medium-gray sm:block"
+        >
+          Sort
+        </label>
+        <div className="w-[11rem] sm:w-[12.5rem]">
+          <Select
+            id={selectId}
+            aria-label="Sort products"
+            options={[...SORT_OPTIONS]}
+            value={current}
+            onChange={(event) => onChange(event.target.value)}
+          />
+        </div>
+      </div>
+    );
   }
 
   return (

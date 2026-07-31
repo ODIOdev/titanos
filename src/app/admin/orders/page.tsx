@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { AdminReturnsCard } from "@/components/admin/admin-returns-card";
+import { AdminSearchForm } from "@/components/admin/admin-search-form";
 import { DataTable } from "@/components/admin/data-table";
 import { Badge } from "@/components/ui/badge";
-import { getAdminOrders } from "@/lib/data/admin";
+import { getAdminOrders, getAdminReturnsSummary } from "@/lib/data/admin";
 import { formatCurrency, formatDate } from "@/lib/utils";
 
-type SearchParams = Promise<{ status?: string }>;
+type SearchParams = Promise<{ status?: string; q?: string }>;
 
 const STATUSES = [
   "all",
@@ -24,17 +26,40 @@ export default async function AdminOrdersPage({
 }) {
   const params = await searchParams;
   const status = params.status ?? "all";
-  const orders = await getAdminOrders({ status });
+  const q = params.q ?? "";
+  const [orders, returns] = await Promise.all([
+    getAdminOrders({ status, q }),
+    getAdminReturnsSummary(),
+  ]);
+
+  function statusHref(s: string) {
+    const query = new URLSearchParams();
+    if (s !== "all") query.set("status", s);
+    if (q.trim()) query.set("q", q.trim());
+    const qs = query.toString();
+    return qs ? `/admin/orders?${qs}` : "/admin/orders";
+  }
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <AdminSearchForm
+          placeholder="Search order #, email, product…"
+          defaultValue={q}
+          hiddenFields={status !== "all" ? { status } : undefined}
+          label="Search orders"
+        />
+      </div>
+
+      <AdminReturnsCard summary={returns} />
+
       <div className="flex flex-wrap gap-2">
         {STATUSES.map((s) => {
           const active = status === s;
           return (
             <Link
               key={s}
-              href={s === "all" ? "/admin/orders" : `/admin/orders?status=${s}`}
+              href={statusHref(s)}
               className={
                 active
                   ? "inline-flex h-8 items-center rounded-sm bg-dark-charcoal px-3 text-xs font-semibold uppercase tracking-wide text-white"
@@ -56,7 +81,9 @@ export default async function AdminOrdersPage({
           { key: "date", header: "Date" },
           { key: "actions", header: "", className: "text-right" },
         ]}
-        emptyMessage="No orders for this filter."
+        emptyMessage={
+          q.trim() ? `No orders match “${q.trim()}”.` : "No orders for this filter."
+        }
         rows={orders.map((o) => [
           <Link
             key={`${o.id}-num`}

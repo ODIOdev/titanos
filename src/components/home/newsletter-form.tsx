@@ -51,7 +51,7 @@ export function NewsletterForm({ className }: NewsletterFormProps) {
 
   return (
     <section
-      className={cn("section-y border-t border-border-gray bg-light-gray", className)}
+      className={cn("section-y border-t border-border-gray bg-muted-gray", className)}
       aria-labelledby="newsletter-heading"
     >
       <div className="container-titan">

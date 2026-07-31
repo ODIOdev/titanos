@@ -1,9 +1,11 @@
+import { departmentForProductType } from "@/lib/data/catalog-options";
 import {
   SEED_BRANDS,
   SEED_CATEGORIES,
   SEED_PRODUCTS,
   type SeedProduct,
 } from "@/lib/data/seed-data";
+import { productMatchesQuery } from "@/lib/search";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import type { Brand, Category, Product, ProductFilters } from "@/types";
 
@@ -13,6 +15,7 @@ function seedToProduct(p: SeedProduct): Product {
   return {
     ...p,
     cost: p.cost,
+    department: departmentForProductType(p.product_type),
     metadata: {
       certifications: p.certifications,
       features: p.features,
@@ -80,6 +83,10 @@ function filterSeedProducts(filters: ProductFilters = {}): Product[] {
     }
   }
 
+  if (filters.department) {
+    products = products.filter((p) => p.department === filters.department);
+  }
+
   if (filters.minPrice != null) {
     products = products.filter((p) => p.price >= filters.minPrice!);
   }
@@ -115,16 +122,7 @@ function filterSeedProducts(filters: ProductFilters = {}): Product[] {
     products = products.filter((p) => p.bestseller);
   }
   if (filters.q) {
-    const q = filters.q.toLowerCase();
-    products = products.filter(
-      (p) =>
-        p.name.toLowerCase().includes(q) ||
-        p.sku.toLowerCase().includes(q) ||
-        p.description?.toLowerCase().includes(q) ||
-        p.short_description?.toLowerCase().includes(q) ||
-        p.brand?.name.toLowerCase().includes(q) ||
-        p.category?.name.toLowerCase().includes(q),
-    );
+    products = products.filter((p) => productMatchesQuery(p, filters.q!));
   }
 
   switch (filters.sort) {
@@ -183,6 +181,9 @@ export async function getProducts(
           .maybeSingle();
         if (brand) query = query.eq("brand_id", brand.id);
       }
+      if (filters.department) {
+        query = query.eq("department", filters.department);
+      }
       if (filters.minPrice != null) query = query.gte("price", filters.minPrice);
       if (filters.maxPrice != null) query = query.lte("price", filters.maxPrice);
       if (filters.productType) query = query.eq("product_type", filters.productType);
@@ -193,11 +194,8 @@ export async function getProducts(
       if (filters.rating) query = query.gte("rating_avg", filters.rating);
       if (filters.featured) query = query.eq("featured", true);
       if (filters.bestseller) query = query.eq("bestseller", true);
-      if (filters.q) {
-        query = query.or(
-          `name.ilike.%${filters.q}%,sku.ilike.%${filters.q}%,description.ilike.%${filters.q}%,short_description.ilike.%${filters.q}%`,
-        );
-      }
+
+      const hasTextSearch = Boolean(filters.q?.trim());
 
       switch (filters.sort) {
         case "newest":
@@ -219,11 +217,14 @@ export async function getProducts(
           query = query.order("featured", { ascending: false }).order("name");
       }
 
+      // Text search spans brand/category/tag — load the filtered set then paginate in memory.
       const from = (page - 1) * pageSize;
-      const { data, count, error } = await query.range(from, from + pageSize - 1);
+      const { data, count, error } = hasTextSearch
+        ? await query
+        : await query.range(from, from + pageSize - 1);
       if (error) throw error;
 
-      const products = (data ?? []).map((row) => {
+      let products = (data ?? []).map((row) => {
         const mapped = row as unknown as Product & { images?: Product["images"] };
         const images = mapped.images ?? [];
         const primary = images.find((i) => i.is_primary) ?? images[0];
@@ -235,6 +236,17 @@ export async function getProducts(
           image_url: primary?.url ?? null,
         } satisfies Product;
       });
+
+      if (hasTextSearch) {
+        products = products.filter((p) => productMatchesQuery(p, filters.q!));
+        const total = products.length;
+        return {
+          products: products.slice(from, from + pageSize),
+          total,
+          page,
+          pageSize,
+        };
+      }
 
       return { products, total: count ?? 0, page, pageSize };
     } catch {

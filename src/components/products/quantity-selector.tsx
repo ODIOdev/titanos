@@ -1,6 +1,7 @@
 "use client";
 
 import { Minus, Plus } from "lucide-react";
+import { selectInputValueOnFocus } from "@/lib/input-focus";
 import { clampQuantity, cn } from "@/lib/utils";
 
 export type QuantitySelectorProps = {
@@ -55,6 +56,7 @@ export function QuantitySelector({
         value={current}
         disabled={disabled}
         aria-label="Quantity"
+        onFocus={selectInputValueOnFocus}
         onChange={(event) => {
           const parsed = Number.parseInt(event.target.value, 10);
           if (Number.isNaN(parsed)) return;

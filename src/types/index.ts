@@ -49,6 +49,7 @@ export type Brand = {
   slug: string;
   description: string | null;
   logo_url: string | null;
+  website?: string | null;
   active: boolean;
 };
 
@@ -77,6 +78,7 @@ export type Product = {
   color: string | null;
   size: string | null;
   product_type: string | null;
+  department: string | null;
   metadata: Record<string, unknown> | null;
   image_url?: string | null;
   brand?: Brand | null;
@@ -191,6 +193,7 @@ export type Resource = {
 export type ProductFilters = {
   category?: string;
   brand?: string;
+  department?: string;
   minPrice?: number;
   maxPrice?: number;
   productType?: string;

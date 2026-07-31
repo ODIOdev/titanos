@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import { ZoomIn } from "lucide-react";
+import { ChevronLeft, ChevronRight, Expand } from "lucide-react";
+import { Dialog } from "@/components/ui/dialog";
 import type { ProductImage } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -37,53 +38,60 @@ export function ProductGallery({
   }, [images, productName]);
 
   const [activeIndex, setActiveIndex] = useState(0);
-  const [zoomed, setZoomed] = useState(false);
-  const active = sorted[Math.min(activeIndex, sorted.length - 1)]!;
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const index = Math.min(activeIndex, sorted.length - 1);
+  const active = sorted[index]!;
+  const multiple = sorted.length > 1;
+
+  useEffect(() => {
+    if (!previewOpen || !multiple) return;
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "ArrowRight") {
+        setActiveIndex((prev) => (prev + 1) % sorted.length);
+      } else if (event.key === "ArrowLeft") {
+        setActiveIndex((prev) => (prev - 1 + sorted.length) % sorted.length);
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [previewOpen, multiple, sorted.length]);
 
   return (
     <div className={cn("space-y-3", className)}>
-      <div
-        className="relative aspect-square overflow-hidden rounded-sm border border-border-gray bg-light-gray"
-        onMouseEnter={() => setZoomed(true)}
-        onMouseLeave={() => setZoomed(false)}
-      >
+      <div className="relative aspect-square overflow-hidden rounded-sm border border-border-gray bg-light-gray">
         <button
           type="button"
           className="relative h-full w-full cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-titan-yellow"
-          onClick={() => setZoomed((prev) => !prev)}
-          aria-label={zoomed ? "Exit image zoom" : "Zoom product image"}
+          onClick={() => setPreviewOpen(true)}
+          aria-label="Open image preview"
         >
           <Image
             src={active.url}
             alt={active.alt_text ?? productName}
             fill
             priority
-            className={cn(
-              "object-contain p-6 transition-transform duration-300",
-              zoomed ? "scale-150" : "scale-100",
-            )}
+            className="object-contain p-6"
             sizes="(max-width: 1024px) 100vw, 50vw"
           />
           <span className="pointer-events-none absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-sm bg-white/90 px-2 py-1 text-xs font-medium text-dark-charcoal">
-            <ZoomIn className="size-3.5" aria-hidden="true" />
-            Zoom
+            <Expand className="size-3.5" aria-hidden="true" />
+            Preview
           </span>
         </button>
       </div>
 
-      {sorted.length > 1 ? (
+      {multiple ? (
         <ul className="flex flex-wrap gap-2" aria-label="Product images">
-          {sorted.map((image, index) => {
-            const selected = index === activeIndex;
+          {sorted.map((image, thumbIndex) => {
+            const selected = thumbIndex === index;
             return (
               <li key={image.id}>
                 <button
                   type="button"
-                  onClick={() => {
-                    setActiveIndex(index);
-                    setZoomed(false);
-                  }}
-                  aria-label={`View image ${index + 1}`}
+                  onClick={() => setActiveIndex(thumbIndex)}
+                  aria-label={`View image ${thumbIndex + 1}`}
                   aria-current={selected ? "true" : undefined}
                   className={cn(
                     "relative size-16 overflow-hidden rounded-sm border bg-light-gray transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow sm:size-20",
@@ -94,7 +102,10 @@ export function ProductGallery({
                 >
                   <Image
                     src={image.url}
-                    alt={image.alt_text ?? `${productName} thumbnail ${index + 1}`}
+                    alt={
+                      image.alt_text ??
+                      `${productName} thumbnail ${thumbIndex + 1}`
+                    }
                     fill
                     className="object-contain p-1.5"
                     sizes="80px"
@@ -105,6 +116,56 @@ export function ProductGallery({
           })}
         </ul>
       ) : null}
+
+      <Dialog
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        title={productName}
+        description={
+          multiple ? `Image ${index + 1} of ${sorted.length}` : undefined
+        }
+        className="max-w-4xl"
+      >
+        <div className="relative">
+          <div className="relative h-[60vh] w-full bg-light-gray">
+            <Image
+              src={active.url}
+              alt={active.alt_text ?? productName}
+              fill
+              className="object-contain p-4"
+              sizes="90vw"
+              unoptimized={
+                active.url.startsWith("data:") || active.url.startsWith("blob:")
+              }
+            />
+          </div>
+
+          {multiple ? (
+            <>
+              <button
+                type="button"
+                onClick={() =>
+                  setActiveIndex(
+                    (prev) => (prev - 1 + sorted.length) % sorted.length,
+                  )
+                }
+                aria-label="Previous image"
+                className="absolute left-2 top-1/2 inline-flex size-10 -translate-y-1/2 items-center justify-center rounded-sm border border-border-gray bg-white/90 text-dark-charcoal transition-colors hover:bg-white"
+              >
+                <ChevronLeft className="size-5" aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveIndex((prev) => (prev + 1) % sorted.length)}
+                aria-label="Next image"
+                className="absolute right-2 top-1/2 inline-flex size-10 -translate-y-1/2 items-center justify-center rounded-sm border border-border-gray bg-white/90 text-dark-charcoal transition-colors hover:bg-white"
+              >
+                <ChevronRight className="size-5" aria-hidden="true" />
+              </button>
+            </>
+          ) : null}
+        </div>
+      </Dialog>
     </div>
   );
 }

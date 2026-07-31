@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isMasterAdmin, isMasterAdminEmail } from "@/lib/utils";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -48,8 +49,31 @@ export async function updateSession(request: NextRequest) {
   if (!user && (isAccountRoute || isAdminRoute)) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";
-    redirectUrl.searchParams.set("redirect", pathname);
+    redirectUrl.searchParams.set("redirect", isAdminRoute ? "/admin" : pathname);
     return NextResponse.redirect(redirectUrl);
+  }
+
+  // Hard rule: master email always uses /admin CRM — never /account
+  const masterByEmail = isMasterAdminEmail(user?.email);
+  let master = masterByEmail;
+
+  if (user && !master && (isAuthRoute || isAccountRoute || isAdminRoute)) {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role, is_owner, email")
+      .eq("id", user.id)
+      .maybeSingle();
+    master = isMasterAdmin(profile) || isMasterAdminEmail(profile?.email);
+  }
+
+  if (user && master) {
+    if (isAuthRoute || isAccountRoute) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/admin";
+      return NextResponse.redirect(redirectUrl);
+    }
+    // Allow /admin CRM through
+    return supabaseResponse;
   }
 
   if (user && isAuthRoute) {
@@ -59,17 +83,9 @@ export async function updateSession(request: NextRequest) {
   }
 
   if (user && isAdminRoute) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (!profile || profile.role !== "admin") {
-      const redirectUrl = request.nextUrl.clone();
-      redirectUrl.pathname = "/account";
-      return NextResponse.redirect(redirectUrl);
-    }
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = "/account";
+    return NextResponse.redirect(redirectUrl);
   }
 
   return supabaseResponse;

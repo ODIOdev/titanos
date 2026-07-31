@@ -9,10 +9,18 @@ export type Database = {
           email: string;
           first_name: string | null;
           last_name: string | null;
+          full_name: string | null;
           company: string | null;
           phone: string | null;
-          role: "customer" | "staff" | "admin";
+          state: string | null;
+          postal_code: string | null;
+          date_of_birth: string | null;
+          role: string;
+          is_owner: boolean;
+          account_status: string | null;
           avatar_url: string | null;
+          promo_code: string | null;
+          affiliate_coupon_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -21,13 +29,21 @@ export type Database = {
           email: string;
           first_name?: string | null;
           last_name?: string | null;
+          full_name?: string | null;
           company?: string | null;
           phone?: string | null;
-          role?: "customer" | "staff" | "admin";
+          state?: string | null;
+          postal_code?: string | null;
+          date_of_birth?: string | null;
+          role?: string;
+          is_owner?: boolean;
+          account_status?: string | null;
           avatar_url?: string | null;
+          promo_code?: string | null;
+          affiliate_coupon_id?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["profiles"]["Insert"]>;
-      Relationships: [];
+        Relationships: [];
       };
       products: {
         Row: {
@@ -55,6 +71,7 @@ export type Database = {
           color: string | null;
           size: string | null;
           product_type: string | null;
+          department: string | null;
           metadata: Json | null;
           created_at: string;
           updated_at: string;
@@ -291,11 +308,13 @@ export type Database = {
           user_id: string | null;
           contact_name: string;
           company: string | null;
+          ein: string | null;
           email: string;
           phone: string | null;
           industry: string | null;
           project_name: string | null;
           requested_delivery_date: string | null;
+          urgency: string | null;
           shipping_address: Json | null;
           tax_exempt: boolean;
           notes: string | null;
@@ -498,11 +517,95 @@ export type Database = {
         Update: Partial<Database["public"]["Tables"]["inventory_movements"]["Insert"]>;
         Relationships: [];
       };
+      coupons: {
+        Row: {
+          id: string;
+          code: string;
+          description: string | null;
+          discount_type: string;
+          discount_value: number;
+          min_order_amount: number | null;
+          max_uses: number | null;
+          used_count: number;
+          active: boolean;
+          starts_at: string | null;
+          ends_at: string | null;
+          owner_user_id: string | null;
+          is_affiliate: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          code: string;
+          description?: string | null;
+          discount_type: string;
+          discount_value: number;
+          min_order_amount?: number | null;
+          max_uses?: number | null;
+          used_count?: number;
+          active?: boolean;
+          starts_at?: string | null;
+          ends_at?: string | null;
+          owner_user_id?: string | null;
+          is_affiliate?: boolean;
+        };
+        Update: Partial<Database["public"]["Tables"]["coupons"]["Insert"]>;
+        Relationships: [];
+      };
+      affiliate_applications: {
+        Row: {
+          id: string;
+          user_id: string;
+          status: string;
+          contact_name: string;
+          email: string;
+          phone: string | null;
+          company: string | null;
+          audience: string;
+          motivation: string | null;
+          agreed_to_terms: boolean;
+          orders_at_apply: number;
+          admin_note: string | null;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          status?: string;
+          contact_name: string;
+          email: string;
+          phone?: string | null;
+          company?: string | null;
+          audience: string;
+          motivation?: string | null;
+          agreed_to_terms?: boolean;
+          orders_at_apply?: number;
+          admin_note?: string | null;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["affiliate_applications"]["Insert"]
+        >;
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
       is_admin: { Args: Record<string, never>; Returns: boolean };
       is_staff_or_admin: { Args: Record<string, never>; Returns: boolean };
+      apply_affiliate_discounts: {
+        Args: { p_customer_percent: number; p_admin_percent: number };
+        Returns: number;
+      };
+      ensure_affiliate_promo_for_profile: {
+        Args: { p_profile_id: string };
+        Returns: string;
+      };
     };
     Enums: Record<string, never>;
   };

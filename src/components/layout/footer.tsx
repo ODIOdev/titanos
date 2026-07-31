@@ -1,38 +1,9 @@
 import Image from "next/image";
 import Link from "next/link";
+import { FooterBrandLink } from "@/components/layout/footer-brand-link";
+import { logout } from "@/lib/actions/auth";
+import { getIsSignedIn } from "@/lib/auth/session";
 import { SITE_CONFIG } from "@/lib/data/seed-data";
-
-function FacebookIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
-      <path d="M14 9h3V6h-3c-1.7 0-3 1.3-3 3v2H9v3h2v7h3v-7h2.6l.4-3H14V9z" />
-    </svg>
-  );
-}
-
-function InstagramIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
-      <path d="M7 3h10a4 4 0 0 1 4 4v10a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4zm10 2H7a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2zm-5 3.5A3.5 3.5 0 1 1 8.5 12 3.5 3.5 0 0 1 12 8.5zm0 2A1.5 1.5 0 1 0 13.5 12 1.5 1.5 0 0 0 12 10.5zM17.2 7.3a.9.9 0 1 1-.9.9.9.9 0 0 1 .9-.9z" />
-    </svg>
-  );
-}
-
-function LinkedinIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
-      <path d="M6.5 9.5H3.7V20h2.8V9.5zM5.1 4A1.6 1.6 0 1 0 5.1 7.2 1.6 1.6 0 0 0 5.1 4zM20.3 20h-2.8v-5.6c0-1.5-.5-2.5-1.8-2.5a1.9 1.9 0 0 0-1.8 1.3 2.4 2.4 0 0 0-.1.9V20h-2.8s0-8.4 0-10.5h2.8v1.5a3.2 3.2 0 0 1 2.9-1.7c2.1 0 3.7 1.4 3.7 4.4V20z" />
-    </svg>
-  );
-}
-
-function XIcon({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
-      <path d="M17.7 3h2.9l-6.3 7.2L22 21h-5.7l-4.5-5.9L7 21H4.1l6.8-7.8L2 3h5.8l4 5.4L17.7 3zm-1 16.2h1.6L7.4 4.7H5.7l11 14.5z" />
-    </svg>
-  );
-}
 
 const FOOTER_COLUMNS = [
   {
@@ -67,76 +38,128 @@ const FOOTER_COLUMNS = [
       { label: "Terms", href: "/terms" },
     ],
   },
-  {
-    title: "Account",
-    links: [
-      { label: "Sign In", href: "/login" },
-      { label: "Register", href: "/register" },
-      { label: "Orders", href: "/account/orders" },
-      { label: "Wishlist", href: "/account/wishlist" },
-      { label: "Admin", href: "/admin" },
-    ],
-  },
 ] as const;
 
 const SOCIAL = [
-  { label: "Facebook", href: SITE_CONFIG.social.facebook, Icon: FacebookIcon },
-  { label: "Instagram", href: SITE_CONFIG.social.instagram, Icon: InstagramIcon },
-  { label: "LinkedIn", href: SITE_CONFIG.social.linkedin, Icon: LinkedinIcon },
-  { label: "X", href: SITE_CONFIG.social.twitter, Icon: XIcon },
+  {
+    label: "Facebook",
+    href: SITE_CONFIG.social.facebook,
+    src: "/images/social/facebook.png",
+    width: 325,
+    height: 325,
+  },
+  {
+    label: "Instagram",
+    href: SITE_CONFIG.social.instagram,
+    src: "/images/social/instagram.png",
+    width: 192,
+    height: 192,
+  },
+  {
+    label: "LinkedIn",
+    href: SITE_CONFIG.social.linkedin,
+    src: "/images/social/linkedin.svg",
+    width: 77,
+    height: 65,
+  },
+  {
+    label: "X",
+    href: SITE_CONFIG.social.twitter,
+    src: "/images/social/x.png",
+    width: 125,
+    height: 128,
+  },
 ] as const;
 
-export function Footer() {
+const PAYMENT_LOGOS = [
+  {
+    name: "Visa",
+    src: "/images/payments/visa.png",
+    href: "https://www.visa.com",
+    width: 208,
+    height: 68,
+  },
+  {
+    name: "Mastercard",
+    src: "/images/payments/mastercard.svg",
+    href: "https://www.mastercard.com",
+    width: 100,
+    height: 62,
+  },
+  {
+    name: "American Express",
+    src: "/images/payments/amex.svg",
+    href: "https://www.americanexpress.com",
+    width: 100,
+    height: 28,
+  },
+  {
+    name: "Discover",
+    src: "/images/payments/discover.png",
+    href: "https://www.discover.com",
+    width: 136,
+    height: 23,
+  },
+  {
+    name: "PayPal",
+    src: "/images/payments/paypal.png",
+    href: "https://www.paypal.com",
+    width: 124,
+    height: 33,
+  },
+] as const;
+
+const accountLinkClass = "text-sm text-white/75 transition-colors hover:text-titan-yellow";
+
+export async function Footer() {
   const year = new Date().getFullYear();
+  const signedIn = await getIsSignedIn();
 
   return (
-    <footer className="mt-auto bg-dark-charcoal text-white">
-      <div className="container-titan py-12 sm:py-14">
-        <div className="mb-10 flex flex-col gap-6 border-b border-white/10 pb-10 lg:flex-row lg:items-end lg:justify-between">
-          <div className="max-w-md">
+    <footer className="bg-dark-charcoal mt-auto text-white">
+      <div className="container-titan py-9 sm:py-10">
+        <div className="mb-7 flex flex-col gap-5 border-b border-white/10 pb-6 lg:flex-row lg:items-end lg:justify-between">
+          <FooterBrandLink
+            className="max-w-md"
+            label={`${SITE_CONFIG.name} — back to top of home page`}
+          >
             <Image
               src="/images/logo/logo-badge.webp"
-              alt={SITE_CONFIG.name}
+              alt=""
               width={56}
               height={56}
-              className="mb-4 h-12 w-12 object-contain"
+              className="mb-3 h-10 w-10 object-contain"
             />
-            <p className="font-heading text-2xl font-bold uppercase tracking-wide text-titan-yellow">
+            <p className="font-heading text-titan-yellow text-2xl font-bold tracking-wide uppercase">
               {SITE_CONFIG.name}
             </p>
             <p className="mt-2 text-sm text-white/75">{SITE_CONFIG.tagline}</p>
-          </div>
+          </FooterBrandLink>
           <div className="text-sm text-white/80 lg:text-right">
             <a
               href={`tel:${SITE_CONFIG.phone.replace(/[^+\d]/g, "")}`}
-              className="font-heading text-lg uppercase tracking-wide text-white transition-colors hover:text-titan-yellow"
+              className="font-heading hover:text-titan-yellow text-lg tracking-wide text-white uppercase transition-colors"
             >
               {SITE_CONFIG.phoneDisplay}
             </a>
             <p className="mt-1">
-              <a
-                href={`mailto:${SITE_CONFIG.email}`}
-                className="hover:text-titan-yellow"
-              >
+              <a href={`mailto:${SITE_CONFIG.email}`} className="hover:text-titan-yellow">
                 {SITE_CONFIG.email}
               </a>
             </p>
           </div>
         </div>
 
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-x-6 gap-y-7 sm:grid-cols-2 lg:grid-cols-4">
           {FOOTER_COLUMNS.map((column) => (
             <div key={column.title}>
-              <h2 className="font-heading text-sm font-semibold uppercase tracking-wide text-white">
+              <h2 className="font-heading text-sm font-semibold tracking-wide text-white uppercase">
                 {column.title}
               </h2>
-              <ul className="mt-4 space-y-2.5">
+              <ul className="mt-3 space-y-2">
                 {column.links.map((link) => (
                   <li key={`${column.title}-${link.href}`}>
-                    <Link
-                      href={link.href}
-                      className="text-sm text-white/75 transition-colors hover:text-titan-yellow"
-                    >
+                    <Link href={link.href} className={accountLinkClass}>
                       {link.label}
                     </Link>
                   </li>
@@ -144,36 +167,113 @@ export function Footer() {
               </ul>
             </div>
           ))}
+
+          <div>
+            <h2 className="font-heading text-sm font-semibold tracking-wide text-white uppercase">
+              Account
+            </h2>
+            <ul className="mt-3 space-y-2">
+              <li>
+                {signedIn ? (
+                  <form action={logout}>
+                    <button type="submit" className={accountLinkClass}>
+                      Sign Out
+                    </button>
+                  </form>
+                ) : (
+                  <Link href="/login" className={accountLinkClass}>
+                    Sign In
+                  </Link>
+                )}
+              </li>
+              {!signedIn ? (
+                <li>
+                  <Link href="/register" className={accountLinkClass}>
+                    Register
+                  </Link>
+                </li>
+              ) : null}
+              <li>
+                <Link href="/account/orders" className={accountLinkClass}>
+                  Orders
+                </Link>
+              </li>
+              <li>
+                <Link href="/wishlist" className={accountLinkClass}>
+                  Wishlist
+                </Link>
+              </li>
+              <li>
+                <Link href="/affiliates" className={accountLinkClass}>
+                  Affiliates
+                </Link>
+              </li>
+              <li>
+                <Link href="/admin" className={accountLinkClass}>
+                  Master Admin
+                </Link>
+              </li>
+            </ul>
+          </div>
         </div>
 
-        <div className="mt-10 flex flex-col gap-6 border-t border-white/15 pt-8 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            {SOCIAL.map(({ label, href, Icon }) => (
-              <a
-                key={label}
-                href={href}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={label}
-                className="inline-flex size-9 items-center justify-center rounded-sm border border-white/20 text-white/80 transition-colors hover:border-titan-yellow hover:text-titan-yellow"
-              >
-                <Icon className="size-4" />
-              </a>
-            ))}
+        <div className="mt-7 border-t border-white/15 pt-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <ul className="flex items-center gap-1">
+              {SOCIAL.map(({ label, href, src, width, height }) => (
+                <li key={label}>
+                  <a
+                    href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={label}
+                    className="inline-flex size-9 items-center justify-center opacity-85 transition-opacity hover:opacity-100"
+                  >
+                    <Image
+                      src={src}
+                      alt=""
+                      width={width}
+                      height={height}
+                      className="size-7 object-contain"
+                      unoptimized={src.endsWith(".svg")}
+                    />
+                  </a>
+                </li>
+              ))}
+            </ul>
+
+            <ul className="flex flex-wrap items-center justify-start gap-3 sm:justify-end">
+              {PAYMENT_LOGOS.map((logo) => (
+                <li key={logo.name}>
+                  <a
+                    href={logo.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    aria-label={logo.name}
+                    className="inline-flex h-9 items-center justify-center rounded-sm border border-white/15 bg-white px-2.5 transition-opacity hover:opacity-90"
+                  >
+                    <Image
+                      src={logo.src}
+                      alt={logo.name}
+                      width={logo.width}
+                      height={logo.height}
+                      className="h-5 w-auto object-contain"
+                      unoptimized={logo.src.endsWith(".svg")}
+                    />
+                  </a>
+                </li>
+              ))}
+            </ul>
           </div>
 
-          <p className="text-xs text-white/55">
-            We accept Visa · Mastercard · Amex · Discover · PayPal
-          </p>
-        </div>
-
-        <div className="mt-8 flex flex-col gap-2 border-t border-white/15 pt-6 text-xs text-white/55 sm:flex-row sm:items-center sm:justify-between">
-          <p>
-            © {year} {SITE_CONFIG.name}. All rights reserved.
-          </p>
-          <p className="font-heading uppercase tracking-wide text-white/70">
-            {SITE_CONFIG.tagline}
-          </p>
+          <div className="mt-5 flex flex-col gap-1 text-xs text-white/55 sm:flex-row sm:items-center sm:justify-between">
+            <p>
+              © {year} {SITE_CONFIG.name}. All rights reserved.
+            </p>
+            <p className="font-heading tracking-wide text-white/70 uppercase">
+              {SITE_CONFIG.tagline}
+            </p>
+          </div>
         </div>
       </div>
     </footer>

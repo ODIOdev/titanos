@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { AdminPathHeader } from "@/components/admin/admin-path-header";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
+import { isMasterAdmin, isMasterAdminEmail, MASTER_ADMIN_EMAIL } from "@/lib/utils";
 
 export const metadata = {
   title: "Admin",
@@ -10,7 +11,6 @@ export const metadata = {
 
 async function getAdminUser(): Promise<{ email: string } | null> {
   if (!isSupabaseConfigured()) {
-    // Demo mode — middleware skips auth when env is unset
     return { email: "demo-admin@titansafetyco.com" };
   }
 
@@ -23,15 +23,19 @@ async function getAdminUser(): Promise<{ email: string } | null> {
 
     if (!user) return null;
 
+    if (isMasterAdminEmail(user.email)) {
+      return { email: user.email ?? MASTER_ADMIN_EMAIL };
+    }
+
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, email")
+      .select("role, email, is_owner")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
-    if (!profile || profile.role !== "admin") return null;
+    if (!isMasterAdmin(profile)) return null;
 
-    return { email: profile.email || user.email || "" };
+    return { email: profile?.email || user.email || "" };
   } catch {
     return null;
   }
@@ -52,7 +56,7 @@ export default async function AdminLayout({
     <div className="flex min-h-screen bg-light-gray">
       <AdminSidebar />
       <div className="flex min-w-0 flex-1 flex-col">
-        <AdminPathHeader userEmail={admin.email} />
+        <AdminPathHeader />
         <main className="flex-1 p-4 sm:p-6">{children}</main>
       </div>
     </div>

@@ -1,8 +1,12 @@
 import Link from "next/link";
 import { FREE_SHIPPING_THRESHOLD, SITE_CONFIG } from "@/lib/data/seed-data";
 import { formatCurrency } from "@/lib/utils";
+import { logout } from "@/lib/actions/auth";
 
-export function UtilityBar() {
+const linkClass =
+  "text-white/85 transition-colors hover:text-titan-yellow";
+
+export function UtilityBar({ signedIn = false }: { signedIn?: boolean }) {
   return (
     <div className="bg-dark-charcoal text-white">
       <div className="container-titan flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2 text-xs">
@@ -19,24 +23,23 @@ export function UtilityBar() {
           >
             {SITE_CONFIG.phoneDisplay}
           </a>
-          <Link
-            href="/bulk-orders"
-            className="text-white/85 transition-colors hover:text-titan-yellow"
-          >
+          <Link href="/bulk-orders" className={linkClass}>
             Bulk Orders
           </Link>
-          <Link
-            href="/quote"
-            className="text-white/85 transition-colors hover:text-titan-yellow"
-          >
+          <Link href="/quote" className={linkClass}>
             Request a Quote
           </Link>
-          <Link
-            href="/login"
-            className="text-white/85 transition-colors hover:text-titan-yellow"
-          >
-            Sign In / Register
-          </Link>
+          {signedIn ? (
+            <form action={logout}>
+              <button type="submit" className={linkClass}>
+                Sign Out
+              </button>
+            </form>
+          ) : (
+            <Link href="/login" className={linkClass}>
+              Sign In / Register
+            </Link>
+          )}
         </nav>
       </div>
     </div>

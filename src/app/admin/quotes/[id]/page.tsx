@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { QuoteReviewForm } from "@/components/admin/admin-forms";
 import { Badge } from "@/components/ui/badge";
@@ -21,9 +20,6 @@ export default async function AdminQuoteDetailPage({
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
-        <Link href="/admin/quotes" className="text-sm text-medium-gray hover:text-dark-charcoal">
-          ← Quotes
-        </Link>
         <h2 className="font-heading text-xl font-semibold uppercase tracking-wide">
           {quote.quote_number}
         </h2>
@@ -50,6 +46,10 @@ export default async function AdminQuoteDetailPage({
                 <dd>{quote.company ?? "—"}</dd>
               </div>
               <div>
+                <dt className="text-medium-gray">EIN</dt>
+                <dd>{quote.ein ?? "—"}</dd>
+              </div>
+              <div>
                 <dt className="text-medium-gray">Email</dt>
                 <dd>{quote.email}</dd>
               </div>
@@ -64,6 +64,20 @@ export default async function AdminQuoteDetailPage({
               <div>
                 <dt className="text-medium-gray">Project</dt>
                 <dd>{quote.project_name ?? "—"}</dd>
+              </div>
+              <div>
+                <dt className="text-medium-gray">Delivery date</dt>
+                <dd>
+                  {quote.requested_delivery_date
+                    ? formatDate(quote.requested_delivery_date)
+                    : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-medium-gray">Urgency</dt>
+                <dd className="capitalize">
+                  {quote.urgency?.replaceAll("_", " ") ?? "—"}
+                </dd>
               </div>
               <div>
                 <dt className="text-medium-gray">Submitted</dt>

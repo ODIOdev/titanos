@@ -2,8 +2,10 @@
 
 import {
   useCallback,
+  useEffect,
   useId,
   useMemo,
+  useRef,
   useState,
   useTransition,
   type ReactNode,
@@ -16,6 +18,7 @@ import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { ColorSwatch } from "@/components/shared/color-swatch";
 
 export type FilterOption = {
   label: string;
@@ -26,12 +29,15 @@ export type FilterOption = {
 export type ProductFiltersProps = {
   categories?: FilterOption[];
   brands?: FilterOption[];
+  departments?: FilterOption[];
   productTypes?: FilterOption[];
   ansiClasses?: FilterOption[];
   colors?: FilterOption[];
   sizes?: FilterOption[];
   className?: string;
   priceBounds?: { min: number; max: number };
+  /** Applied filter count, shown on the mobile trigger. */
+  activeCount?: number;
 };
 
 const RATING_OPTIONS = [
@@ -93,11 +99,13 @@ function OptionList({
   paramKey,
   selected,
   onToggle,
+  showColorSwatch = false,
 }: {
   options: FilterOption[];
   paramKey: string;
   selected: string | null;
   onToggle: (key: string, value: string) => void;
+  showColorSwatch?: boolean;
 }) {
   if (options.length === 0) return null;
 
@@ -105,13 +113,22 @@ function OptionList({
     <ul className="space-y-2">
       {options.map((option) => {
         const checked = selected === option.value;
+        const text =
+          option.count != null
+            ? `${option.label} (${option.count})`
+            : option.label;
         return (
           <li key={option.value}>
             <Checkbox
               label={
-                option.count != null
-                  ? `${option.label} (${option.count})`
-                  : option.label
+                showColorSwatch ? (
+                  <span className="inline-flex items-center gap-2">
+                    <ColorSwatch color={option.value} />
+                    <span>{text}</span>
+                  </span>
+                ) : (
+                  text
+                )
               }
               checked={checked}
               onChange={() => onToggle(paramKey, option.value)}
@@ -126,21 +143,29 @@ function OptionList({
 export function ProductFilters({
   categories = [],
   brands = [],
+  departments = [],
   productTypes = [],
   ansiClasses = [],
   colors = [],
   sizes = [],
   className,
   priceBounds = { min: 0, max: 500 },
+  activeCount = 0,
 }: ProductFiltersProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [query, setQuery] = useState(searchParams.get("q") ?? "");
+  const [syncedQuery, setSyncedQuery] = useState(searchParams.get("q") ?? "");
+  const [pushedQuery, setPushedQuery] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const current = useMemo(
     () => ({
+      q: searchParams.get("q") ?? "",
+      department: searchParams.get("department") ?? searchParams.get("group"),
       category: searchParams.get("category"),
       brand: searchParams.get("brand"),
       minPrice: searchParams.get("minPrice") ?? "",
@@ -155,20 +180,44 @@ export function ProductFilters({
     [searchParams],
   );
 
+  // Adopt the URL's search term when something else changes it (filter chips,
+  // clear all), while ignoring the value this component just pushed so a slow
+  // route update can't clobber characters typed since the debounce fired.
+  if (current.q !== syncedQuery) {
+    setSyncedQuery(current.q);
+    if (current.q !== pushedQuery) setQuery(current.q);
+  }
+
   const updateParams = useCallback(
     (mutate: (params: URLSearchParams) => void) => {
       const params = new URLSearchParams(searchParams.toString());
       mutate(params);
       params.delete("page");
-      const query = params.toString();
+      const next = params.toString();
       startTransition(() => {
-        router.push(query ? `${pathname}?${query}` : pathname, {
+        router.replace(next ? `${pathname}?${next}` : pathname, {
           scroll: false,
         });
       });
     },
     [pathname, router, searchParams],
   );
+
+  useEffect(() => {
+    if (query === current.q) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      const trimmed = query.trim();
+      setPushedQuery(trimmed);
+      updateParams((params) => {
+        if (!trimmed) params.delete("q");
+        else params.set("q", trimmed);
+      });
+    }, 250);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [query, current.q, updateParams]);
 
   const toggleParam = useCallback(
     (key: string, value: string) => {
@@ -194,8 +243,13 @@ export function ProductFilters({
   );
 
   const clearAll = useCallback(() => {
+    setQuery("");
+    setPushedQuery("");
     updateParams((params) => {
       [
+        "q",
+        "department",
+        "group",
         "category",
         "brand",
         "minPrice",
@@ -218,17 +272,60 @@ export function ProductFilters({
       aria-busy={isPending}
     >
       <div className="mb-3 flex items-center justify-between gap-2 border-b border-border-gray pb-4">
-        <h2 className="font-heading text-lg uppercase tracking-wide text-dark-charcoal">
+        <h2 className="flex items-center gap-2 font-heading text-lg uppercase tracking-wide text-dark-charcoal">
           Filters
+          {activeCount > 0 ? (
+            <span className="inline-flex min-w-5 items-center justify-center rounded-sm bg-titan-yellow px-1.5 text-xs font-semibold tabular-nums text-near-black">
+              {activeCount}
+            </span>
+          ) : null}
         </h2>
-        <button
-          type="button"
-          onClick={clearAll}
-          className="text-sm font-medium text-medium-gray underline-offset-2 hover:text-dark-charcoal hover:underline"
-        >
-          Clear all
-        </button>
+        {activeCount > 0 ? (
+          <button
+            type="button"
+            onClick={clearAll}
+            className="text-sm font-medium text-medium-gray underline-offset-2 hover:text-dark-charcoal hover:underline"
+          >
+            Clear all
+          </button>
+        ) : null}
       </div>
+
+      <FilterSection title="Search" defaultOpen active={Boolean(current.q)}>
+        <Input
+          name="q"
+          type="search"
+          placeholder="Name, SKU, brand, category, tag…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          aria-label="Search products"
+          aria-busy={isPending || undefined}
+        />
+      </FilterSection>
+
+      {departments.length > 0 ? (
+        <FilterSection
+          title="Department"
+          defaultOpen
+          active={Boolean(current.department)}
+        >
+          <OptionList
+            options={departments}
+            paramKey="department"
+            selected={current.department}
+            onToggle={(key, value) => {
+              updateParams((params) => {
+                params.delete("group");
+                if (params.get(key) === value) {
+                  params.delete(key);
+                } else {
+                  params.set(key, value);
+                }
+              });
+            }}
+          />
+        </FilterSection>
+      ) : null}
 
       {categories.length > 0 ? (
         <FilterSection
@@ -321,6 +418,7 @@ export function ProductFilters({
             paramKey="color"
             selected={current.color}
             onToggle={toggleParam}
+            showColorSwatch
           />
         </FilterSection>
       ) : null}
@@ -365,20 +463,30 @@ export function ProductFilters({
 
   return (
     <>
-      <div className="mb-4 lg:hidden">
+      <div className="lg:hidden">
         <Button
           type="button"
           variant="outline"
           size="md"
-          className="w-full"
+          className="w-full justify-between"
           onClick={() => setMobileOpen(true)}
         >
-          <Filter aria-hidden="true" />
-          Filters
+          <span className="inline-flex items-center gap-2">
+            <Filter aria-hidden="true" />
+            Filters
+          </span>
+          {activeCount > 0 ? (
+            <span className="inline-flex min-w-5 items-center justify-center rounded-sm bg-titan-yellow px-1.5 text-xs font-semibold tabular-nums text-near-black">
+              {activeCount}
+            </span>
+          ) : null}
         </Button>
       </div>
 
-      <aside className="hidden lg:block" aria-label="Product filters">
+      <aside
+        className="hidden lg:sticky lg:top-20 lg:block lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto lg:pr-1"
+        aria-label="Product filters"
+      >
         {filtersBody}
       </aside>
 
