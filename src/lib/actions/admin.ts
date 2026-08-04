@@ -651,7 +651,7 @@ async function uploadCatalogImage(
     return { success: false, message: "Image must be 8 MB or smaller." };
   }
 
-  let buffer = Buffer.from(await file.arrayBuffer());
+  let buffer: Buffer = Buffer.from(await file.arrayBuffer());
   let contentType = file.type;
   let ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
 
@@ -660,7 +660,7 @@ async function uploadCatalogImage(
     try {
       const { prepareBrandLogo } = await import("@/lib/images/brand-logo");
       const prepared = await prepareBrandLogo(buffer, contentType);
-      buffer = prepared.buffer;
+      buffer = Buffer.from(prepared.buffer);
       contentType = prepared.contentType;
       ext = prepared.extension;
     } catch {
