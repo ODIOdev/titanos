@@ -60,22 +60,24 @@ export function ProductGallery({
 
   return (
     <div className={cn("space-y-3", className)}>
-      <div className="relative aspect-square overflow-hidden rounded-sm border border-border-gray bg-light-gray">
+      <div className="relative aspect-square overflow-hidden rounded-sm border border-border-gray bg-white">
         <button
           type="button"
           className="relative h-full w-full cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-titan-yellow"
           onClick={() => setPreviewOpen(true)}
           aria-label="Open image preview"
         >
-          <Image
-            src={active.url}
-            alt={active.alt_text ?? productName}
-            fill
-            priority
-            className="object-contain p-6"
-            sizes="(max-width: 1024px) 100vw, 50vw"
-          />
-          <span className="pointer-events-none absolute bottom-3 right-3 inline-flex items-center gap-1 rounded-sm bg-white/90 px-2 py-1 text-xs font-medium text-dark-charcoal">
+          <span className="absolute inset-4 overflow-hidden rounded-sm border border-border-gray sm:inset-6">
+            <Image
+              src={active.url}
+              alt={active.alt_text ?? productName}
+              fill
+              priority
+              className="object-contain p-4 sm:p-5"
+              sizes="(max-width: 1024px) 100vw, 50vw"
+            />
+          </span>
+          <span className="pointer-events-none absolute bottom-3 right-3 z-10 inline-flex items-center gap-1 rounded-sm bg-white/90 px-2 py-1 text-xs font-medium text-dark-charcoal shadow-sm">
             <Expand className="size-3.5" aria-hidden="true" />
             Preview
           </span>
@@ -94,22 +96,24 @@ export function ProductGallery({
                   aria-label={`View image ${thumbIndex + 1}`}
                   aria-current={selected ? "true" : undefined}
                   className={cn(
-                    "relative size-16 overflow-hidden rounded-sm border bg-light-gray transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow sm:size-20",
+                    "relative size-16 overflow-hidden rounded-sm border bg-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow sm:size-20",
                     selected
                       ? "border-dark-charcoal"
                       : "border-border-gray hover:border-medium-gray",
                   )}
                 >
-                  <Image
-                    src={image.url}
-                    alt={
-                      image.alt_text ??
-                      `${productName} thumbnail ${thumbIndex + 1}`
-                    }
-                    fill
-                    className="object-contain p-1.5"
-                    sizes="80px"
-                  />
+                  <span className="absolute inset-1 overflow-hidden rounded-[2px] border border-border-gray">
+                    <Image
+                      src={image.url}
+                      alt={
+                        image.alt_text ??
+                        `${productName} thumbnail ${thumbIndex + 1}`
+                      }
+                      fill
+                      className="object-contain p-1"
+                      sizes="80px"
+                    />
+                  </span>
                 </button>
               </li>
             );
@@ -127,17 +131,20 @@ export function ProductGallery({
         className="max-w-4xl"
       >
         <div className="relative">
-          <div className="relative h-[60vh] w-full bg-light-gray">
-            <Image
-              src={active.url}
-              alt={active.alt_text ?? productName}
-              fill
-              className="object-contain p-4"
-              sizes="90vw"
-              unoptimized={
-                active.url.startsWith("data:") || active.url.startsWith("blob:")
-              }
-            />
+          <div className="relative h-[60vh] w-full overflow-hidden bg-white">
+            <span className="absolute inset-3 overflow-hidden rounded-sm border border-border-gray sm:inset-6">
+              <Image
+                src={active.url}
+                alt={active.alt_text ?? productName}
+                fill
+                className="object-contain p-4 sm:p-6"
+                sizes="90vw"
+                unoptimized={
+                  active.url.startsWith("data:") ||
+                  active.url.startsWith("blob:")
+                }
+              />
+            </span>
           </div>
 
           {multiple ? (
@@ -156,7 +163,9 @@ export function ProductGallery({
               </button>
               <button
                 type="button"
-                onClick={() => setActiveIndex((prev) => (prev + 1) % sorted.length)}
+                onClick={() =>
+                  setActiveIndex((prev) => (prev + 1) % sorted.length)
+                }
                 aria-label="Next image"
                 className="absolute right-2 top-1/2 inline-flex size-10 -translate-y-1/2 items-center justify-center rounded-sm border border-border-gray bg-white/90 text-dark-charcoal transition-colors hover:bg-white"
               >

@@ -32,6 +32,9 @@ export function ArchiveProductButton({
             return;
           }
           toast.success(result.message);
+          if (active) {
+            router.push("/admin/products?tab=archived");
+          }
           router.refresh();
         });
       }}

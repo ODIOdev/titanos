@@ -46,16 +46,56 @@ export const DEPARTMENT_OPTIONS: DepartmentOption[] = [
   { label: "Signage", value: "Signage", slug: "signage" },
 ];
 
+/**
+ * Shop filter / rail departments (admin “catalog” source).
+ * Always merged into storefront options unless explicitly removed.
+ */
+export const DEFAULT_PRIMARY_DEPARTMENTS: string[] = [
+  "Fall Protection",
+  "Head Protection",
+  "Hearing Protection",
+  "Reflective Visibility Clothing",
+  "Respiratory Protection",
+  "Safety Glasses",
+  "Safety Gloves",
+  "Safety Shoes & Boots",
+  "Safety Tapes",
+  "Signage",
+  "Traffic Safety Equipment",
+  "Combo Deals",
+];
+
 /** Resolve a URL/query param (slug or display value) to the canonical department value. */
 export function resolveDepartmentParam(
   param: string | null | undefined,
 ): string | undefined {
   if (!param?.trim()) return undefined;
   const key = param.trim().toLowerCase();
-  const match = DEPARTMENT_OPTIONS.find(
+  const fromBuiltIn = DEPARTMENT_OPTIONS.find(
     (d) => d.slug === key || d.value.toLowerCase() === key,
   );
-  return match?.value;
+  if (fromBuiltIn) return fromBuiltIn.value;
+  const fromPrimary = DEFAULT_PRIMARY_DEPARTMENTS.find((name) => {
+    const option = toDepartmentOption(name);
+    return option.slug === key || option.value.toLowerCase() === key;
+  });
+  if (fromPrimary) return fromPrimary;
+  // Custom admin-added departments use their display name as the filter value.
+  return param.trim();
+}
+
+/** Build a department option from a display name. */
+export function toDepartmentOption(name: string): DepartmentOption {
+  const value = name.trim();
+  return {
+    label: value,
+    value,
+    slug: value
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, "")
+      .replace(/[\s_-]+/g, "-")
+      .replace(/^-+|-+$/g, ""),
+  };
 }
 
 /** Infer department from product type when none is set (seed / backfill). */
@@ -189,12 +229,29 @@ export const SAFETY_CERTIFICATION_OPTIONS: string[] = [
 /** Shop / home image for a department card. */
 export function departmentImagePath(slug: string): string {
   const map: Record<string, string> = {
-    "safety-equipment": "/images/categories/construction-hard-hats.jpg",
-    "traffic-control": "/images/categories/traffic-cones.jpg",
-    "foot-wear": "/images/categories/work-boots.jpg",
-    signage: "/images/categories/street-signs.jpg",
+    "safety-equipment": "/images/categories/construction-hard-hats-v2.jpg",
+    "traffic-control": "/images/categories/traffic-control-v4.jpg",
+    "foot-wear": "/images/categories/foot-wear-v4.jpg",
+    signage: "/images/categories/signage.png",
+    "fall-protection": "/images/categories/fall-protection.png",
+    "head-protection": "/images/categories/head-protection.png",
+    "hearing-protection": "/images/categories/hearing-protection.png",
+    "reflective-visibility-clothing":
+      "/images/categories/reflective-visibility-clothing.png",
+    "respiratory-protection": "/images/categories/respiratory-protection.png",
+    "safety-glasses": "/images/categories/safety-glasses.png",
+    "safety-gloves": "/images/categories/safety-gloves.png",
+    "safety-shoes-boots": "/images/categories/safety-shoes-boots.png",
+    "safety-tapes": "/images/categories/safety-tapes.png",
+    "traffic-safety": "/images/categories/traffic-safety-equipment-v2.png",
+    "traffic-safety-equipment":
+      "/images/categories/traffic-safety-equipment-v2.png",
+    "combo-deals": "/images/categories/combo-deals.png",
+    "work-boots": "/images/categories/safety-shoes-boots.png",
+    "hard-hats": "/images/categories/head-protection.png",
+    "safety-vests": "/images/categories/reflective-visibility-clothing.png",
   };
-  return map[slug] ?? `/images/categories/${slug}.svg`;
+  return map[slug] ?? `/images/categories/${slug}.png`;
 }
 
 /** Merchandising tags for admin catalog labeling. */
@@ -252,15 +309,15 @@ export function getTagPastelClasses(tag: string): string {
 
 /** ANSI / ISEA visibility and hard-hat electrical classes used across PPE. */
 export const ANSI_CLASS_OPTIONS: CatalogOption[] = [
+  { label: "Type I Class C", value: "Type I Class C" },
+  { label: "Type I Class G", value: "Type I Class G" },
+  { label: "Type I Class E", value: "Type I Class E" },
+  { label: "Type II Class C", value: "Type II Class C" },
+  { label: "Type II Class G", value: "Type II Class G" },
+  { label: "Type II Class E", value: "Type II Class E" },
   { label: "Class 1", value: "Class 1" },
   { label: "Class 2", value: "Class 2" },
   { label: "Class 3", value: "Class 3" },
-  { label: "Type I Class C", value: "Type I Class C" },
-  { label: "Type I Class E", value: "Type I Class E" },
-  { label: "Type I Class G", value: "Type I Class G" },
-  { label: "Type II Class C", value: "Type II Class C" },
-  { label: "Type II Class E", value: "Type II Class E" },
-  { label: "Type II Class G", value: "Type II Class G" },
 ];
 
 /** Named color → hex used to build swatches for single & dual-tone colors. */

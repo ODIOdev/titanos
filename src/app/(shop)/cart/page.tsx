@@ -154,15 +154,17 @@ export default function CartPage() {
                   >
                     <Link
                       href={product ? `/product/${product.slug}` : "/shop"}
-                      className="relative size-24 shrink-0 overflow-hidden rounded-sm border border-border-gray bg-light-gray"
+                      className="relative size-24 shrink-0 overflow-hidden rounded-sm border border-border-gray bg-white"
                     >
-                      <Image
-                        src={image}
-                        alt={product?.name ?? "Product"}
-                        fill
-                        className="object-contain p-2"
-                        sizes="96px"
-                      />
+                      <span className="absolute inset-2">
+                        <Image
+                          src={image}
+                          alt={product?.name ?? "Product"}
+                          fill
+                          className="object-contain"
+                          sizes="96px"
+                        />
+                      </span>
                     </Link>
 
                     <div className="min-w-0 flex-1 space-y-2">

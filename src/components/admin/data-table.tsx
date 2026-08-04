@@ -3,7 +3,8 @@ import { cn } from "@/lib/utils";
 
 export type DataTableColumn = {
   key: string;
-  header: string;
+  /** Column title — string or custom node (e.g. select-all checkbox). */
+  header: ReactNode;
   className?: string;
 };
 
@@ -12,6 +13,8 @@ type DataTableProps = {
   rows: ReactNode[][];
   emptyMessage?: string;
   className?: string;
+  /** Fit narrow cards without horizontal scroll. */
+  compact?: boolean;
 };
 
 export function DataTable({
@@ -19,6 +22,7 @@ export function DataTable({
   rows,
   emptyMessage = "No records found.",
   className,
+  compact = false,
 }: DataTableProps) {
   return (
     <div
@@ -27,15 +31,25 @@ export function DataTable({
         className,
       )}
     >
-      <div className="max-lg:scrollbar-hidden overflow-x-auto">
-        <table className="w-full min-w-[640px] border-collapse text-left text-sm">
+      <div
+        className={cn(
+          compact ? "overflow-x-hidden" : "max-lg:scrollbar-hidden overflow-x-auto",
+        )}
+      >
+        <table
+          className={cn(
+            "w-full border-collapse text-left text-sm",
+            compact ? "table-fixed" : "min-w-[640px]",
+          )}
+        >
           <thead>
             <tr className="border-b border-border-gray bg-light-gray">
               {columns.map((col) => (
                 <th
                   key={col.key}
                   className={cn(
-                    "px-4 py-3 font-heading text-xs font-semibold uppercase tracking-wide text-dark-charcoal",
+                    "font-heading text-xs font-semibold uppercase tracking-wide text-dark-charcoal",
+                    compact ? "px-2.5 py-2.5 sm:px-3" : "px-4 py-3",
                     col.className,
                   )}
                 >
@@ -49,7 +63,10 @@ export function DataTable({
               <tr>
                 <td
                   colSpan={columns.length}
-                  className="px-4 py-10 text-center text-medium-gray"
+                  className={cn(
+                    "text-center text-medium-gray",
+                    compact ? "px-2.5 py-8 sm:px-3" : "px-4 py-10",
+                  )}
                 >
                   {emptyMessage}
                 </td>
@@ -64,7 +81,8 @@ export function DataTable({
                     <td
                       key={cellIndex}
                       className={cn(
-                        "px-4 py-3 align-middle",
+                        "align-middle",
+                        compact ? "px-2.5 py-2.5 sm:px-3" : "px-4 py-3",
                         columns[cellIndex]?.className,
                       )}
                     >

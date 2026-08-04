@@ -5,11 +5,15 @@ import {
   SITE_CONFIG,
 } from "@/lib/data/seed-data";
 import {
+  DEPARTMENT_OPTIONS,
+  DEFAULT_PRIMARY_DEPARTMENTS,
   PRODUCT_TAG_OPTIONS,
   SIZE_OPTIONS,
   departmentForProductType,
   mergeCatalogOptions,
+  toDepartmentOption,
   type CatalogOption,
+  type DepartmentOption,
 } from "@/lib/data/catalog-options";
 import { productMatchesQuery, productSearchScore, matchesQuery } from "@/lib/search";
 import { AFFILIATE_ELIGIBILITY_ORDERS } from "@/lib/affiliates/program";
@@ -145,6 +149,14 @@ export type AdminTag = {
   source: "catalog" | "custom" | "product";
 };
 
+export type AdminDepartment = {
+  name: string;
+  slug: string;
+  productCount: number;
+  /** Canonical catalog option, custom (site_settings), or only found on products. */
+  source: "catalog" | "custom" | "product";
+};
+
 /** In-memory custom tags for demo mode (no Supabase). */
 let demoCatalogTags: string[] = [];
 /** Admin-created catalog-source tags in demo mode. */
@@ -185,6 +197,37 @@ export function getDemoCatalogSizes(): string[] {
 
 export function setDemoCatalogSizes(sizes: string[]) {
   demoCatalogSizes = [...sizes];
+}
+
+/** In-memory custom departments for demo mode (no Supabase). */
+let demoCatalogDepartments: string[] = [];
+/** Admin-created catalog-source departments in demo mode. */
+let demoPrimaryCatalogDepartments: string[] = [...DEFAULT_PRIMARY_DEPARTMENTS];
+/** Built-in / custom departments removed from the catalog in demo mode. */
+let demoRemovedCatalogDepartments: string[] = [];
+
+export function getDemoCatalogDepartments(): string[] {
+  return [...demoCatalogDepartments];
+}
+
+export function setDemoCatalogDepartments(departments: string[]) {
+  demoCatalogDepartments = [...departments];
+}
+
+export function getDemoPrimaryCatalogDepartments(): string[] {
+  return [...demoPrimaryCatalogDepartments];
+}
+
+export function setDemoPrimaryCatalogDepartments(departments: string[]) {
+  demoPrimaryCatalogDepartments = [...departments];
+}
+
+export function getDemoRemovedCatalogDepartments(): string[] {
+  return [...demoRemovedCatalogDepartments];
+}
+
+export function setDemoRemovedCatalogDepartments(departments: string[]) {
+  demoRemovedCatalogDepartments = [...departments];
 }
 
 function daysAgo(n: number): string {
@@ -491,6 +534,17 @@ const DEMO_RESOURCES: Resource[] = [
   },
 ];
 
+function emptyRevenueOverTime(): { date: string; revenue: number }[] {
+  return Array.from({ length: 7 }, (_, i) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (6 - i));
+    return {
+      date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      revenue: 0,
+    };
+  });
+}
+
 function buildDemoMetrics(): AdminMetrics {
   const paidOrders = DEMO_ORDERS.filter(
     (o) => !["cancelled", "refunded", "pending"].includes(o.status),
@@ -577,52 +631,153 @@ function buildDemoMetrics(): AdminMetrics {
 export async function getAdminMetrics(): Promise<AdminMetrics> {
   if (isSupabaseConfigured()) {
     try {
-      const { createClient } = await import("@/lib/supabase/server");
-      const supabase = await createClient();
+      // Service role so empty post-reset state is read accurately (no RLS gaps).
+      const { createServiceClient } = await import("@/lib/supabase/admin");
+      const supabase = createServiceClient();
 
-      const [{ data: orders }, { count: customersCount }, { data: quotes }, { data: products }] =
-        await Promise.all([
-          supabase.from("orders").select("id, status, total, created_at"),
-          supabase.from("profiles").select("*", { count: "exact", head: true }).eq("role", "customer"),
-          supabase.from("quotes").select("id, status"),
-          supabase.from("products").select("id, name, inventory_quantity, low_stock_threshold, category_id"),
+      const [
+        { data: orders, error: ordersError },
+        { count: customersCount, error: customersError },
+        { data: quotes, error: quotesError },
+        { data: products, error: productsError },
+      ] = await Promise.all([
+        supabase.from("orders").select("id, status, total, created_at"),
+        supabase
+          .from("profiles")
+          .select("*", { count: "exact", head: true })
+          .eq("role", "customer"),
+        supabase.from("quotes").select("id, status"),
+        supabase
+          .from("products")
+          .select("id, name, inventory_quantity, low_stock_threshold, category_id"),
+      ]);
+
+      if (ordersError) throw ordersError;
+      if (customersError) throw customersError;
+      if (quotesError) throw quotesError;
+      if (productsError) throw productsError;
+
+      const orderRows = orders ?? [];
+      const productRows = products ?? [];
+      const quoteRows = quotes ?? [];
+
+      const paid = orderRows.filter(
+        (o) => !["cancelled", "refunded", "pending"].includes(o.status),
+      );
+      const revenue = paid.reduce((s, o) => s + Number(o.total), 0);
+      const aov = paid.length ? revenue / paid.length : 0;
+      const lowStockCount = productRows.filter(
+        (p) => p.inventory_quantity <= p.low_stock_threshold,
+      ).length;
+      const pendingQuotes = quoteRows.filter((q) =>
+        ["submitted", "reviewing", "information_requested", "quoted"].includes(
+          q.status,
+        ),
+      ).length;
+
+      const statusCounts = new Map<string, number>();
+      for (const o of orderRows) {
+        statusCounts.set(o.status, (statusCounts.get(o.status) ?? 0) + 1);
+      }
+
+      const revenueOverTime = Array.from({ length: 7 }, (_, i) => {
+        const date = new Date();
+        date.setDate(date.getDate() - (6 - i));
+        const label = date.toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        });
+        const dayRevenue = orderRows
+          .filter((o) => {
+            const od = new Date(o.created_at);
+            return (
+              od.toDateString() === date.toDateString() &&
+              !["cancelled", "refunded"].includes(o.status)
+            );
+          })
+          .reduce((s, o) => s + Number(o.total), 0);
+        return { date: label, revenue: Math.round(dayRevenue * 100) / 100 };
+      });
+
+      let salesByCategory: AdminMetrics["salesByCategory"] = [];
+      let topProducts: AdminMetrics["topProducts"] = [];
+
+      if (orderRows.length > 0) {
+        const orderIds = orderRows.map((o) => o.id);
+        const [{ data: items }, { data: categories }] = await Promise.all([
+          supabase
+            .from("order_items")
+            .select("product_id, product_name, quantity, total_price, order_id")
+            .in("order_id", orderIds),
+          supabase.from("categories").select("id, name"),
         ]);
 
-      if (orders?.length) {
-        const paid = orders.filter((o) => !["cancelled", "refunded", "pending"].includes(o.status));
-        const revenue = paid.reduce((s, o) => s + Number(o.total), 0);
-        const aov = paid.length ? revenue / paid.length : 0;
-        const lowStockCount = (products ?? []).filter(
-          (p) => p.inventory_quantity <= p.low_stock_threshold,
-        ).length;
-        const pendingQuotes = (quotes ?? []).filter((q) =>
-          ["submitted", "reviewing", "information_requested", "quoted"].includes(q.status),
-        ).length;
+        const categoryNameById = new Map(
+          (categories ?? []).map((c) => [c.id, c.name]),
+        );
+        const productCategoryById = new Map(
+          productRows.map((p) => [p.id, p.category_id]),
+        );
 
-        const statusCounts = new Map<string, number>();
-        for (const o of orders) {
-          statusCounts.set(o.status, (statusCounts.get(o.status) ?? 0) + 1);
+        const catSales = new Map<string, number>();
+        const productSales = new Map<
+          string,
+          { name: string; sales: number; quantity: number }
+        >();
+
+        for (const item of items ?? []) {
+          const categoryId = item.product_id
+            ? productCategoryById.get(item.product_id)
+            : null;
+          const categoryName =
+            (categoryId ? categoryNameById.get(categoryId) : null) ?? "Other";
+          catSales.set(
+            categoryName,
+            (catSales.get(categoryName) ?? 0) + Number(item.total_price),
+          );
+
+          const key = item.product_name || "Unknown";
+          const prev = productSales.get(key) ?? {
+            name: key,
+            sales: 0,
+            quantity: 0,
+          };
+          prev.sales += Number(item.total_price);
+          prev.quantity += Number(item.quantity) || 0;
+          productSales.set(key, prev);
         }
 
-        const demo = buildDemoMetrics();
-        return {
-          revenue: Math.round(revenue * 100) / 100,
-          ordersCount: orders.length,
-          customersCount: customersCount ?? 0,
-          pendingQuotes,
-          lowStockCount,
-          aov: Math.round(aov * 100) / 100,
-          revenueOverTime: demo.revenueOverTime,
-          ordersByStatus: Array.from(statusCounts.entries()).map(([status, count]) => ({
-            status,
-            count,
-          })),
-          salesByCategory: demo.salesByCategory,
-          topProducts: demo.topProducts,
-        };
+        salesByCategory = Array.from(catSales.entries())
+          .map(([category, sales]) => ({
+            category,
+            sales: Math.round(sales * 100) / 100,
+          }))
+          .sort((a, b) => b.sales - a.sales)
+          .slice(0, 6);
+
+        topProducts = Array.from(productSales.values())
+          .sort((a, b) => b.sales - a.sales)
+          .slice(0, 5)
+          .map((p) => ({ ...p, sales: Math.round(p.sales * 100) / 100 }));
       }
+
+      return {
+        revenue: Math.round(revenue * 100) / 100,
+        ordersCount: orderRows.length,
+        customersCount: customersCount ?? 0,
+        pendingQuotes,
+        lowStockCount,
+        aov: Math.round(aov * 100) / 100,
+        revenueOverTime:
+          orderRows.length > 0 ? revenueOverTime : emptyRevenueOverTime(),
+        ordersByStatus: Array.from(statusCounts.entries()).map(
+          ([status, count]) => ({ status, count }),
+        ),
+        salesByCategory,
+        topProducts,
+      };
     } catch {
-      // Fall through to demo metrics
+      // Fall through to demo metrics only when live reads fail
     }
   }
   return buildDemoMetrics();
@@ -634,8 +789,8 @@ export async function getAdminProducts(opts?: {
 }): Promise<Product[]> {
   if (isSupabaseConfigured()) {
     try {
-      const { createClient } = await import("@/lib/supabase/server");
-      const supabase = await createClient();
+      const { createServiceClient } = await import("@/lib/supabase/admin");
+      const supabase = createServiceClient();
       let query = supabase
         .from("products")
         .select(
@@ -746,10 +901,14 @@ export async function getAdminProduct(id: string): Promise<Product | null> {
 export async function getAdminCategories(): Promise<Category[]> {
   if (isSupabaseConfigured()) {
     try {
-      const { createClient } = await import("@/lib/supabase/server");
-      const supabase = await createClient();
-      const { data } = await supabase.from("categories").select("*").order("sort_order");
-      if (data?.length) return data as Category[];
+      const { createServiceClient } = await import("@/lib/supabase/admin");
+      const supabase = createServiceClient();
+      const { data, error } = await supabase
+        .from("categories")
+        .select("*")
+        .order("sort_order");
+      if (error) throw error;
+      if (data) return data as Category[];
     } catch {
       // Fall through
     }
@@ -902,10 +1061,14 @@ export async function getAdminCategoryDetail(
 export async function getAdminBrands(): Promise<Brand[]> {
   if (isSupabaseConfigured()) {
     try {
-      const { createClient } = await import("@/lib/supabase/server");
-      const supabase = await createClient();
-      const { data } = await supabase.from("brands").select("*").order("name");
-      if (data?.length) {
+      const { createServiceClient } = await import("@/lib/supabase/admin");
+      const supabase = createServiceClient();
+      const { data, error } = await supabase
+        .from("brands")
+        .select("*")
+        .order("name");
+      if (error) throw error;
+      if (data) {
         return data.map((b) => ({
           id: b.id,
           name: b.name,
@@ -929,8 +1092,8 @@ export async function getAdminOrders(opts?: {
 }): Promise<AdminOrder[]> {
   if (isSupabaseConfigured()) {
     try {
-      const { createClient } = await import("@/lib/supabase/server");
-      const supabase = await createClient();
+      const { createServiceClient } = await import("@/lib/supabase/admin");
+      const supabase = createServiceClient();
       let query = supabase
         .from("orders")
         .select("*, items:order_items(*)")
@@ -1675,12 +1838,13 @@ export async function getAdminMembers(opts?: {
 
   if (isSupabaseConfigured()) {
     try {
-      const { createClient } = await import("@/lib/supabase/server");
-      const supabase = await createClient();
-      const { data } = await supabase
+      const { createServiceClient } = await import("@/lib/supabase/admin");
+      const supabase = createServiceClient();
+      const { data, error } = await supabase
         .from("profiles")
         .select("*")
         .order("created_at", { ascending: false });
+      if (error) throw error;
       if (data) {
         const { isAdminRole, isMasterAdminEmail } = await import("@/lib/utils");
         return filterMembers(
@@ -1746,8 +1910,8 @@ export async function getAdminQuotes(opts?: {
 
   if (isSupabaseConfigured()) {
     try {
-      const { createClient } = await import("@/lib/supabase/server");
-      const supabase = await createClient();
+      const { createServiceClient } = await import("@/lib/supabase/admin");
+      const supabase = createServiceClient();
       let query = supabase
         .from("quotes")
         .select("*")
@@ -1813,13 +1977,14 @@ export async function getAdminInventory(): Promise<Product[]> {
 export async function getAdminResources(): Promise<Resource[]> {
   if (isSupabaseConfigured()) {
     try {
-      const { createClient } = await import("@/lib/supabase/server");
-      const supabase = await createClient();
-      const { data } = await supabase
+      const { createServiceClient } = await import("@/lib/supabase/admin");
+      const supabase = createServiceClient();
+      const { data, error } = await supabase
         .from("resources")
         .select("*")
         .order("created_at", { ascending: false });
-      if (data?.length) {
+      if (error) throw error;
+      if (data) {
         return data.map((r) => ({
           id: r.id,
           title: r.title,
@@ -2002,6 +2167,178 @@ async function getStoredCatalogSizes(): Promise<string[]> {
     }
   }
   return getDemoCatalogSizes();
+}
+
+async function getStoredCatalogDepartments(): Promise<string[]> {
+  if (isSupabaseConfigured()) {
+    try {
+      const { createClient } = await import("@/lib/supabase/server");
+      const supabase = await createClient();
+      const { data } = await supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "catalog_departments")
+        .maybeSingle();
+      const value = data?.value as { departments?: unknown } | null;
+      if (Array.isArray(value?.departments)) {
+        return value.departments
+          .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+          .map((d) => d.trim());
+      }
+    } catch {
+      // Fall through
+    }
+  }
+  return getDemoCatalogDepartments();
+}
+
+async function getStoredPrimaryCatalogDepartments(): Promise<string[]> {
+  if (isSupabaseConfigured()) {
+    try {
+      const { createClient } = await import("@/lib/supabase/server");
+      const supabase = await createClient();
+      const { data } = await supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "catalog_primary_departments")
+        .maybeSingle();
+      const value = data?.value as { departments?: unknown } | null;
+      if (Array.isArray(value?.departments)) {
+        return value.departments
+          .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+          .map((d) => d.trim());
+      }
+    } catch {
+      // Fall through
+    }
+  }
+  return getDemoPrimaryCatalogDepartments();
+}
+
+async function getRemovedCatalogDepartments(): Promise<string[]> {
+  if (isSupabaseConfigured()) {
+    try {
+      const { createClient } = await import("@/lib/supabase/server");
+      const supabase = await createClient();
+      const { data } = await supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "catalog_departments_removed")
+        .maybeSingle();
+      const value = data?.value as { departments?: unknown } | null;
+      if (Array.isArray(value?.departments)) {
+        return value.departments
+          .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+          .map((d) => d.trim());
+      }
+    } catch {
+      // Fall through
+    }
+  }
+  return getDemoRemovedCatalogDepartments();
+}
+
+/**
+ * Department options for the product form and shop filters —
+ * canonical + admin-added + departments already in use on products.
+ */
+export async function getCatalogDepartmentOptions(): Promise<DepartmentOption[]> {
+  const [products, customDepartments, primaryDepartments, removed] =
+    await Promise.all([
+      getAdminProducts({ active: "all" }),
+      getStoredCatalogDepartments(),
+      getStoredPrimaryCatalogDepartments(),
+      getRemovedCatalogDepartments(),
+    ]);
+  const removedKeys = new Set(removed.map((d) => d.toLowerCase()));
+
+  const merged = new Map<string, DepartmentOption>();
+  for (const option of DEPARTMENT_OPTIONS) {
+    if (removedKeys.has(option.value.toLowerCase())) continue;
+    merged.set(option.value.toLowerCase(), option);
+  }
+  for (const name of [
+    ...DEFAULT_PRIMARY_DEPARTMENTS,
+    ...primaryDepartments,
+    ...customDepartments,
+    ...products
+      .map((p) => p.department)
+      .filter((d): d is string => Boolean(d?.trim())),
+  ]) {
+    const key = name.toLowerCase();
+    if (removedKeys.has(key) || merged.has(key)) continue;
+    merged.set(key, toDepartmentOption(name));
+  }
+  return Array.from(merged.values()).sort((a, b) =>
+    a.label.localeCompare(b.label),
+  );
+}
+
+/** Department management rows for the Categories page. */
+export async function getAdminDepartments(): Promise<AdminDepartment[]> {
+  const [products, customDepartments, primaryDepartments, removed] =
+    await Promise.all([
+      getAdminProducts({ active: "all" }),
+      getStoredCatalogDepartments(),
+      getStoredPrimaryCatalogDepartments(),
+      getRemovedCatalogDepartments(),
+    ]);
+  const removedKeys = new Set(removed.map((d) => d.toLowerCase()));
+
+  const counts = new Map<string, number>();
+  for (const product of products) {
+    const department = product.department?.trim();
+    if (!department) continue;
+    const key = department.toLowerCase();
+    if (removedKeys.has(key)) continue;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  const canonical = new Map(
+    [
+      ...DEPARTMENT_OPTIONS.map((o) => o.value),
+      ...DEFAULT_PRIMARY_DEPARTMENTS,
+      ...primaryDepartments,
+    ]
+      .filter((name) => !removedKeys.has(name.toLowerCase()))
+      .map((name) => {
+        const option = toDepartmentOption(name);
+        return [option.value.toLowerCase(), option] as const;
+      }),
+  );
+  const custom = new Map(
+    customDepartments
+      .filter((name) => !removedKeys.has(name.toLowerCase()))
+      .map((name) => {
+        const option = toDepartmentOption(name);
+        return [option.value.toLowerCase(), option] as const;
+      }),
+  );
+  const names = new Map<string, DepartmentOption>();
+
+  for (const [key, option] of canonical) names.set(key, option);
+  for (const [key, option] of custom) names.set(key, option);
+  for (const product of products) {
+    const department = product.department?.trim();
+    if (!department) continue;
+    const key = department.toLowerCase();
+    if (removedKeys.has(key) || names.has(key)) continue;
+    names.set(key, toDepartmentOption(department));
+  }
+
+  return Array.from(names.entries())
+    .map(([key, option]) => {
+      let source: AdminDepartment["source"] = "product";
+      if (canonical.has(key)) source = "catalog";
+      else if (custom.has(key)) source = "custom";
+      return {
+        name: option.value,
+        slug: option.slug,
+        productCount: counts.get(key) ?? 0,
+        source,
+      };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Every size a product already uses, from the size field and the variant matrix. */

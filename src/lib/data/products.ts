@@ -350,17 +350,26 @@ export async function getCategoryBySlug(slug: string): Promise<Category | null> 
 }
 
 export async function getBrands(): Promise<Brand[]> {
+  const withLogo = (brands: Brand[]) =>
+    brands.filter((b) => Boolean(b.logo_url?.trim()));
+
   if (isSupabaseConfigured()) {
     try {
       const { createClient } = await import("@/lib/supabase/server");
       const supabase = await createClient();
-      const { data } = await supabase.from("brands").select("*").eq("active", true).order("name");
-      if (data?.length) return data as Brand[];
+      const { data, error } = await supabase
+        .from("brands")
+        .select("*")
+        .eq("active", true)
+        .order("name");
+      if (error) throw error;
+      // Live site only surfaces brands that have an uploaded logo.
+      if (data) return withLogo(data as Brand[]);
     } catch {
       // Fall through
     }
   }
-  return SEED_BRANDS;
+  return withLogo(SEED_BRANDS as Brand[]);
 }
 
 export async function getFeaturedProducts(limit = 6): Promise<Product[]> {

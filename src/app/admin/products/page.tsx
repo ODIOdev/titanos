@@ -1,17 +1,13 @@
 import Link from "next/link";
-import Image from "next/image";
 import {
   Archive,
   FilePenLine,
   Package,
   TriangleAlert,
 } from "lucide-react";
-import { ArchiveProductButton } from "@/components/admin/archive-product-button";
 import { AdminProductsFilterBar } from "@/components/admin/admin-products-filter-bar";
-import { ReplenishProductButton } from "@/components/admin/replenish-product-button";
-import { DataTable } from "@/components/admin/data-table";
+import { AdminProductsTable } from "@/components/admin/admin-products-table";
 import { Pagination } from "@/components/products/pagination";
-import { Badge } from "@/components/ui/badge";
 import {
   getAdminBrands,
   getAdminCategories,
@@ -22,7 +18,6 @@ import {
   cn,
   formatCurrency,
   getCatalogStatus,
-  type CatalogStatus,
 } from "@/lib/utils";
 import type { Product } from "@/types";
 
@@ -60,12 +55,6 @@ function parseTab(value: string | undefined): TabId {
 function parseStock(value: string | undefined): StockFilter {
   if (value === "low" || value === "out" || value === "ok") return value;
   return "all";
-}
-
-function ProductStatusBadge({ status }: { status: CatalogStatus }) {
-  if (status === "active") return <Badge variant="success">Active</Badge>;
-  if (status === "draft") return <Badge variant="warning">Draft</Badge>;
-  return <Badge variant="default">Archived</Badge>;
 }
 
 function buildHref(opts: {
@@ -344,93 +333,24 @@ export default async function AdminProductsPage({
       </div>
 
       <div className="overflow-hidden rounded-b-sm border border-t-0 border-border-gray bg-white">
-        <DataTable
-          className="rounded-none border-0"
-          columns={[
-            { key: "name", header: "Product" },
-            { key: "sku", header: "SKU" },
-            { key: "category", header: "Category" },
-            { key: "price", header: "Price" },
-            { key: "stock", header: "Stock" },
-            { key: "status", header: "Status" },
-            { key: "actions", header: "Actions", className: "text-right" },
-          ]}
+        <AdminProductsTable
+          tab={tab}
           emptyMessage={
             hasFilters
               ? `No ${tabMeta[tab].title.toLowerCase()} match these filters.`
               : tabMeta[tab].empty
           }
-          rows={pageItems.map((p) => {
-            const status = getCatalogStatus(p);
-            const low = p.inventory_quantity <= p.low_stock_threshold;
-            const imageUrl = productImageUrl(p);
-            return [
-              <div key={`${p.id}-name`} className="flex items-center gap-3">
-                <div className="relative size-11 shrink-0 overflow-hidden rounded-sm border border-border-gray bg-light-gray">
-                  <Image
-                    src={imageUrl}
-                    alt=""
-                    fill
-                    className="object-cover"
-                    sizes="44px"
-                    unoptimized={
-                      imageUrl.startsWith("data:") ||
-                      imageUrl.startsWith("blob:")
-                    }
-                  />
-                </div>
-                <div className="min-w-0">
-                  <Link
-                    href={`/admin/products/${p.id}`}
-                    className="font-medium text-dark-charcoal hover:text-titan-yellow"
-                  >
-                    {p.name}
-                  </Link>
-                  {low && status === "active" ? (
-                    <p className="text-xs font-medium text-warning-orange">
-                      Low stock
-                    </p>
-                  ) : null}
-                </div>
-              </div>,
-              <span key={`${p.id}-sku`} className="text-medium-gray">
-                {p.sku}
-              </span>,
-              <span key={`${p.id}-cat`}>{p.category?.name ?? "—"}</span>,
-              <span key={`${p.id}-price`} className="tabular-nums">
-                {formatCurrency(p.price)}
-              </span>,
-              <span
-                key={`${p.id}-stock`}
-                className={cn(
-                  "tabular-nums",
-                  low && "font-semibold text-warning-orange",
-                )}
-              >
-                {p.inventory_quantity}
-              </span>,
-              <ProductStatusBadge key={`${p.id}-status`} status={status} />,
-              <div key={`${p.id}-actions`} className="flex justify-end gap-2">
-                <Link
-                  href={`/admin/products/${p.id}`}
-                  className="inline-flex h-8 items-center rounded-sm border border-border-gray px-3 text-xs font-semibold uppercase tracking-wide hover:bg-light-gray"
-                >
-                  Edit
-                </Link>
-                <ReplenishProductButton
-                  productId={p.id}
-                  productName={p.name}
-                  currentQty={p.inventory_quantity ?? 0}
-                />
-                {status !== "draft" ? (
-                  <ArchiveProductButton
-                    productId={p.id}
-                    active={status === "active"}
-                  />
-                ) : null}
-              </div>,
-            ];
-          })}
+          products={pageItems.map((p) => ({
+            id: p.id,
+            name: p.name,
+            sku: p.sku,
+            categoryName: p.category?.name ?? null,
+            price: Number(p.price ?? 0),
+            inventoryQuantity: p.inventory_quantity ?? 0,
+            lowStockThreshold: p.low_stock_threshold ?? 0,
+            status: getCatalogStatus(p),
+            imageUrl: productImageUrl(p),
+          }))}
         />
 
         {totalPages > 1 ? (

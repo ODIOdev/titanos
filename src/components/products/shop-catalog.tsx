@@ -6,7 +6,7 @@ import { ProductFilters } from "@/components/products/product-filters";
 import { ProductGrid } from "@/components/products/product-grid";
 import { ProductGridSkeleton } from "@/components/products/product-grid-skeleton";
 import { ProductSort } from "@/components/products/product-sort";
-import { ShopCategoryRail } from "@/components/products/shop-category-rail";
+import { ShopDepartmentRail } from "@/components/products/shop-department-rail";
 import { Pagination } from "@/components/products/pagination";
 import {
   buildShopFilterChips,
@@ -18,6 +18,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorMessage } from "@/components/ui/error-message";
 import { getBrands, getCategories, getProducts } from "@/lib/data/products";
+import { getCatalogDepartmentOptions } from "@/lib/data/admin";
 import {
   parseShopFilters,
   toFilterQuery,
@@ -27,7 +28,6 @@ import type { ProductFilters as ProductFiltersType } from "@/types";
 import { SEED_PRODUCTS } from "@/lib/data/seed-data";
 import {
   ANSI_CLASS_OPTIONS,
-  DEPARTMENT_OPTIONS,
   COLOR_OPTIONS,
   PRODUCT_TYPE_OPTIONS,
   SIZE_OPTIONS,
@@ -174,14 +174,15 @@ export async function ShopCatalog({
   // paint while results stream in below.
   const results = loadResults(filters);
 
-  const [categories, brands] = await Promise.all([
+  const [categories, brands, departmentOptions] = await Promise.all([
     getCategories(),
     getBrands(),
+    getCatalogDepartmentOptions(),
   ]);
 
   // Keep shop filters aligned with admin dropdowns (plus any legacy product values).
   const filterOptions: ShopFilterOptions = {
-    departments: DEPARTMENT_OPTIONS.map((d) => ({
+    departments: departmentOptions.map((d) => ({
       label: d.label,
       value: d.value,
     })),
@@ -249,9 +250,10 @@ export async function ShopCatalog({
         </div>
       </header>
 
-      <ShopCategoryRail
-        categories={categories}
-        activeSlug={categorySlug}
+      <ShopDepartmentRail
+        departments={filterOptions.departments}
+        activeDepartment={query.department}
+        basePath={basePath}
         className="mt-5"
       />
 

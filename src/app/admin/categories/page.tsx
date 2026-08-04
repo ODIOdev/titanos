@@ -3,17 +3,21 @@ import {
   CircleOff,
   FolderKanban,
   FolderOpen,
+  Layers,
   PackageOpen,
   type LucideIcon,
 } from "lucide-react";
 import { AdminSearchForm } from "@/components/admin/admin-search-form";
+import { AddDepartmentButton } from "@/components/admin/add-department-button";
 import { CategoryRowActions } from "@/components/admin/category-row-actions";
 import { DataTable } from "@/components/admin/data-table";
+import { DepartmentsManagementCard } from "@/components/admin/departments-management-card";
 import { TagsManagementCard } from "@/components/admin/tags-management-card";
 import { Badge } from "@/components/ui/badge";
 import {
   getAdminCategories,
   getAdminCategoryDetail,
+  getAdminDepartments,
   getAdminTags,
 } from "@/lib/data/admin";
 import { matchesQuery } from "@/lib/search";
@@ -67,9 +71,10 @@ export default async function AdminCategoriesPage({
   const q = params.q ?? "";
   const tab = parseTab(params.tab);
 
-  const [categories, tags] = await Promise.all([
+  const [categories, tags, departments] = await Promise.all([
     getAdminCategories(),
     getAdminTags(),
+    getAdminDepartments(),
   ]);
 
   const details: CategoryRow[] = await Promise.all(
@@ -143,6 +148,17 @@ export default async function AdminCategoriesPage({
 
   const hasFilters = Boolean(query || tab !== "all");
 
+  const departmentProductCount = departments.reduce(
+    (sum, d) => sum + d.productCount,
+    0,
+  );
+  const catalogDepartmentCount = departments.filter(
+    (d) => d.source === "catalog",
+  ).length;
+  const customDepartmentCount = departments.filter(
+    (d) => d.source === "custom" || d.source === "product",
+  ).length;
+
   return (
     <div className="space-y-8">
       <div className="space-y-4">
@@ -153,18 +169,36 @@ export default async function AdminCategoriesPage({
             label="Search categories"
             hiddenFields={tab !== "all" ? { tab } : undefined}
           />
-          <Link
-            href="/admin/categories/new"
-            className="inline-flex h-10 items-center justify-center rounded-sm bg-titan-yellow px-4 font-heading text-sm font-semibold uppercase tracking-wide text-dark-charcoal hover:bg-[#e0b400]"
-          >
-            Add new category
-          </Link>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            <AddDepartmentButton />
+            <Link
+              href="/admin/categories/new"
+              className="inline-flex h-10 items-center justify-center rounded-sm bg-titan-yellow px-4 font-heading text-sm font-semibold uppercase tracking-wide text-dark-charcoal hover:bg-[#e0b400]"
+            >
+              Add new category
+            </Link>
+          </div>
         </div>
 
         <nav
-          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"
+          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"
           aria-label="Category filters"
         >
+          <CategoryMetricCard
+            href="#departments"
+            label="Departments"
+            value={String(departments.length)}
+            hint={`${departmentProductCount} products assigned`}
+            icon={Layers}
+            active={false}
+            accent="bg-sky-100 text-sky-800"
+            barClass="bg-sky-400"
+            share={statusBarShare(departmentProductCount)}
+            spark={[
+              { label: "Catalog", value: String(catalogDepartmentCount) },
+              { label: "Custom", value: String(customDepartmentCount) },
+            ]}
+          />
           <CategoryMetricCard
             href={buildHref({ tab: "all", q })}
             label="Categories"
@@ -243,49 +277,52 @@ export default async function AdminCategoriesPage({
           />
         </nav>
 
-        <div className="overflow-hidden rounded-sm border border-border-gray bg-white">
-          <div className="border-b border-border-gray px-4 py-4 sm:px-5">
-            <h2 className="font-heading text-lg font-semibold uppercase tracking-wide text-dark-charcoal">
-              {tabMeta[tab].title}
-            </h2>
-            <p className="mt-0.5 text-sm text-medium-gray">
-              {tabMeta[tab].description}
-              <span className="ml-1.5 tabular-nums text-dark-charcoal">
-                · {visible.length} item{visible.length === 1 ? "" : "s"}
-              </span>
-            </p>
-          </div>
-          <DataTable
-            className="rounded-none border-0"
-            columns={[
-              { key: "name", header: "Name" },
-              { key: "products", header: "Products" },
-              { key: "brands", header: "Brands" },
-              { key: "inventory", header: "Inventory" },
-              { key: "sales", header: "Sales" },
-              { key: "status", header: "Status" },
-              { key: "actions", header: "Actions", className: "text-right" },
-            ]}
-            emptyMessage={
-              hasFilters && query
-                ? `No categories match “${q.trim()}”.`
-                : tabMeta[tab].empty
-            }
-            rows={visible.map(
-              ({ category: c, productCount, brandCount, inventory, sales }) => [
-                <div key={`${c.id}-name`}>
+        <div className="grid min-w-0 gap-4 xl:grid-cols-2 xl:items-start">
+          <DepartmentsManagementCard departments={departments} />
+
+          <div className="min-w-0 overflow-hidden rounded-sm border border-border-gray bg-white">
+            <div className="border-b border-border-gray px-4 py-4 sm:px-5">
+              <h2 className="font-heading text-lg font-semibold uppercase tracking-wide text-dark-charcoal">
+                {tabMeta[tab].title}
+              </h2>
+              <p className="mt-0.5 text-sm text-medium-gray">
+                {tabMeta[tab].description}
+                <span className="ml-1.5 tabular-nums text-dark-charcoal">
+                  · {visible.length} item{visible.length === 1 ? "" : "s"}
+                </span>
+              </p>
+            </div>
+            <DataTable
+              className="rounded-none border-0"
+              compact
+              columns={[
+                { key: "name", header: "Name", className: "w-[42%]" },
+                { key: "products", header: "Products", className: "w-[14%]" },
+                { key: "status", header: "Status", className: "w-[20%]" },
+                {
+                  key: "actions",
+                  header: "Actions",
+                  className: "w-[24%] text-right",
+                },
+              ]}
+              emptyMessage={
+                hasFilters && query
+                  ? `No categories match “${q.trim()}”.`
+                  : tabMeta[tab].empty
+              }
+              rows={visible.map(({ category: c, productCount }) => [
+                <div key={`${c.id}-name`} className="min-w-0">
                   <Link
                     href={`/admin/categories/${c.id}`}
-                    className="font-medium text-dark-charcoal hover:text-titan-yellow"
+                    className="block truncate font-medium text-dark-charcoal hover:text-titan-yellow"
                   >
                     {c.name}
                   </Link>
-                  <p className="text-xs text-medium-gray">{c.slug}</p>
+                  <p className="truncate text-xs text-medium-gray">{c.slug}</p>
                 </div>,
-                <span key={`${c.id}-products`}>{productCount}</span>,
-                <span key={`${c.id}-brands`}>{brandCount}</span>,
-                <span key={`${c.id}-inv`}>{inventory}</span>,
-                <span key={`${c.id}-sales`}>{formatCurrency(sales)}</span>,
+                <span key={`${c.id}-products`} className="tabular-nums">
+                  {productCount}
+                </span>,
                 <Badge
                   key={`${c.id}-status`}
                   variant={c.active ? "success" : "default"}
@@ -297,9 +334,9 @@ export default async function AdminCategoriesPage({
                   categoryId={c.id}
                   categoryName={c.name}
                 />,
-              ],
-            )}
-          />
+              ])}
+            />
+          </div>
         </div>
       </div>
 

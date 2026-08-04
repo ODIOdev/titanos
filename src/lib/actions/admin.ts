@@ -20,7 +20,13 @@ import {
   DEFAULT_MAINTENANCE_MESSAGE,
   MAINTENANCE_SETTINGS_KEY,
 } from "@/lib/data/maintenance";
-import { absoluteUrl, generateOrderNumber, isMasterAdmin, isMasterAdminEmail, slugify } from "@/lib/utils";
+import {
+  absoluteUrl,
+  generateOrderNumber,
+  isMasterAdmin,
+  isMasterAdminEmail,
+  slugify,
+} from "@/lib/utils";
 import type { CatalogStatus } from "@/lib/utils";
 import type { Database } from "@/types/database";
 import type { OrderStatus, QuoteStatus } from "@/types";
@@ -817,6 +823,165 @@ export async function restoreProduct(id: string): Promise<ActionResult> {
   }
 }
 
+export async function bulkArchiveProducts(
+  ids: string[],
+): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.result;
+
+  const uniqueIds = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+  if (uniqueIds.length === 0) {
+    return { success: false, message: "Select at least one product." };
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+    const { data: existing, error: fetchError } = await supabase
+      .from("products")
+      .select("id, metadata")
+      .in("id", uniqueIds);
+
+    if (fetchError) throw fetchError;
+
+    for (const row of existing ?? []) {
+      const metadata = {
+        ...(row.metadata && typeof row.metadata === "object"
+          ? (row.metadata as Record<string, unknown>)
+          : {}),
+        status: "archived",
+      };
+      const { error } = await supabase
+        .from("products")
+        .update({ active: false, metadata })
+        .eq("id", row.id);
+      if (error) throw error;
+    }
+
+    revalidatePath("/admin/products");
+    revalidatePath("/admin/inventory");
+    const count = existing?.length ?? 0;
+    return {
+      success: true,
+      message:
+        count === 1
+          ? "1 product archived."
+          : `${count} products archived.`,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message:
+        err instanceof Error ? err.message : "Failed to archive products.",
+    };
+  }
+}
+
+export async function bulkRestoreProducts(
+  ids: string[],
+): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.result;
+
+  const uniqueIds = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+  if (uniqueIds.length === 0) {
+    return { success: false, message: "Select at least one product." };
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+    const { data: existing, error: fetchError } = await supabase
+      .from("products")
+      .select("id, metadata")
+      .in("id", uniqueIds);
+
+    if (fetchError) throw fetchError;
+
+    for (const row of existing ?? []) {
+      const metadata = {
+        ...(row.metadata && typeof row.metadata === "object"
+          ? (row.metadata as Record<string, unknown>)
+          : {}),
+        status: "active",
+      };
+      const { error } = await supabase
+        .from("products")
+        .update({ active: true, metadata })
+        .eq("id", row.id);
+      if (error) throw error;
+    }
+
+    revalidatePath("/admin/products");
+    revalidatePath("/admin/inventory");
+    const count = existing?.length ?? 0;
+    return {
+      success: true,
+      message:
+        count === 1
+          ? "1 product restored."
+          : `${count} products restored.`,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message:
+        err instanceof Error ? err.message : "Failed to restore products.",
+    };
+  }
+}
+
+export async function bulkDeleteProducts(
+  ids: string[],
+): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    if (!isSupabaseConfigured()) {
+      revalidatePath("/admin/products");
+      return {
+        success: true,
+        message: "Products deleted (demo). Connect Supabase to persist.",
+      };
+    }
+    return auth.result;
+  }
+
+  const uniqueIds = [...new Set(ids.map((id) => id.trim()).filter(Boolean))];
+  if (uniqueIds.length === 0) {
+    return { success: false, message: "Select at least one product." };
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+    const { error, count } = await supabase
+      .from("products")
+      .delete({ count: "exact" })
+      .in("id", uniqueIds);
+
+    if (error) throw error;
+
+    revalidatePath("/admin/products");
+    revalidatePath("/admin/inventory");
+    revalidatePath("/admin/categories");
+    revalidatePath("/shop");
+    const deleted = count ?? uniqueIds.length;
+    return {
+      success: true,
+      message:
+        deleted === 1
+          ? "1 product deleted permanently."
+          : `${deleted} products deleted permanently.`,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message:
+        err instanceof Error ? err.message : "Failed to delete products.",
+    };
+  }
+}
+
 export async function updateOrderStatus(
   orderId: string,
   status: OrderStatus,
@@ -1134,7 +1299,10 @@ export async function saveSiteSettings(formData: FormData): Promise<ActionResult
 
 const RESET_PLATFORM_CONFIRMATION = "RESET";
 
-/** Deletes all catalog/commerce data. Keeps admin accounts and profiles. */
+/**
+ * Wipes catalog/commerce + members/customers/dashboard data.
+ * Keeps the master admin account and all brands (logos).
+ */
 export async function resetPlatform(
   confirmation: string,
 ): Promise<ActionResult> {
@@ -1159,12 +1327,18 @@ export async function resetPlatform(
   try {
     const { createServiceClient } = await import("@/lib/supabase/admin");
     const supabase = createServiceClient();
+    const isMissingTable = (message: string) =>
+      /Could not find the table|does not exist|schema cache/i.test(message);
+
     const clearAll = async (table: string) => {
       const { error } = await supabase
         .from(table)
         .delete()
         .neq("id", "00000000-0000-0000-0000-000000000000");
-      if (error) throw new Error(`${table}: ${error.message}`);
+      if (!error) return;
+      // Optional / unmigrated tables should not block a platform wipe.
+      if (isMissingTable(error.message)) return;
+      throw new Error(`${table}: ${error.message}`);
     };
 
     // Commerce / quotes first (FK-safe order)
@@ -1184,8 +1358,13 @@ export async function resetPlatform(
     await clearAll("coupons");
     await clearAll("newsletter_subscribers");
     await clearAll("resources");
+    await clearAll("affiliate_applications");
+    await clearAll("addresses");
 
-    // Catalog (child tables cascade from products)
+    // Catalog (child tables cascade from products). Brands/logos are kept.
+    await clearAll("product_images");
+    await clearAll("product_variants");
+    await clearAll("product_specifications");
     await clearAll("products");
 
     const { error: categoryParentError } = await supabase
@@ -1195,7 +1374,6 @@ export async function resetPlatform(
     if (categoryParentError) throw categoryParentError;
 
     await clearAll("categories");
-    await clearAll("brands");
 
     // Custom platform settings (tags, etc.) — leave core store config alone
     const { error: settingsError } = await supabase
@@ -1206,8 +1384,58 @@ export async function resetPlatform(
         "catalog_primary_tags",
         "catalog_tags_removed",
         "catalog_sizes",
+        "catalog_departments",
+        "catalog_primary_departments",
+        "catalog_departments_removed",
       ]);
     if (settingsError) throw settingsError;
+
+    // Wipe members + customers; master admin always survives.
+    const { data: profiles, error: profilesError } = await supabase
+      .from("profiles")
+      .select("id, email");
+    if (profilesError) throw profilesError;
+
+    const removableIds = (profiles ?? [])
+      .filter((profile) => !isMasterAdminEmail(profile.email))
+      .map((profile) => profile.id);
+
+    for (const userId of removableIds) {
+      const { error: deleteUserError } =
+        await supabase.auth.admin.deleteUser(userId);
+      if (
+        deleteUserError &&
+        !/not found|user not found/i.test(deleteUserError.message)
+      ) {
+        const { error: profileDeleteError } = await supabase
+          .from("profiles")
+          .delete()
+          .eq("id", userId);
+        if (profileDeleteError) {
+          throw new Error(
+            `profiles/${userId}: ${deleteUserError.message}; ${profileDeleteError.message}`,
+          );
+        }
+      }
+    }
+
+    // Catch any leftover non-master profiles (e.g. auth user already gone).
+    const { data: leftoverProfiles, error: leftoverFetchError } = await supabase
+      .from("profiles")
+      .select("id, email");
+    if (leftoverFetchError) throw leftoverFetchError;
+
+    const leftoverIds = (leftoverProfiles ?? [])
+      .filter((profile) => !isMasterAdminEmail(profile.email))
+      .map((profile) => profile.id);
+
+    if (leftoverIds.length > 0) {
+      const { error: leftoverProfilesError } = await supabase
+        .from("profiles")
+        .delete()
+        .in("id", leftoverIds);
+      if (leftoverProfilesError) throw leftoverProfilesError;
+    }
 
     revalidatePath("/admin");
     revalidatePath("/admin/products");
@@ -1216,6 +1444,8 @@ export async function resetPlatform(
     revalidatePath("/admin/orders");
     revalidatePath("/admin/quotes");
     revalidatePath("/admin/customers");
+    revalidatePath("/admin/members");
+    revalidatePath("/admin/affiliates");
     revalidatePath("/admin/inventory");
     revalidatePath("/admin/resources");
     revalidatePath("/admin/settings");
@@ -1224,7 +1454,7 @@ export async function resetPlatform(
     return {
       success: true,
       message:
-        "Platform reset. Catalog, orders, quotes, and carts were cleared. Admin accounts were kept.",
+        "Platform reset. Catalog, commerce, members, and customers were cleared. Master admin and brands were kept.",
     };
   } catch (err) {
     return {
@@ -1597,6 +1827,534 @@ export async function addCatalogSize(name: string): Promise<ActionResult> {
       success: false,
       message: err instanceof Error ? err.message : "Failed to add size.",
     };
+  }
+}
+
+/**
+ * Adds a department to the shared catalog list so it is selectable on products
+ * and available in shop filters.
+ */
+export async function addCatalogDepartment(
+  name: string,
+  source: "catalog" | "custom" = "custom",
+): Promise<ActionResult> {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return { success: false, message: "Department name is required." };
+  }
+  if (trimmed.length > 48) {
+    return {
+      success: false,
+      message: "Department must be 48 characters or fewer.",
+    };
+  }
+  const departmentSource = source === "catalog" ? "catalog" : "custom";
+
+  const { DEPARTMENT_OPTIONS } = await import("@/lib/data/catalog-options");
+
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    if (!isSupabaseConfigured()) {
+      const {
+        getDemoCatalogDepartments,
+        setDemoCatalogDepartments,
+        getDemoPrimaryCatalogDepartments,
+        setDemoPrimaryCatalogDepartments,
+        getDemoRemovedCatalogDepartments,
+        setDemoRemovedCatalogDepartments,
+      } = await import("@/lib/data/admin");
+      setDemoRemovedCatalogDepartments(
+        getDemoRemovedCatalogDepartments().filter(
+          (d) => d.toLowerCase() !== trimmed.toLowerCase(),
+        ),
+      );
+      const custom = getDemoCatalogDepartments();
+      const primary = getDemoPrimaryCatalogDepartments();
+      const isCanonical = DEPARTMENT_OPTIONS.some(
+        (o) => o.value.toLowerCase() === trimmed.toLowerCase(),
+      );
+      const exists =
+        isCanonical ||
+        custom.some((d) => d.toLowerCase() === trimmed.toLowerCase()) ||
+        primary.some((d) => d.toLowerCase() === trimmed.toLowerCase());
+      if (exists) {
+        // Restoring a previously removed built-in is enough.
+        if (isCanonical) {
+          revalidatePath("/admin/categories");
+          revalidatePath("/admin/products");
+          revalidatePath("/shop");
+          return {
+            success: true,
+            message: "Department restored (demo). Connect Supabase to persist.",
+          };
+        }
+        return { success: false, message: "That department already exists." };
+      }
+      if (departmentSource === "catalog") {
+        setDemoPrimaryCatalogDepartments([...primary, trimmed]);
+      } else {
+        setDemoCatalogDepartments([...custom, trimmed]);
+      }
+      revalidatePath("/admin/categories");
+      revalidatePath("/admin/products");
+      revalidatePath("/shop");
+      return {
+        success: true,
+        message: "Department added (demo). Connect Supabase to persist.",
+      };
+    }
+    return auth.result;
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+    const [customRow, primaryRow, removedRow] = await Promise.all([
+      supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "catalog_departments")
+        .maybeSingle(),
+      supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "catalog_primary_departments")
+        .maybeSingle(),
+      supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "catalog_departments_removed")
+        .maybeSingle(),
+    ]);
+    const customValue = customRow.data?.value as { departments?: unknown } | null;
+    const primaryValue = primaryRow.data?.value as {
+      departments?: unknown;
+    } | null;
+    const removedValue = removedRow.data?.value as {
+      departments?: unknown;
+    } | null;
+    const currentCustom = Array.isArray(customValue?.departments)
+      ? customValue.departments
+          .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+          .map((d) => d.trim())
+      : [];
+    const currentPrimary = Array.isArray(primaryValue?.departments)
+      ? primaryValue.departments
+          .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+          .map((d) => d.trim())
+      : [];
+    const currentRemoved = Array.isArray(removedValue?.departments)
+      ? removedValue.departments
+          .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+          .map((d) => d.trim())
+      : [];
+    const nextRemoved = currentRemoved.filter(
+      (d) => d.toLowerCase() !== trimmed.toLowerCase(),
+    );
+    const wasRemoved = nextRemoved.length !== currentRemoved.length;
+
+    const { error: removedError } = await supabase.from("site_settings").upsert(
+      {
+        key: "catalog_departments_removed",
+        value: { departments: nextRemoved },
+      },
+      { onConflict: "key" },
+    );
+    if (removedError) throw removedError;
+
+    const isCanonical = DEPARTMENT_OPTIONS.some(
+      (o) => o.value.toLowerCase() === trimmed.toLowerCase(),
+    );
+    const exists =
+      isCanonical ||
+      currentCustom.some((d) => d.toLowerCase() === trimmed.toLowerCase()) ||
+      currentPrimary.some((d) => d.toLowerCase() === trimmed.toLowerCase());
+    if (exists) {
+      if (isCanonical && wasRemoved) {
+        revalidatePath("/admin/categories");
+        revalidatePath("/admin/products");
+        revalidatePath("/shop");
+        return {
+          success: true,
+          message: `Department "${trimmed}" restored.`,
+        };
+      }
+      return { success: false, message: "That department already exists." };
+    }
+
+    const key =
+      departmentSource === "catalog"
+        ? "catalog_primary_departments"
+        : "catalog_departments";
+    const next =
+      departmentSource === "catalog"
+        ? [...currentPrimary, trimmed]
+        : [...currentCustom, trimmed];
+
+    const { error } = await supabase.from("site_settings").upsert(
+      { key, value: { departments: next } },
+      { onConflict: "key" },
+    );
+    if (error) throw error;
+
+    revalidatePath("/admin/categories");
+    revalidatePath("/admin/products");
+    revalidatePath("/shop");
+    return {
+      success: true,
+      message: `Department "${trimmed}" added.`,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message:
+        err instanceof Error ? err.message : "Failed to add department.",
+    };
+  }
+}
+
+/** Renames a department across the catalog list and any products using it. */
+/** Renames a department and/or changes its catalog vs custom source tag. */
+export async function renameCatalogDepartment(
+  oldName: string,
+  newName: string,
+  source: "catalog" | "custom" = "custom",
+): Promise<ActionResult> {
+  const from = oldName.trim();
+  const to = newName.trim();
+  if (!from || !to) {
+    return { success: false, message: "Department name is required." };
+  }
+  if (to.length > 48) {
+    return {
+      success: false,
+      message: "Department must be 48 characters or fewer.",
+    };
+  }
+  const departmentSource = source === "catalog" ? "catalog" : "custom";
+
+  const { DEPARTMENT_OPTIONS } = await import("@/lib/data/catalog-options");
+  const toIsBuiltIn = DEPARTMENT_OPTIONS.some(
+    (o) => o.value.toLowerCase() === to.toLowerCase(),
+  );
+
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    if (!isSupabaseConfigured()) {
+      const {
+        getDemoCatalogDepartments,
+        setDemoCatalogDepartments,
+        getDemoPrimaryCatalogDepartments,
+        setDemoPrimaryCatalogDepartments,
+        getDemoRemovedCatalogDepartments,
+        setDemoRemovedCatalogDepartments,
+      } = await import("@/lib/data/admin");
+
+      setDemoRemovedCatalogDepartments(
+        getDemoRemovedCatalogDepartments().filter(
+          (d) =>
+            d.toLowerCase() !== from.toLowerCase() &&
+            d.toLowerCase() !== to.toLowerCase(),
+        ),
+      );
+
+      let custom = getDemoCatalogDepartments().filter(
+        (d) => d.toLowerCase() !== from.toLowerCase(),
+      );
+      let primary = getDemoPrimaryCatalogDepartments().filter(
+        (d) => d.toLowerCase() !== from.toLowerCase(),
+      );
+
+      const nameTaken =
+        to.toLowerCase() !== from.toLowerCase() &&
+        (toIsBuiltIn ||
+          custom.some((d) => d.toLowerCase() === to.toLowerCase()) ||
+          primary.some((d) => d.toLowerCase() === to.toLowerCase()));
+      if (nameTaken) {
+        return { success: false, message: "That department already exists." };
+      }
+
+      if (!toIsBuiltIn) {
+        if (departmentSource === "catalog") {
+          primary = [...primary, to];
+        } else {
+          custom = [...custom, to];
+        }
+      }
+
+      setDemoCatalogDepartments(custom);
+      setDemoPrimaryCatalogDepartments(primary);
+      revalidatePath("/admin/categories");
+      revalidatePath("/admin/products");
+      revalidatePath("/shop");
+      return {
+        success: true,
+        message: "Department updated (demo). Connect Supabase to persist.",
+      };
+    }
+    return auth.result;
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+    const [customRow, primaryRow, removedRow] = await Promise.all([
+      supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "catalog_departments")
+        .maybeSingle(),
+      supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "catalog_primary_departments")
+        .maybeSingle(),
+      supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "catalog_departments_removed")
+        .maybeSingle(),
+    ]);
+
+    const readList = (row: { data: { value: unknown } | null }) => {
+      const value = row.data?.value as { departments?: unknown } | null;
+      return Array.isArray(value?.departments)
+        ? value.departments
+            .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+            .map((d) => d.trim())
+        : [];
+    };
+
+    let custom = readList(customRow).filter(
+      (d) => d.toLowerCase() !== from.toLowerCase(),
+    );
+    let primary = readList(primaryRow).filter(
+      (d) => d.toLowerCase() !== from.toLowerCase(),
+    );
+    const removed = readList(removedRow).filter(
+      (d) =>
+        d.toLowerCase() !== from.toLowerCase() &&
+        d.toLowerCase() !== to.toLowerCase(),
+    );
+
+    const nameTaken =
+      to.toLowerCase() !== from.toLowerCase() &&
+      (toIsBuiltIn ||
+        custom.some((d) => d.toLowerCase() === to.toLowerCase()) ||
+        primary.some((d) => d.toLowerCase() === to.toLowerCase()));
+    if (nameTaken) {
+      return { success: false, message: "That department already exists." };
+    }
+
+    if (!toIsBuiltIn) {
+      if (departmentSource === "catalog") {
+        primary = [...primary, to];
+      } else {
+        custom = [...custom, to];
+      }
+    }
+
+    const { error: customError } = await supabase.from("site_settings").upsert(
+      { key: "catalog_departments", value: { departments: custom } },
+      { onConflict: "key" },
+    );
+    if (customError) throw customError;
+    const { error: primaryError } = await supabase.from("site_settings").upsert(
+      { key: "catalog_primary_departments", value: { departments: primary } },
+      { onConflict: "key" },
+    );
+    if (primaryError) throw primaryError;
+    const { error: removedError } = await supabase.from("site_settings").upsert(
+      { key: "catalog_departments_removed", value: { departments: removed } },
+      { onConflict: "key" },
+    );
+    if (removedError) throw removedError;
+
+    if (from.toLowerCase() !== to.toLowerCase()) {
+      await remapProductDepartments(supabase, from, to);
+    }
+
+    revalidatePath("/admin/categories");
+    revalidatePath("/admin/products");
+    revalidatePath("/shop");
+    return {
+      success: true,
+      message:
+        from.toLowerCase() === to.toLowerCase()
+          ? `Department source updated to ${departmentSource}.`
+          : `Department renamed to "${to}".`,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message:
+        err instanceof Error ? err.message : "Failed to update department.",
+    };
+  }
+}
+
+/** Removes a department from the catalog list and clears it on products. */
+export async function deleteCatalogDepartment(
+  name: string,
+): Promise<ActionResult> {
+  const trimmed = name.trim();
+  if (!trimmed) {
+    return { success: false, message: "Department name is required." };
+  }
+
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    if (!isSupabaseConfigured()) {
+      const {
+        getDemoCatalogDepartments,
+        setDemoCatalogDepartments,
+        getDemoPrimaryCatalogDepartments,
+        setDemoPrimaryCatalogDepartments,
+        getDemoRemovedCatalogDepartments,
+        setDemoRemovedCatalogDepartments,
+      } = await import("@/lib/data/admin");
+      setDemoCatalogDepartments(
+        getDemoCatalogDepartments().filter(
+          (d) => d.toLowerCase() !== trimmed.toLowerCase(),
+        ),
+      );
+      setDemoPrimaryCatalogDepartments(
+        getDemoPrimaryCatalogDepartments().filter(
+          (d) => d.toLowerCase() !== trimmed.toLowerCase(),
+        ),
+      );
+      const removed = getDemoRemovedCatalogDepartments();
+      if (!removed.some((d) => d.toLowerCase() === trimmed.toLowerCase())) {
+        setDemoRemovedCatalogDepartments([...removed, trimmed]);
+      }
+      revalidatePath("/admin/categories");
+      revalidatePath("/admin/products");
+      revalidatePath("/shop");
+      return {
+        success: true,
+        message: "Department removed (demo). Connect Supabase to persist.",
+      };
+    }
+    return auth.result;
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+    const [customRow, primaryRow, removedRow] = await Promise.all([
+      supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "catalog_departments")
+        .maybeSingle(),
+      supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "catalog_primary_departments")
+        .maybeSingle(),
+      supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "catalog_departments_removed")
+        .maybeSingle(),
+    ]);
+    const customValue = customRow.data?.value as { departments?: unknown } | null;
+    const primaryValue = primaryRow.data?.value as {
+      departments?: unknown;
+    } | null;
+    const removedValue = removedRow.data?.value as {
+      departments?: unknown;
+    } | null;
+    const currentCustom = Array.isArray(customValue?.departments)
+      ? customValue.departments
+          .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+          .map((d) => d.trim())
+      : [];
+    const currentPrimary = Array.isArray(primaryValue?.departments)
+      ? primaryValue.departments
+          .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+          .map((d) => d.trim())
+      : [];
+    const currentRemoved = Array.isArray(removedValue?.departments)
+      ? removedValue.departments
+          .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+          .map((d) => d.trim())
+      : [];
+
+    const nextCustom = currentCustom.filter(
+      (d) => d.toLowerCase() !== trimmed.toLowerCase(),
+    );
+    const nextPrimary = currentPrimary.filter(
+      (d) => d.toLowerCase() !== trimmed.toLowerCase(),
+    );
+    const nextRemoved = currentRemoved.some(
+      (d) => d.toLowerCase() === trimmed.toLowerCase(),
+    )
+      ? currentRemoved
+      : [...currentRemoved, trimmed];
+
+    const { error: customError } = await supabase.from("site_settings").upsert(
+      { key: "catalog_departments", value: { departments: nextCustom } },
+      { onConflict: "key" },
+    );
+    if (customError) throw customError;
+    const { error: primaryError } = await supabase.from("site_settings").upsert(
+      {
+        key: "catalog_primary_departments",
+        value: { departments: nextPrimary },
+      },
+      { onConflict: "key" },
+    );
+    if (primaryError) throw primaryError;
+    const { error: removedError } = await supabase.from("site_settings").upsert(
+      {
+        key: "catalog_departments_removed",
+        value: { departments: nextRemoved },
+      },
+      { onConflict: "key" },
+    );
+    if (removedError) throw removedError;
+
+    await remapProductDepartments(supabase, trimmed, null);
+
+    revalidatePath("/admin/categories");
+    revalidatePath("/admin/products");
+    revalidatePath("/shop");
+    return {
+      success: true,
+      message: `Department "${trimmed}" removed.`,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message:
+        err instanceof Error ? err.message : "Failed to remove department.",
+    };
+  }
+}
+
+async function remapProductDepartments(
+  supabase: Awaited<
+    ReturnType<typeof import("@/lib/supabase/admin").createServiceClient>
+  >,
+  fromName: string,
+  toName: string | null,
+) {
+  const { data: products, error } = await supabase
+    .from("products")
+    .select("id, department");
+  if (error) throw error;
+
+  const fromKey = fromName.toLowerCase();
+  for (const product of products ?? []) {
+    const current =
+      typeof product.department === "string" ? product.department.trim() : "";
+    if (current.toLowerCase() !== fromKey) continue;
+    const { error: updateError } = await supabase
+      .from("products")
+      .update({ department: toName })
+      .eq("id", product.id);
+    if (updateError) throw updateError;
   }
 }
 

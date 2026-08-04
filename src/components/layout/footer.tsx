@@ -75,35 +75,30 @@ const PAYMENT_LOGOS = [
   {
     name: "Visa",
     src: "/images/payments/visa.png",
-    href: "https://www.visa.com",
     width: 208,
     height: 68,
   },
   {
     name: "Mastercard",
     src: "/images/payments/mastercard.svg",
-    href: "https://www.mastercard.com",
     width: 100,
     height: 62,
   },
   {
     name: "American Express",
     src: "/images/payments/amex.svg",
-    href: "https://www.americanexpress.com",
     width: 100,
     height: 28,
   },
   {
     name: "Discover",
     src: "/images/payments/discover.png",
-    href: "https://www.discover.com",
     width: 136,
     height: 23,
   },
   {
     name: "PayPal",
     src: "/images/payments/paypal.png",
-    href: "https://www.paypal.com",
     width: 124,
     height: 33,
   },
@@ -117,23 +112,27 @@ export async function Footer() {
 
   return (
     <footer className="bg-dark-charcoal mt-auto text-white">
-      <div className="container-titan py-9 sm:py-10">
-        <div className="mb-7 flex flex-col gap-5 border-b border-white/10 pb-6 lg:flex-row lg:items-end lg:justify-between">
+      <div className="container-titan py-7 sm:py-8">
+        <div className="mb-5 flex flex-col gap-4 border-b border-white/10 pb-5 lg:flex-row lg:items-center lg:justify-between">
           <FooterBrandLink
-            className="max-w-md"
+            className="flex max-w-md items-center gap-1"
             label={`${SITE_CONFIG.name} — back to top of home page`}
           >
             <Image
               src="/images/logo/logo-badge.webp"
               alt=""
-              width={56}
-              height={56}
-              className="mb-3 h-10 w-10 object-contain"
+              width={72}
+              height={72}
+              className="h-14 w-14 shrink-0 object-contain"
             />
-            <p className="font-heading text-titan-yellow text-2xl font-bold tracking-wide uppercase">
-              {SITE_CONFIG.name}
-            </p>
-            <p className="mt-2 text-sm text-white/75">{SITE_CONFIG.tagline}</p>
+            <span className="min-w-0">
+              <span className="font-heading text-titan-yellow block text-2xl font-bold tracking-wide uppercase">
+                {SITE_CONFIG.name}
+              </span>
+              <span className="mt-1 block text-sm text-white/75">
+                {SITE_CONFIG.tagline}
+              </span>
+            </span>
           </FooterBrandLink>
           <div className="text-sm text-white/80 lg:text-right">
             <a
@@ -150,7 +149,7 @@ export async function Footer() {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:gap-x-6 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-6 sm:gap-x-6 lg:grid-cols-4">
           {FOOTER_COLUMNS.map((column) => (
             <div key={column.title}>
               <h2 className="font-heading text-sm font-semibold tracking-wide text-white uppercase">
@@ -217,7 +216,7 @@ export async function Footer() {
           </div>
         </div>
 
-        <div className="mt-7 border-t border-white/15 pt-6">
+        <div className="mt-5 border-t border-white/15 pt-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <ul className="flex items-center gap-1">
               {SOCIAL.map(({ label, href, src, width, height }) => (
@@ -242,36 +241,28 @@ export async function Footer() {
               ))}
             </ul>
 
-            <ul className="hidden flex-wrap items-center gap-3 lg:flex lg:justify-end">
+            <ul className="hidden items-center gap-2 lg:flex lg:justify-end">
               {PAYMENT_LOGOS.map((logo) => (
-                <li key={logo.name}>
-                  <a
-                    href={logo.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    aria-label={logo.name}
-                    className="inline-flex h-9 items-center justify-center rounded-sm border border-white/15 bg-white px-2.5 transition-opacity hover:opacity-90"
-                  >
-                    <Image
-                      src={logo.src}
-                      alt={logo.name}
-                      width={logo.width}
-                      height={logo.height}
-                      className="h-5 w-auto object-contain"
-                      unoptimized={logo.src.endsWith(".svg")}
-                    />
-                  </a>
+                <li
+                  key={logo.name}
+                  className="inline-flex h-8 w-[4.25rem] shrink-0 items-center justify-center rounded-sm border border-white/15 bg-white px-2"
+                >
+                  <Image
+                    src={logo.src}
+                    alt={logo.name}
+                    width={logo.width}
+                    height={logo.height}
+                    className="h-4 w-auto max-w-full object-contain"
+                    unoptimized={logo.src.endsWith(".svg")}
+                  />
                 </li>
               ))}
             </ul>
           </div>
 
-          <div className="mt-5 flex flex-col gap-1 text-xs text-white/55 sm:flex-row sm:items-center sm:justify-between">
+          <div className="mt-4 text-xs text-white/55">
             <p>
               © {year} {SITE_CONFIG.name}. All rights reserved.
-            </p>
-            <p className="font-heading tracking-wide text-white/70 uppercase">
-              {SITE_CONFIG.tagline}
             </p>
           </div>
         </div>

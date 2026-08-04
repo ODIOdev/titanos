@@ -56,16 +56,18 @@ export function ProductCard({
       <div className="relative">
         <Link
           href={`/product/${product.slug}`}
-          className="relative block aspect-square overflow-hidden bg-light-gray focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-titan-yellow"
+          className="relative block aspect-square overflow-hidden bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-titan-yellow"
         >
-          <Image
-            src={imageUrl}
-            alt={product.name}
-            fill
-            priority={priority}
-            className="object-contain p-5"
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-          />
+          <span className="absolute inset-4 overflow-hidden rounded-sm border border-border-gray sm:inset-5">
+            <Image
+              src={imageUrl}
+              alt={product.name}
+              fill
+              priority={priority}
+              className="object-contain p-3 sm:p-4"
+              sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+            />
+          </span>
         </Link>
 
         <div className="absolute left-2 top-2 flex flex-col items-start gap-1.5">

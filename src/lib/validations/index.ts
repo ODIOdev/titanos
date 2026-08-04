@@ -195,7 +195,29 @@ export const brandFormSchema = z.object({
   slug: z.string().min(1, "Slug is required"),
   description: z.string().optional(),
   logoUrl: z.string().optional(),
-  website: z.string().optional(),
+  website: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => {
+      if (!value) return undefined;
+      const withProtocol = /^[a-z][a-z0-9+.-]*:/i.test(value)
+        ? value
+        : `https://${value}`;
+      return withProtocol;
+    })
+    .refine(
+      (value) => {
+        if (!value) return true;
+        try {
+          const parsed = new URL(value);
+          return parsed.protocol === "http:" || parsed.protocol === "https:";
+        } catch {
+          return false;
+        }
+      },
+      { message: "Enter a valid website URL" },
+    ),
   active: z.boolean(),
 });
 

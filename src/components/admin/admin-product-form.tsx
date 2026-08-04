@@ -8,6 +8,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { ImagePlus, Star, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import {
+  addCatalogDepartment,
   addCatalogSize,
   createProduct,
   deleteProduct,
@@ -85,6 +86,8 @@ type AdminProductFormProps = {
   tagOptions?: { label: string; value: string }[];
   /** Canonical + admin-added sizes; shared by every product form. */
   sizeOptions?: { label: string; value: string }[];
+  /** Canonical + admin-added departments; shared by every product form. */
+  departmentOptions?: { label: string; value: string }[];
   defaultValues?: Partial<ProductFormInput>;
   initialImages?: ProductImageDraft[];
   /** Where cancel, create, and delete return to. */
@@ -98,6 +101,7 @@ export function AdminProductForm({
   brands,
   tagOptions,
   sizeOptions,
+  departmentOptions,
   defaultValues,
   initialImages = [],
   returnHref = "/admin/products",
@@ -119,8 +123,13 @@ export function AdminProductForm({
   /** Remount money fields after programmatic sale updates so display stays in sync. */
   const [priceSyncKey, setPriceSyncKey] = useState(0);
   const [sizes, setSizes] = useState(() => sizeOptions ?? SIZE_OPTIONS);
+  const [departments, setDepartments] = useState(
+    () => departmentOptions ?? DEPARTMENT_OPTIONS,
+  );
   const [customSize, setCustomSize] = useState("");
   const [addingSize, setAddingSize] = useState(false);
+  const [customDepartment, setCustomDepartment] = useState("");
+  const [addingDepartment, setAddingDepartment] = useState(false);
 
   const form = useForm<ProductFormInput>({
     resolver: zodResolver(productFormSchema) as never,
@@ -326,6 +335,36 @@ export function AdminProductForm({
       toast.success(result.message ?? `Size "${trimmed}" added.`);
     } finally {
       setAddingSize(false);
+    }
+  }
+
+  async function handleAddCustomDepartment() {
+    const trimmed = customDepartment.trim();
+    if (!trimmed) return;
+
+    const duplicate = departments.find(
+      (opt) => opt.value.toLowerCase() === trimmed.toLowerCase(),
+    );
+    if (duplicate) {
+      setValue("department", duplicate.value, { shouldDirty: true });
+      setCustomDepartment("");
+      toast.info(`"${duplicate.label}" is already in the department list.`);
+      return;
+    }
+
+    setAddingDepartment(true);
+    try {
+      const result = await addCatalogDepartment(trimmed);
+      if (!result.success) {
+        toast.error(result.message ?? "Failed to add department.");
+        return;
+      }
+      setDepartments((prev) => [...prev, { label: trimmed, value: trimmed }]);
+      setValue("department", trimmed, { shouldDirty: true });
+      setCustomDepartment("");
+      toast.success(result.message ?? `Department "${trimmed}" added.`);
+    } finally {
+      setAddingDepartment(false);
     }
   }
 
@@ -633,10 +672,40 @@ export function AdminProductForm({
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <Select
             label="Department"
-            options={toSelectOptions(DEPARTMENT_OPTIONS, "Select department")}
+            options={toSelectOptions(departments, "Select department")}
             error={errors.department?.message}
             {...register("department")}
           />
+          <div className="w-full">
+            <Label htmlFor="custom-department">Custom department</Label>
+            <div className="flex gap-2">
+              <Input
+                id="custom-department"
+                value={customDepartment}
+                placeholder="e.g. Hearing Protection"
+                autoComplete="off"
+                disabled={addingDepartment}
+                onChange={(e) => setCustomDepartment(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  void handleAddCustomDepartment();
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 shrink-0"
+                disabled={addingDepartment || !customDepartment.trim()}
+                onClick={() => void handleAddCustomDepartment()}
+              >
+                {addingDepartment ? "Adding…" : "Add"}
+              </Button>
+            </div>
+            <p className="mt-1.5 text-sm text-medium-gray">
+              Added as a custom department for every product.
+            </p>
+          </div>
           <Select
             label="Category"
             options={[

@@ -23,7 +23,11 @@ export function CategoryGrid({ className }: CategoryGridProps) {
   const departments = DEPARTMENT_OPTIONS.map((d) => ({
     slug: d.slug,
     name: TILE_LABELS[d.slug] ?? d.label,
-    imageUrl: departmentImagePath(d.slug),
+    // Industry banners can differ from shop department rail thumbs.
+    imageUrl:
+      d.slug === "signage"
+        ? "/images/categories/signage-industry-v4.jpg"
+        : departmentImagePath(d.slug),
     href: `/shop?department=${encodeURIComponent(d.value)}`,
   }));
 

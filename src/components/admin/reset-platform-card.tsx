@@ -37,9 +37,9 @@ export function ResetPlatformCard() {
               Reset platform
             </h2>
             <p className="mt-1 text-sm text-medium-gray">
-              Permanently delete all products, categories, brands, orders,
-              quotes, carts, and related catalog data. Admin accounts and store
-              settings are kept.
+              Permanently delete all products, categories, orders, quotes,
+              carts, members, customers, and related dashboard data. Brands,
+              logos, and the master admin account are kept.
             </p>
           </div>
         </div>
@@ -66,7 +66,8 @@ export function ResetPlatformCard() {
               This cannot be undone.
             </p>
             <p className="mt-1 text-medium-gray">
-              All catalog and commerce data will be wiped. Type{" "}
+              Catalog, commerce, members, and customers will be wiped. Brands
+              and the master admin stay. Type{" "}
               <span className="font-semibold text-dark-charcoal">
                 {CONFIRM_WORD}
               </span>{" "}

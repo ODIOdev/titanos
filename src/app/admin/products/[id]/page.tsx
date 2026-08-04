@@ -6,6 +6,7 @@ import {
   getAdminBrands,
   getAdminCategories,
   getAdminProduct,
+  getCatalogDepartmentOptions,
   getCatalogSizeOptions,
   getCatalogTagOptions,
 } from "@/lib/data/admin";
@@ -26,13 +27,14 @@ export default async function AdminEditProductPage({
   const returnHref = adminReturnTarget(
     typeof from === "string" ? from : undefined,
   )?.href;
-  const [product, categories, brands, tagOptions, sizeOptions] =
+  const [product, categories, brands, tagOptions, sizeOptions, departmentOptions] =
     await Promise.all([
       getAdminProduct(id),
       getAdminCategories(),
       getAdminBrands(),
       getCatalogTagOptions(),
       getCatalogSizeOptions(),
+      getCatalogDepartmentOptions(),
     ]);
 
   if (!product) notFound();
@@ -50,6 +52,7 @@ export default async function AdminEditProductPage({
       brands={brands.map((b) => ({ id: b.id, name: b.name }))}
       tagOptions={tagOptions}
       sizeOptions={sizeOptions}
+      departmentOptions={departmentOptions}
       initialImages={(product.images ?? []).map((img, index) => ({
         id: img.id,
         url: img.url,

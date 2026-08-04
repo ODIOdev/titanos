@@ -114,7 +114,7 @@ export function AdminBrandForm({
         ...values,
         slug: values.slug || slugify(values.name),
         logoUrl: values.logoUrl?.trim() || undefined,
-        website: values.website?.trim() || undefined,
+        website: values.website || undefined,
       };
       const result =
         mode === "edit" && brandId
@@ -172,8 +172,11 @@ export function AdminBrandForm({
           />
           <Input
             label="Website"
-            type="url"
-            placeholder="https://"
+            type="text"
+            inputMode="url"
+            autoComplete="url"
+            placeholder="https://example.com"
+            hint="Optional. Include https:// or we’ll add it for you."
             error={errors.website?.message}
             {...register("website")}
           />

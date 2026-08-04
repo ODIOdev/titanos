@@ -22,41 +22,42 @@ export default async function BrandsPage() {
         municipal fleets.
       </p>
 
-      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {brands.map((brand) => (
-          <Link
-            key={brand.id}
-            href={`/shop?brand=${brand.slug}`}
-            className="group flex flex-col overflow-hidden rounded-sm border border-border-gray bg-white transition-colors hover:border-dark-charcoal"
-          >
-            <div className="relative flex h-36 items-center justify-center bg-light-gray p-6">
-              {brand.logo_url ? (
+      {brands.length === 0 ? (
+        <p className="mt-10 rounded-sm border border-border-gray bg-white px-5 py-10 text-center text-sm text-medium-gray">
+          Brand logos will appear here once they are uploaded in admin.
+        </p>
+      ) : (
+        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {brands.map((brand) => (
+            <Link
+              key={brand.id}
+              href={`/shop?brand=${brand.slug}`}
+              className="group flex flex-col overflow-hidden rounded-sm border border-border-gray bg-white transition-colors hover:border-dark-charcoal"
+            >
+              <div className="relative flex h-36 items-center justify-center bg-transparent p-6">
                 <Image
-                  src={brand.logo_url}
+                  src={brand.logo_url!}
                   alt={`${brand.name} logo`}
                   width={160}
                   height={64}
-                  className="max-h-16 w-auto object-contain"
+                  className="max-h-16 w-auto bg-transparent object-contain"
+                  unoptimized
                 />
-              ) : (
-                <span className="font-heading text-2xl uppercase text-dark-charcoal">
+              </div>
+              <div className="p-5">
+                <h2 className="font-heading text-xl uppercase tracking-wide text-dark-charcoal group-hover:underline group-hover:underline-offset-2">
                   {brand.name}
-                </span>
-              )}
-            </div>
-            <div className="p-5">
-              <h2 className="font-heading text-xl uppercase tracking-wide text-dark-charcoal group-hover:underline group-hover:underline-offset-2">
-                {brand.name}
-              </h2>
-              {brand.description ? (
-                <p className="mt-2 line-clamp-3 text-sm text-medium-gray">
-                  {brand.description}
-                </p>
-              ) : null}
-            </div>
-          </Link>
-        ))}
-      </div>
+                </h2>
+                {brand.description ? (
+                  <p className="mt-2 line-clamp-3 text-sm text-medium-gray">
+                    {brand.description}
+                  </p>
+                ) : null}
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

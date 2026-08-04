@@ -26,8 +26,13 @@ function Dialog({
 }: DialogProps) {
   const dialogRef = React.useRef<HTMLDivElement>(null);
   const previouslyFocused = React.useRef<HTMLElement | null>(null);
+  const onOpenChangeRef = React.useRef(onOpenChange);
   const titleId = React.useId();
   const descriptionId = React.useId();
+
+  React.useEffect(() => {
+    onOpenChangeRef.current = onOpenChange;
+  }, [onOpenChange]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -38,16 +43,19 @@ function Dialog({
 
     const dialog = dialogRef.current;
     if (dialog) {
-      const focusable = dialog.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      (focusable[0] ?? dialog).focus();
+      // Prefer an autofocus field; otherwise the first interactive control.
+      const preferred =
+        dialog.querySelector<HTMLElement>("[autofocus], [data-autofocus]") ??
+        dialog.querySelector<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        );
+      (preferred ?? dialog).focus();
     }
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.preventDefault();
-        onOpenChange(false);
+        onOpenChangeRef.current(false);
         return;
       }
 
@@ -55,8 +63,8 @@ function Dialog({
 
       const focusable = Array.from(
         dialogRef.current.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
       ).filter((el) => !el.hasAttribute("disabled") && el.tabIndex !== -1);
 
       if (focusable.length === 0) {
@@ -84,7 +92,7 @@ function Dialog({
       document.body.style.overflow = previousOverflow;
       previouslyFocused.current?.focus();
     };
-  }, [open, onOpenChange]);
+  }, [open]);
 
   if (!open) return null;
 
@@ -105,7 +113,7 @@ function Dialog({
         tabIndex={-1}
         className={cn(
           "relative z-10 w-full max-w-lg rounded-sm border border-border-gray bg-white shadow-lg outline-none",
-          className
+          className,
         )}
       >
         <div className="flex items-start justify-between gap-4 border-b border-border-gray px-5 py-4">
