@@ -9,6 +9,7 @@ import {
   renameCatalogDepartment,
 } from "@/lib/actions/admin";
 import type { AdminDepartment } from "@/lib/data/admin";
+import { AddDepartmentButton } from "@/components/admin/add-department-button";
 import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/admin/data-table";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
@@ -17,10 +18,33 @@ type DepartmentsManagementCardProps = {
   departments: AdminDepartment[];
 };
 
-type EditSource = "catalog" | "custom";
+type EditSource = "catalog" | "custom" | "offline";
 
 function toEditSource(source: AdminDepartment["source"]): EditSource {
-  return source === "catalog" ? "catalog" : "custom";
+  if (source === "catalog") return "catalog";
+  if (source === "offline") return "offline";
+  return "custom";
+}
+
+function parseEditSource(value: string): EditSource {
+  if (value === "catalog") return "catalog";
+  if (value === "offline") return "offline";
+  return "custom";
+}
+
+function sourceBadgeVariant(
+  source: AdminDepartment["source"],
+): "success" | "warning" | "default" {
+  if (source === "catalog") return "success";
+  if (source === "offline") return "warning";
+  return "default";
+}
+
+function sourceLabel(source: AdminDepartment["source"]) {
+  if (source === "catalog") return "Catalog";
+  if (source === "offline") return "Off-line";
+  if (source === "custom") return "Custom";
+  return "Product";
 }
 
 /** Side-by-side companion to the categories table — lists merchandise departments. */
@@ -83,17 +107,20 @@ export function DepartmentsManagementCard({
       id="departments"
       className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-sm border border-border-gray bg-white scroll-mt-4"
     >
-      <div className="border-b border-border-gray px-4 py-4 sm:px-5">
-        <h2 className="font-heading text-lg font-semibold uppercase tracking-wide text-dark-charcoal">
-          Departments
-        </h2>
-        <p className="mt-0.5 text-sm text-medium-gray">
-          Top-level shop groupings for products.
-          <span className="ml-1.5 tabular-nums text-dark-charcoal">
-            · {departments.length} item
-            {departments.length === 1 ? "" : "s"}
-          </span>
-        </p>
+      <div className="flex items-start justify-between gap-3 border-b border-border-gray px-4 py-4 sm:px-5">
+        <div className="min-w-0">
+          <h2 className="font-heading text-lg font-semibold uppercase tracking-wide text-dark-charcoal">
+            Departments
+          </h2>
+          <p className="mt-0.5 text-sm text-medium-gray">
+            Top-level shop groupings for products.
+            <span className="ml-1.5 tabular-nums text-dark-charcoal">
+              · {departments.length} item
+              {departments.length === 1 ? "" : "s"}
+            </span>
+          </p>
+        </div>
+        <AddDepartmentButton className="shrink-0" />
       </div>
 
       <DataTable
@@ -149,26 +176,21 @@ export function DepartmentsManagementCard({
               value={editSource}
               disabled={pending}
               onChange={(event) =>
-                setEditSource(
-                  event.target.value === "catalog" ? "catalog" : "custom",
-                )
+                setEditSource(parseEditSource(event.target.value))
               }
               className="h-8 max-w-full rounded-sm border border-border-gray bg-white px-1.5 text-[10px] font-semibold uppercase tracking-wide text-dark-charcoal focus-visible:border-dark-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow/40"
               aria-label={`Source for ${department.name}`}
             >
               <option value="custom">Custom</option>
               <option value="catalog">Catalog</option>
+              <option value="offline">Off-line</option>
             </select>
           ) : (
             <Badge
               key={`${department.name}-source`}
-              variant={department.source === "catalog" ? "success" : "default"}
+              variant={sourceBadgeVariant(department.source)}
             >
-              {department.source === "catalog"
-                ? "Catalog"
-                : department.source === "custom"
-                  ? "Custom"
-                  : "Product"}
+              {sourceLabel(department.source)}
             </Badge>
           ),
           editing === department.name ? (

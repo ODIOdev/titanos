@@ -18,7 +18,7 @@ import {
 export const ADMIN_NAV = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard },
   { href: "/admin/products", label: "Products", icon: Package },
-  { href: "/admin/categories", label: "Categories", icon: FolderTree },
+  { href: "/admin/categories", label: "Dept./ Categories", icon: FolderTree },
   { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
   { href: "/admin/customers", label: "Customers", icon: Users },
   { href: "/admin/members", label: "Members", icon: UserCog },

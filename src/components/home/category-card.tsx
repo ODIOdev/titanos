@@ -28,13 +28,13 @@ export function CategoryCard({
         className,
       )}
     >
-      {/* Match banner artwork (~4:3) so cover fills edge-to-edge with no letterbox. */}
-      <div className="relative aspect-[4/3] overflow-hidden bg-white">
+      {/* Banner art is ~3:2 — match that so cover doesn't clip left/right text & hat. */}
+      <div className="relative aspect-[3/2] overflow-hidden bg-light-gray">
         <Image
           src={imageUrl}
           alt=""
           fill
-          className="scale-[1.02] object-cover object-center"
+          className="object-cover object-center"
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 22vw"
         />
       </div>

@@ -11,12 +11,20 @@ import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
+type DepartmentSource = "catalog" | "custom" | "offline";
+
+function parseDepartmentSource(value: string): DepartmentSource {
+  if (value === "catalog") return "catalog";
+  if (value === "offline") return "offline";
+  return "custom";
+}
+
 /** Opens a dialog to add a merchandise department. */
 export function AddDepartmentButton({ className }: { className?: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
-  const [source, setSource] = useState<"catalog" | "custom">("custom");
+  const [source, setSource] = useState<DepartmentSource>("custom");
   const [pending, startTransition] = useTransition();
 
   function resetForm() {
@@ -50,9 +58,9 @@ export function AddDepartmentButton({ className }: { className?: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className={cn(buttonVariants({ variant: "outline" }), className)}
+        className={cn(buttonVariants({ variant: "outline", size: "sm" }), className)}
       >
-        <Plus className="size-4" aria-hidden="true" />
+        <Plus className="size-3.5" aria-hidden="true" />
         Add department
       </button>
 
@@ -79,13 +87,14 @@ export function AddDepartmentButton({ className }: { className?: string }) {
             label="Source"
             value={source}
             onChange={(event) =>
-              setSource(event.target.value === "catalog" ? "catalog" : "custom")
+              setSource(parseDepartmentSource(event.target.value))
             }
             options={[
               { label: "Custom", value: "custom" },
               { label: "Catalog", value: "catalog" },
+              { label: "Off-line", value: "offline" },
             ]}
-            hint="Catalog departments show as built-in catalog source. Custom departments are admin-defined."
+            hint="Catalog and Custom appear on the live shop. Off-line stays admin-only."
             required
           />
           <div className="flex justify-end gap-2">

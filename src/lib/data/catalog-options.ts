@@ -28,6 +28,23 @@ export const PRODUCT_TYPE_OPTIONS: CatalogOption[] = [
   { label: "Hearing Protection", value: "Hearing Protection" },
 ];
 
+/** Shop filter + product onboarding gender options. */
+export const GENDER_OPTIONS: CatalogOption[] = [
+  { label: "Men", value: "Men" },
+  { label: "Women", value: "Women" },
+  { label: "Unisex", value: "Unisex" },
+];
+
+/** Read gender from product metadata (admin-controlled attribute). */
+export function productGender(
+  product: { metadata?: Record<string, unknown> | null } | null | undefined,
+): string | null {
+  const raw = product?.metadata?.gender;
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  return trimmed || null;
+}
+
 /** Top-level merchandise departments for catalog organization. */
 export type DepartmentOption = CatalogOption & { slug: string };
 
@@ -42,9 +59,17 @@ export const DEPARTMENT_OPTIONS: DepartmentOption[] = [
     value: "Traffic Control",
     slug: "traffic-control",
   },
-  { label: "Foot Wear", value: "Foot Wear", slug: "foot-wear" },
   { label: "Signage", value: "Signage", slug: "signage" },
 ];
+
+/**
+ * Industry parent departments kept on the homepage / admin, but omitted from
+ * the shop department rail and sidebar filters.
+ */
+export const SHOP_HIDDEN_DEPARTMENTS = new Set([
+  "safety equipment",
+  "foot wear",
+]);
 
 /**
  * Shop filter / rail departments (admin “catalog” source).
@@ -116,7 +141,7 @@ export function departmentForProductType(
       return "Traffic Control";
     case "Work Boot":
     case "Work Shoe":
-      return "Foot Wear";
+      return "Safety Shoes & Boots";
     case "Street Sign":
     case "Construction Sign":
       return "Signage";
@@ -401,6 +426,201 @@ export const SIZE_OPTIONS: CatalogOption[] = [
   { label: "4XL", value: "4XL" },
 ];
 
+/** US work-boot / shoe sizes shown in shop filters and product forms. */
+export const SHOE_SIZE_OPTIONS: CatalogOption[] = [
+  "6",
+  "6.5",
+  "7",
+  "7.5",
+  "8",
+  "8.5",
+  "9",
+  "9.5",
+  "10",
+  "10.5",
+  "11",
+  "11.5",
+  "12",
+  "13",
+  "14",
+  "15",
+].map((value) => ({ label: value, value }));
+
+/** Apparel letter ranks for natural size ordering (supports combo sizes like M/L). */
+const APPAREL_SIZE_RANK: Record<string, number> = {
+  xxs: 0,
+  xs: 1,
+  s: 2,
+  "s/m": 2.5,
+  sm: 2.5,
+  m: 3,
+  "m/l": 3.5,
+  ml: 3.5,
+  l: 4,
+  "l/xl": 4.5,
+  lxl: 4.5,
+  xl: 5,
+  "xl/2xl": 5.5,
+  "2xl": 6,
+  xxl: 6,
+  "2xl/3xl": 6.5,
+  "3xl": 7,
+  xxxl: 7,
+  "3xl/4xl": 7.5,
+  "4xl": 8,
+  xxxxl: 8,
+  "5xl": 9,
+  "6xl": 10,
+};
+
+const QUALITATIVE_SIZE_RANK: Record<string, number> = {
+  "one size": 0,
+  onesize: 0,
+  os: 0,
+  universal: 1,
+  adjustable: 2,
+  standard: 3,
+};
+
+function normalizeSizeKey(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, "");
+}
+
+function apparelSizeRank(value: string): number | null {
+  const compact = normalizeSizeKey(value);
+  if (compact in APPAREL_SIZE_RANK) return APPAREL_SIZE_RANK[compact];
+
+  // Combo sizes written with spaces: "2XL / 3XL"
+  const spaced = value
+    .trim()
+    .toLowerCase()
+    .replace(/\s*\/\s*/g, "/")
+    .replace(/\s+/g, "");
+  if (spaced in APPAREL_SIZE_RANK) return APPAREL_SIZE_RANK[spaced];
+
+  // Average ranks for unknown combos like "S/M".
+  if (spaced.includes("/")) {
+    const parts = spaced.split("/").map((part) => APPAREL_SIZE_RANK[part]);
+    if (parts.every((part) => part != null)) {
+      return (parts[0]! + parts[parts.length - 1]!) / 2;
+    }
+  }
+  return null;
+}
+
+/** Convert length labels (18 in, 6 ft, Up to 8 ft) to inches for sorting. */
+function lengthSizeInches(value: string): number | null {
+  const trimmed = value.trim().toLowerCase();
+  const upToFt = trimmed.match(/up\s*to\s*(\d+(?:\.\d+)?)\s*(?:ft|feet|')\b/);
+  if (upToFt) return Number(upToFt[1]) * 12;
+  const feet = trimmed.match(/(\d+(?:\.\d+)?)\s*(?:ft|feet|')\b/);
+  if (feet) return Number(feet[1]) * 12;
+  const inches = trimmed.match(/(\d+(?:\.\d+)?)\s*(?:in|inch|inches|")\b/);
+  if (inches) return Number(inches[1]);
+  return null;
+}
+
+function shoeOrNumericSize(value: string): number | null {
+  const trimmed = value.trim();
+  if (!/^\d+(\.\d+)?$/.test(trimmed)) return null;
+  return Number(trimmed);
+}
+
+/**
+ * Sort key groups: apparel → shoe/numeric → length → qualitative → other.
+ * Within each group, sizes follow natural metric / size-chart order.
+ */
+function sizeSortTuple(value: string): [number, number, string] {
+  const apparel = apparelSizeRank(value);
+  if (apparel != null) return [0, apparel, value.toLowerCase()];
+
+  const shoe = shoeOrNumericSize(value);
+  if (shoe != null) return [1, shoe, value.toLowerCase()];
+
+  const length = lengthSizeInches(value);
+  if (length != null) return [2, length, value.toLowerCase()];
+
+  const qualitative = QUALITATIVE_SIZE_RANK[normalizeSizeKey(value)]
+    ?? QUALITATIVE_SIZE_RANK[value.trim().toLowerCase()];
+  if (qualitative != null) return [3, qualitative, value.toLowerCase()];
+
+  return [4, 0, value.toLowerCase()];
+}
+
+/** Compare size labels for shop filters and admin size pickers. */
+export function compareCatalogSizes(a: string, b: string): number {
+  const [aKind, aOrder, aLabel] = sizeSortTuple(a);
+  const [bKind, bOrder, bLabel] = sizeSortTuple(b);
+  if (aKind !== bKind) return aKind - bKind;
+  if (aOrder !== bOrder) return aOrder - bOrder;
+  return aLabel.localeCompare(bLabel);
+}
+
+export function sortCatalogSizes<T extends { label: string; value: string }>(
+  options: T[],
+): T[] {
+  return [...options].sort((a, b) =>
+    compareCatalogSizes(a.label || a.value, b.label || b.value),
+  );
+}
+
+export type SizeGroupId =
+  | "apparel"
+  | "shoe"
+  | "length"
+  | "qualitative"
+  | "other";
+
+export const SIZE_GROUP_LABELS: Record<SizeGroupId, string> = {
+  apparel: "Apparel",
+  shoe: "Shoe / boot",
+  length: "Length / dimension",
+  qualitative: "Fit",
+  other: "Other",
+};
+
+const SIZE_GROUP_ORDER: SizeGroupId[] = [
+  "apparel",
+  "shoe",
+  "length",
+  "qualitative",
+  "other",
+];
+
+/** Classify a size label into a titled shop-filter partition. */
+export function sizeGroupId(value: string): SizeGroupId {
+  const [kind] = sizeSortTuple(value);
+  if (kind === 0) return "apparel";
+  if (kind === 1) return "shoe";
+  if (kind === 2) return "length";
+  if (kind === 3) return "qualitative";
+  return "other";
+}
+
+export type SizeOptionGroup<T extends { label: string; value: string }> = {
+  id: SizeGroupId;
+  title: string;
+  options: T[];
+};
+
+/** Partition sizes into titled groups while preserving natural sort order. */
+export function groupCatalogSizes<T extends { label: string; value: string }>(
+  options: T[],
+): SizeOptionGroup<T>[] {
+  const buckets = new Map<SizeGroupId, T[]>();
+  for (const option of sortCatalogSizes(options)) {
+    const id = sizeGroupId(option.label || option.value);
+    const list = buckets.get(id) ?? [];
+    list.push(option);
+    buckets.set(id, list);
+  }
+  return SIZE_GROUP_ORDER.flatMap((id) => {
+    const groupOptions = buckets.get(id);
+    if (!groupOptions?.length) return [];
+    return [{ id, title: SIZE_GROUP_LABELS[id], options: groupOptions }];
+  });
+}
+
 export const SHIPPING_CLASS_OPTIONS: CatalogOption[] = [
   { label: "Standard", value: "standard" },
   { label: "Oversize", value: "oversize" },
@@ -412,6 +632,7 @@ export const SHIPPING_CLASS_OPTIONS: CatalogOption[] = [
 export function mergeCatalogOptions(
   canonical: CatalogOption[],
   extraValues: (string | null | undefined)[],
+  opts?: { compare?: (a: CatalogOption, b: CatalogOption) => number },
 ): CatalogOption[] {
   const map = new Map<string, CatalogOption>();
   for (const option of canonical) {
@@ -424,7 +645,9 @@ export function mergeCatalogOptions(
       map.set(key, { label: value, value });
     }
   }
-  return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+  const values = Array.from(map.values());
+  if (opts?.compare) return values.sort(opts.compare);
+  return values.sort((a, b) => a.label.localeCompare(b.label));
 }
 
 export function toSelectOptions(

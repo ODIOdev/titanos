@@ -98,6 +98,10 @@ export default async function AdminEditProductPage({
         bestseller: product.bestseller,
         productType: product.product_type ?? "",
         department: product.department ?? "",
+        gender:
+          typeof product.metadata?.gender === "string"
+            ? product.metadata.gender
+            : "",
         tag:
           typeof product.metadata?.tag === "string" ? product.metadata.tag : "",
         ansiClass: product.ansi_class ?? "",

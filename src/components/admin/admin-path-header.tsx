@@ -52,8 +52,7 @@ const TITLES: RouteMeta[] = [
   },
   {
     match: /^\/admin\/categories$/,
-    title: "Categories",
-    description: "Organize catalog taxonomy",
+    title: "Dept./ Categories",
   },
   {
     match: /^\/admin\/members\/new$/,

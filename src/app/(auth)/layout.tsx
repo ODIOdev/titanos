@@ -1,7 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
 import { SITE_CONFIG } from "@/lib/data/seed-data";
-import { HomeButton } from "@/components/layout/home-button";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -9,7 +8,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <main className="flex flex-1 flex-col items-center justify-center px-4 py-10 sm:py-12">
         <Link
           href="/"
-          className="mb-4 inline-flex items-center justify-center sm:mb-5"
+          className="mb-8 inline-flex items-center justify-center sm:mb-10"
           aria-label={SITE_CONFIG.name}
         >
           <Image
@@ -22,7 +21,6 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             unoptimized
           />
         </Link>
-        <HomeButton className="mb-8 sm:mb-10" />
         {children}
       </main>
       <footer className="py-6 text-center text-xs text-medium-gray">

@@ -1,4 +1,4 @@
-import { departmentForProductType } from "@/lib/data/catalog-options";
+import { departmentForProductType, productGender } from "@/lib/data/catalog-options";
 import {
   SEED_BRANDS,
   SEED_CATEGORIES,
@@ -85,6 +85,13 @@ function filterSeedProducts(filters: ProductFilters = {}): Product[] {
 
   if (filters.department) {
     products = products.filter((p) => p.department === filters.department);
+  }
+
+  if (filters.gender) {
+    products = products.filter(
+      (p) =>
+        productGender(p)?.toLowerCase() === filters.gender!.toLowerCase(),
+    );
   }
 
   if (filters.minPrice != null) {
@@ -183,6 +190,9 @@ export async function getProducts(
       }
       if (filters.department) {
         query = query.eq("department", filters.department);
+      }
+      if (filters.gender) {
+        query = query.eq("metadata->>gender", filters.gender);
       }
       if (filters.minPrice != null) query = query.gte("price", filters.minPrice);
       if (filters.maxPrice != null) query = query.lte("price", filters.maxPrice);

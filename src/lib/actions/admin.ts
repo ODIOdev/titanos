@@ -130,6 +130,9 @@ function mapProductPayload(
       ...(existingMetadata ?? {}),
       status,
       ...(input.tag ? { tag: input.tag } : { tag: null }),
+      ...(input.gender?.trim()
+        ? { gender: input.gender.trim() }
+        : { gender: null }),
       hasMultipleSizes: Boolean(input.hasMultipleSizes),
       variants: input.hasMultipleSizes
         ? (input.variants ?? []).filter(
@@ -648,8 +651,26 @@ async function uploadCatalogImage(
     return { success: false, message: "Image must be 8 MB or smaller." };
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+  let buffer = Buffer.from(await file.arrayBuffer());
+  let contentType = file.type;
+  let ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+
+  // Brand logos are stored with a transparent backdrop (PNG), except SVG.
+  if (folder === "brands") {
+    try {
+      const { prepareBrandLogo } = await import("@/lib/images/brand-logo");
+      const prepared = await prepareBrandLogo(buffer, contentType);
+      buffer = prepared.buffer;
+      contentType = prepared.contentType;
+      ext = prepared.extension;
+    } catch {
+      return {
+        success: false,
+        message: "Could not process brand logo. Try a PNG or SVG.",
+      };
+    }
+  }
+
   const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
   const auth = await requireAdmin();
@@ -663,7 +684,7 @@ async function uploadCatalogImage(
       const { error } = await supabase.storage
         .from("product-images")
         .upload(path, buffer, {
-          contentType: file.type,
+          contentType,
           upsert: false,
         });
 
@@ -1387,6 +1408,7 @@ export async function resetPlatform(
         "catalog_departments",
         "catalog_primary_departments",
         "catalog_departments_removed",
+        "catalog_offline_departments",
       ]);
     if (settingsError) throw settingsError;
 
@@ -1832,11 +1854,11 @@ export async function addCatalogSize(name: string): Promise<ActionResult> {
 
 /**
  * Adds a department to the shared catalog list so it is selectable on products
- * and available in shop filters.
+ * and available in shop filters (unless marked off-line).
  */
 export async function addCatalogDepartment(
   name: string,
-  source: "catalog" | "custom" = "custom",
+  source: "catalog" | "custom" | "offline" = "custom",
 ): Promise<ActionResult> {
   const trimmed = name.trim();
   if (!trimmed) {
@@ -1848,7 +1870,12 @@ export async function addCatalogDepartment(
       message: "Department must be 48 characters or fewer.",
     };
   }
-  const departmentSource = source === "catalog" ? "catalog" : "custom";
+  const departmentSource =
+    source === "catalog"
+      ? "catalog"
+      : source === "offline"
+        ? "offline"
+        : "custom";
 
   const { DEPARTMENT_OPTIONS } = await import("@/lib/data/catalog-options");
 
@@ -1860,6 +1887,8 @@ export async function addCatalogDepartment(
         setDemoCatalogDepartments,
         getDemoPrimaryCatalogDepartments,
         setDemoPrimaryCatalogDepartments,
+        getDemoOfflineCatalogDepartments,
+        setDemoOfflineCatalogDepartments,
         getDemoRemovedCatalogDepartments,
         setDemoRemovedCatalogDepartments,
       } = await import("@/lib/data/admin");
@@ -1870,13 +1899,15 @@ export async function addCatalogDepartment(
       );
       const custom = getDemoCatalogDepartments();
       const primary = getDemoPrimaryCatalogDepartments();
+      const offline = getDemoOfflineCatalogDepartments();
       const isCanonical = DEPARTMENT_OPTIONS.some(
         (o) => o.value.toLowerCase() === trimmed.toLowerCase(),
       );
       const exists =
         isCanonical ||
         custom.some((d) => d.toLowerCase() === trimmed.toLowerCase()) ||
-        primary.some((d) => d.toLowerCase() === trimmed.toLowerCase());
+        primary.some((d) => d.toLowerCase() === trimmed.toLowerCase()) ||
+        offline.some((d) => d.toLowerCase() === trimmed.toLowerCase());
       if (exists) {
         // Restoring a previously removed built-in is enough.
         if (isCanonical) {
@@ -1892,6 +1923,8 @@ export async function addCatalogDepartment(
       }
       if (departmentSource === "catalog") {
         setDemoPrimaryCatalogDepartments([...primary, trimmed]);
+      } else if (departmentSource === "offline") {
+        setDemoOfflineCatalogDepartments([...offline, trimmed]);
       } else {
         setDemoCatalogDepartments([...custom, trimmed]);
       }
@@ -1909,7 +1942,7 @@ export async function addCatalogDepartment(
   try {
     const { createServiceClient } = await import("@/lib/supabase/admin");
     const supabase = createServiceClient();
-    const [customRow, primaryRow, removedRow] = await Promise.all([
+    const [customRow, primaryRow, offlineRow, removedRow] = await Promise.all([
       supabase
         .from("site_settings")
         .select("value")
@@ -1923,31 +1956,26 @@ export async function addCatalogDepartment(
       supabase
         .from("site_settings")
         .select("value")
+        .eq("key", "catalog_offline_departments")
+        .maybeSingle(),
+      supabase
+        .from("site_settings")
+        .select("value")
         .eq("key", "catalog_departments_removed")
         .maybeSingle(),
     ]);
-    const customValue = customRow.data?.value as { departments?: unknown } | null;
-    const primaryValue = primaryRow.data?.value as {
-      departments?: unknown;
-    } | null;
-    const removedValue = removedRow.data?.value as {
-      departments?: unknown;
-    } | null;
-    const currentCustom = Array.isArray(customValue?.departments)
-      ? customValue.departments
-          .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
-          .map((d) => d.trim())
-      : [];
-    const currentPrimary = Array.isArray(primaryValue?.departments)
-      ? primaryValue.departments
-          .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
-          .map((d) => d.trim())
-      : [];
-    const currentRemoved = Array.isArray(removedValue?.departments)
-      ? removedValue.departments
-          .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
-          .map((d) => d.trim())
-      : [];
+    const readList = (row: { data: { value: unknown } | null }) => {
+      const value = row.data?.value as { departments?: unknown } | null;
+      return Array.isArray(value?.departments)
+        ? value.departments
+            .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+            .map((d) => d.trim())
+        : [];
+    };
+    const currentCustom = readList(customRow);
+    const currentPrimary = readList(primaryRow);
+    const currentOffline = readList(offlineRow);
+    const currentRemoved = readList(removedRow);
     const nextRemoved = currentRemoved.filter(
       (d) => d.toLowerCase() !== trimmed.toLowerCase(),
     );
@@ -1968,7 +1996,8 @@ export async function addCatalogDepartment(
     const exists =
       isCanonical ||
       currentCustom.some((d) => d.toLowerCase() === trimmed.toLowerCase()) ||
-      currentPrimary.some((d) => d.toLowerCase() === trimmed.toLowerCase());
+      currentPrimary.some((d) => d.toLowerCase() === trimmed.toLowerCase()) ||
+      currentOffline.some((d) => d.toLowerCase() === trimmed.toLowerCase());
     if (exists) {
       if (isCanonical && wasRemoved) {
         revalidatePath("/admin/categories");
@@ -1985,11 +2014,15 @@ export async function addCatalogDepartment(
     const key =
       departmentSource === "catalog"
         ? "catalog_primary_departments"
-        : "catalog_departments";
+        : departmentSource === "offline"
+          ? "catalog_offline_departments"
+          : "catalog_departments";
     const next =
       departmentSource === "catalog"
         ? [...currentPrimary, trimmed]
-        : [...currentCustom, trimmed];
+        : departmentSource === "offline"
+          ? [...currentOffline, trimmed]
+          : [...currentCustom, trimmed];
 
     const { error } = await supabase.from("site_settings").upsert(
       { key, value: { departments: next } },
@@ -2013,12 +2046,11 @@ export async function addCatalogDepartment(
   }
 }
 
-/** Renames a department across the catalog list and any products using it. */
-/** Renames a department and/or changes its catalog vs custom source tag. */
+/** Renames a department and/or changes its catalog / custom / off-line source. */
 export async function renameCatalogDepartment(
   oldName: string,
   newName: string,
-  source: "catalog" | "custom" = "custom",
+  source: "catalog" | "custom" | "offline" = "custom",
 ): Promise<ActionResult> {
   const from = oldName.trim();
   const to = newName.trim();
@@ -2031,7 +2063,12 @@ export async function renameCatalogDepartment(
       message: "Department must be 48 characters or fewer.",
     };
   }
-  const departmentSource = source === "catalog" ? "catalog" : "custom";
+  const departmentSource =
+    source === "catalog"
+      ? "catalog"
+      : source === "offline"
+        ? "offline"
+        : "custom";
 
   const { DEPARTMENT_OPTIONS } = await import("@/lib/data/catalog-options");
   const toIsBuiltIn = DEPARTMENT_OPTIONS.some(
@@ -2046,6 +2083,8 @@ export async function renameCatalogDepartment(
         setDemoCatalogDepartments,
         getDemoPrimaryCatalogDepartments,
         setDemoPrimaryCatalogDepartments,
+        getDemoOfflineCatalogDepartments,
+        setDemoOfflineCatalogDepartments,
         getDemoRemovedCatalogDepartments,
         setDemoRemovedCatalogDepartments,
       } = await import("@/lib/data/admin");
@@ -2064,26 +2103,31 @@ export async function renameCatalogDepartment(
       let primary = getDemoPrimaryCatalogDepartments().filter(
         (d) => d.toLowerCase() !== from.toLowerCase(),
       );
+      let offline = getDemoOfflineCatalogDepartments().filter(
+        (d) => d.toLowerCase() !== from.toLowerCase(),
+      );
 
       const nameTaken =
         to.toLowerCase() !== from.toLowerCase() &&
         (toIsBuiltIn ||
           custom.some((d) => d.toLowerCase() === to.toLowerCase()) ||
-          primary.some((d) => d.toLowerCase() === to.toLowerCase()));
+          primary.some((d) => d.toLowerCase() === to.toLowerCase()) ||
+          offline.some((d) => d.toLowerCase() === to.toLowerCase()));
       if (nameTaken) {
         return { success: false, message: "That department already exists." };
       }
 
-      if (!toIsBuiltIn) {
-        if (departmentSource === "catalog") {
-          primary = [...primary, to];
-        } else {
-          custom = [...custom, to];
-        }
+      if (departmentSource === "catalog") {
+        if (!toIsBuiltIn) primary = [...primary, to];
+      } else if (departmentSource === "offline") {
+        offline = [...offline, to];
+      } else if (!toIsBuiltIn) {
+        custom = [...custom, to];
       }
 
       setDemoCatalogDepartments(custom);
       setDemoPrimaryCatalogDepartments(primary);
+      setDemoOfflineCatalogDepartments(offline);
       revalidatePath("/admin/categories");
       revalidatePath("/admin/products");
       revalidatePath("/shop");
@@ -2098,7 +2142,7 @@ export async function renameCatalogDepartment(
   try {
     const { createServiceClient } = await import("@/lib/supabase/admin");
     const supabase = createServiceClient();
-    const [customRow, primaryRow, removedRow] = await Promise.all([
+    const [customRow, primaryRow, offlineRow, removedRow] = await Promise.all([
       supabase
         .from("site_settings")
         .select("value")
@@ -2108,6 +2152,11 @@ export async function renameCatalogDepartment(
         .from("site_settings")
         .select("value")
         .eq("key", "catalog_primary_departments")
+        .maybeSingle(),
+      supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "catalog_offline_departments")
         .maybeSingle(),
       supabase
         .from("site_settings")
@@ -2131,6 +2180,9 @@ export async function renameCatalogDepartment(
     let primary = readList(primaryRow).filter(
       (d) => d.toLowerCase() !== from.toLowerCase(),
     );
+    let offline = readList(offlineRow).filter(
+      (d) => d.toLowerCase() !== from.toLowerCase(),
+    );
     const removed = readList(removedRow).filter(
       (d) =>
         d.toLowerCase() !== from.toLowerCase() &&
@@ -2141,17 +2193,18 @@ export async function renameCatalogDepartment(
       to.toLowerCase() !== from.toLowerCase() &&
       (toIsBuiltIn ||
         custom.some((d) => d.toLowerCase() === to.toLowerCase()) ||
-        primary.some((d) => d.toLowerCase() === to.toLowerCase()));
+        primary.some((d) => d.toLowerCase() === to.toLowerCase()) ||
+        offline.some((d) => d.toLowerCase() === to.toLowerCase()));
     if (nameTaken) {
       return { success: false, message: "That department already exists." };
     }
 
-    if (!toIsBuiltIn) {
-      if (departmentSource === "catalog") {
-        primary = [...primary, to];
-      } else {
-        custom = [...custom, to];
-      }
+    if (departmentSource === "catalog") {
+      if (!toIsBuiltIn) primary = [...primary, to];
+    } else if (departmentSource === "offline") {
+      offline = [...offline, to];
+    } else if (!toIsBuiltIn) {
+      custom = [...custom, to];
     }
 
     const { error: customError } = await supabase.from("site_settings").upsert(
@@ -2164,6 +2217,11 @@ export async function renameCatalogDepartment(
       { onConflict: "key" },
     );
     if (primaryError) throw primaryError;
+    const { error: offlineError } = await supabase.from("site_settings").upsert(
+      { key: "catalog_offline_departments", value: { departments: offline } },
+      { onConflict: "key" },
+    );
+    if (offlineError) throw offlineError;
     const { error: removedError } = await supabase.from("site_settings").upsert(
       { key: "catalog_departments_removed", value: { departments: removed } },
       { onConflict: "key" },
@@ -2181,7 +2239,7 @@ export async function renameCatalogDepartment(
       success: true,
       message:
         from.toLowerCase() === to.toLowerCase()
-          ? `Department source updated to ${departmentSource}.`
+          ? `Department source updated to ${departmentSource === "offline" ? "off-line" : departmentSource}.`
           : `Department renamed to "${to}".`,
     };
   } catch (err) {
@@ -2210,6 +2268,8 @@ export async function deleteCatalogDepartment(
         setDemoCatalogDepartments,
         getDemoPrimaryCatalogDepartments,
         setDemoPrimaryCatalogDepartments,
+        getDemoOfflineCatalogDepartments,
+        setDemoOfflineCatalogDepartments,
         getDemoRemovedCatalogDepartments,
         setDemoRemovedCatalogDepartments,
       } = await import("@/lib/data/admin");
@@ -2220,6 +2280,11 @@ export async function deleteCatalogDepartment(
       );
       setDemoPrimaryCatalogDepartments(
         getDemoPrimaryCatalogDepartments().filter(
+          (d) => d.toLowerCase() !== trimmed.toLowerCase(),
+        ),
+      );
+      setDemoOfflineCatalogDepartments(
+        getDemoOfflineCatalogDepartments().filter(
           (d) => d.toLowerCase() !== trimmed.toLowerCase(),
         ),
       );
@@ -2241,7 +2306,7 @@ export async function deleteCatalogDepartment(
   try {
     const { createServiceClient } = await import("@/lib/supabase/admin");
     const supabase = createServiceClient();
-    const [customRow, primaryRow, removedRow] = await Promise.all([
+    const [customRow, primaryRow, offlineRow, removedRow] = await Promise.all([
       supabase
         .from("site_settings")
         .select("value")
@@ -2255,11 +2320,19 @@ export async function deleteCatalogDepartment(
       supabase
         .from("site_settings")
         .select("value")
+        .eq("key", "catalog_offline_departments")
+        .maybeSingle(),
+      supabase
+        .from("site_settings")
+        .select("value")
         .eq("key", "catalog_departments_removed")
         .maybeSingle(),
     ]);
     const customValue = customRow.data?.value as { departments?: unknown } | null;
     const primaryValue = primaryRow.data?.value as {
+      departments?: unknown;
+    } | null;
+    const offlineValue = offlineRow.data?.value as {
       departments?: unknown;
     } | null;
     const removedValue = removedRow.data?.value as {
@@ -2275,6 +2348,11 @@ export async function deleteCatalogDepartment(
           .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
           .map((d) => d.trim())
       : [];
+    const currentOffline = Array.isArray(offlineValue?.departments)
+      ? offlineValue.departments
+          .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+          .map((d) => d.trim())
+      : [];
     const currentRemoved = Array.isArray(removedValue?.departments)
       ? removedValue.departments
           .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
@@ -2285,6 +2363,9 @@ export async function deleteCatalogDepartment(
       (d) => d.toLowerCase() !== trimmed.toLowerCase(),
     );
     const nextPrimary = currentPrimary.filter(
+      (d) => d.toLowerCase() !== trimmed.toLowerCase(),
+    );
+    const nextOffline = currentOffline.filter(
       (d) => d.toLowerCase() !== trimmed.toLowerCase(),
     );
     const nextRemoved = currentRemoved.some(
@@ -2306,6 +2387,14 @@ export async function deleteCatalogDepartment(
       { onConflict: "key" },
     );
     if (primaryError) throw primaryError;
+    const { error: offlineError } = await supabase.from("site_settings").upsert(
+      {
+        key: "catalog_offline_departments",
+        value: { departments: nextOffline },
+      },
+      { onConflict: "key" },
+    );
+    if (offlineError) throw offlineError;
     const { error: removedError } = await supabase.from("site_settings").upsert(
       {
         key: "catalog_departments_removed",

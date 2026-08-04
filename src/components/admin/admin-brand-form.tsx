@@ -202,17 +202,28 @@ export function AdminBrandForm({
             >
               {displayUrl ? (
                 <div className="relative flex w-full items-center justify-center">
+                  <div
+                    aria-hidden="true"
+                    className="absolute inset-0 rounded-sm"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(45deg, #dfe3e8 25%, transparent 25%), linear-gradient(-45deg, #dfe3e8 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #dfe3e8 75%), linear-gradient(-45deg, transparent 75%, #dfe3e8 75%)",
+                      backgroundSize: "14px 14px",
+                      backgroundPosition: "0 0, 0 7px, 7px -7px, -7px 0",
+                      backgroundColor: "#f7f8fa",
+                    }}
+                  />
                   <Image
                     src={displayUrl}
                     alt="Brand logo preview"
                     width={240}
                     height={96}
                     unoptimized
-                    className="max-h-24 w-auto object-contain"
+                    className="relative z-[1] max-h-24 w-auto bg-transparent object-contain"
                   />
                   <button
                     type="button"
-                    className="absolute right-0 top-0 inline-flex size-8 items-center justify-center rounded-sm bg-white text-medium-gray shadow-sm hover:text-red-700"
+                    className="absolute right-0 top-0 z-[2] inline-flex size-8 items-center justify-center rounded-sm bg-white text-medium-gray shadow-sm hover:text-red-700"
                     aria-label="Remove logo"
                     onClick={clearLogo}
                   >
@@ -224,6 +235,9 @@ export function AdminBrandForm({
                   <ImagePlus className="size-8 text-medium-gray" aria-hidden="true" />
                   <p className="text-sm text-medium-gray">
                     Drag a logo here, or upload below
+                  </p>
+                  <p className="text-xs text-medium-gray">
+                    White backgrounds are removed automatically (PNG).
                   </p>
                 </>
               )}

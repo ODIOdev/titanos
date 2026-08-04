@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition, type ReactNode } from "react";
+import { useId, useRef, useState, useTransition, type ReactNode } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
@@ -19,6 +19,7 @@ import { productFormSchema, type ProductFormInput } from "@/lib/validations";
 import {
   ANSI_CLASS_OPTIONS,
   DEPARTMENT_OPTIONS,
+  GENDER_OPTIONS,
   PRODUCT_TAG_OPTIONS,
   SHIPPING_CLASS_OPTIONS,
   SIZE_OPTIONS,
@@ -55,6 +56,24 @@ function salePercentFromPrices(
     return null;
   }
   return Math.round((1 - price / compareAt) * 1000) / 10;
+}
+
+const LB_PER_KG = 2.2046226218;
+
+function weightToDisplay(
+  lb: number | null | undefined,
+  unit: "lb" | "kg",
+): string {
+  if (lb == null) return "";
+  const n = typeof lb === "number" ? lb : Number(lb);
+  if (!Number.isFinite(n)) return "";
+  if (unit === "lb") return String(n);
+  return String(Math.round((n / LB_PER_KG) * 1000) / 1000);
+}
+
+function displayToWeightLb(value: number, unit: "lb" | "kg"): number {
+  if (unit === "lb") return Math.round(value * 1000) / 1000;
+  return Math.round(value * LB_PER_KG * 1000) / 1000;
 }
 
 function applySaleToPrice(listPrice: number, percent: number): number {
@@ -130,6 +149,9 @@ export function AdminProductForm({
   const [addingSize, setAddingSize] = useState(false);
   const [customDepartment, setCustomDepartment] = useState("");
   const [addingDepartment, setAddingDepartment] = useState(false);
+  /** Display unit only — catalog weight is always stored in pounds. */
+  const [weightUnit, setWeightUnit] = useState<"lb" | "kg">("lb");
+  const weightFieldId = useId();
 
   const form = useForm<ProductFormInput>({
     resolver: zodResolver(productFormSchema) as never,
@@ -154,6 +176,7 @@ export function AdminProductForm({
       bestseller: false,
       productType: "",
       department: "",
+      gender: "",
       tag: "",
       ansiClass: "",
       color: "",
@@ -416,14 +439,26 @@ export function AdminProductForm({
   const primaryImage = images.find((img) => img.isPrimary) ?? images[0];
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+    <form
+      onSubmit={handleSubmit(onSubmit)}
+      className="admin-product-form relative space-y-5 rounded-sm border border-[#cfd3d8] bg-[#e4e7eb] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] sm:p-4"
+    >
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 rounded-sm opacity-70"
+        style={{
+          background:
+            "radial-gradient(120% 80% at 0% 0%, rgba(245,196,0,0.08), transparent 45%), radial-gradient(90% 60% at 100% 0%, rgba(100,110,125,0.10), transparent 40%)",
+        }}
+      />
+
       {/* Product overview: identity + media */}
-      <section className="overflow-hidden rounded-sm border border-border-gray bg-white">
-        <div className="flex items-start gap-3 border-b border-border-gray bg-light-gray/40 px-5 py-4">
+      <section className="relative overflow-hidden rounded-sm border border-[#cfd3d8] bg-[#f3f4f6] shadow-[0_1px_0_rgba(255,255,255,0.65)]">
+        <div className="flex items-start gap-3 border-b border-[#d8dce1] bg-[#eceef1] px-5 py-4">
           <span className="mt-0.5 h-8 w-1 shrink-0 rounded-sm bg-titan-yellow" aria-hidden="true" />
           <div>
             <h2 className="font-heading text-lg font-semibold uppercase tracking-wide text-dark-charcoal">
-              Product overview
+              {mode === "create" ? "New product" : "Product overview"}
             </h2>
             <p className="mt-0.5 text-sm text-medium-gray">
               Core listing details customers see first on the storefront.
@@ -432,7 +467,7 @@ export function AdminProductForm({
         </div>
 
         <div className="grid lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="space-y-6 p-5 lg:border-r lg:border-border-gray">
+          <div className="space-y-6 p-5 lg:border-r lg:border-[#d8dce1]">
             <div>
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-medium-gray">
                 Identity
@@ -475,7 +510,7 @@ export function AdminProductForm({
               </div>
             </div>
 
-            <div className="border-t border-border-gray pt-6">
+            <div className="border-t border-[#d8dce1] pt-6">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-medium-gray">
                 Storefront copy
               </p>
@@ -498,7 +533,7 @@ export function AdminProductForm({
             </div>
           </div>
 
-          <aside className="bg-light-gray/30 p-5">
+          <aside className="bg-[#e9ebef] p-5">
             <div className="mb-3 flex items-center justify-between gap-2">
               <div>
                 <p className="font-heading text-sm font-semibold uppercase tracking-wide text-dark-charcoal">
@@ -522,7 +557,7 @@ export function AdminProductForm({
 
             <div
               className={cn(
-                "overflow-hidden rounded-sm border border-border-gray bg-white",
+                "overflow-hidden rounded-sm border border-[#cfd3d8] bg-[#f3f4f6]",
                 dragOver && "border-titan-yellow ring-1 ring-titan-yellow",
               )}
               onDragOver={(e) => {
@@ -538,7 +573,7 @@ export function AdminProductForm({
                 }
               }}
             >
-              <div className="relative aspect-square bg-light-gray">
+              <div className="relative aspect-square bg-[#e2e5e9]">
                 {primaryImage ? (
                   <>
                     <Image
@@ -572,7 +607,7 @@ export function AdminProductForm({
                     onClick={() => fileInputRef.current?.click()}
                     className="flex h-full w-full flex-col items-center justify-center gap-2 px-4 text-center"
                   >
-                    <span className="flex size-11 items-center justify-center rounded-sm bg-white text-dark-charcoal">
+                    <span className="flex size-11 items-center justify-center rounded-sm bg-[#f3f4f6] text-dark-charcoal shadow-sm">
                       <ImagePlus className="size-5" aria-hidden="true" />
                     </span>
                     <span className="text-sm font-medium text-dark-charcoal">
@@ -586,17 +621,17 @@ export function AdminProductForm({
               </div>
 
               {images.length > 0 ? (
-                <ul className="grid grid-cols-4 gap-1.5 border-t border-border-gray p-2">
+                <ul className="grid grid-cols-4 gap-1.5 border-t border-[#d8dce1] p-2">
                   {images.map((img) => (
                     <li key={img.id} className="group relative">
                       <button
                         type="button"
                         onClick={() => setPrimary(img.id)}
                         className={cn(
-                          "relative block aspect-square w-full overflow-hidden rounded-sm border bg-light-gray",
+                          "relative block aspect-square w-full overflow-hidden rounded-sm border bg-[#e2e5e9]",
                           img.isPrimary
                             ? "border-titan-yellow ring-1 ring-titan-yellow"
-                            : "border-border-gray hover:border-dark-charcoal",
+                            : "border-[#cfd3d8] hover:border-dark-charcoal",
                         )}
                         aria-pressed={img.isPrimary}
                         aria-label={
@@ -621,7 +656,7 @@ export function AdminProductForm({
                             "absolute left-0.5 top-0.5 flex size-5 items-center justify-center rounded-sm",
                             img.isPrimary
                               ? "bg-titan-yellow text-dark-charcoal"
-                              : "bg-white/90 text-medium-gray opacity-0 group-hover:opacity-100",
+                              : "bg-[#f3f4f6]/90 text-medium-gray opacity-0 group-hover:opacity-100",
                           )}
                           aria-hidden="true"
                         >
@@ -723,6 +758,13 @@ export function AdminProductForm({
             ]}
             error={errors.brandId?.message}
             {...register("brandId")}
+          />
+          <Select
+            label="Gender"
+            hint="Used by the shop Gender filter"
+            options={toSelectOptions(GENDER_OPTIONS, "Select gender")}
+            error={errors.gender?.message}
+            {...register("gender")}
           />
 
           <div className="grid gap-4 sm:col-span-2 lg:col-span-3 lg:grid-cols-2">
@@ -940,13 +982,67 @@ export function AdminProductForm({
             error={errors.lowStockThreshold?.message}
             {...register("lowStockThreshold")}
           />
-          <Input
-            label="Weight (lb)"
-            type="number"
-            step="0.01"
-            error={errors.weight?.message}
-            {...register("weight")}
-          />
+          <div className="w-full">
+            <div className="mb-1.5 flex items-center justify-between gap-2">
+              <Label htmlFor={weightFieldId}>Weight</Label>
+              <div
+                className="inline-flex rounded-sm border border-[#cfd3d8] bg-[#e9ebef] p-0.5"
+                role="group"
+                aria-label="Weight unit"
+              >
+                {(["lb", "kg"] as const).map((unit) => (
+                  <button
+                    key={unit}
+                    type="button"
+                    className={cn(
+                      "rounded-sm px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+                      weightUnit === unit
+                        ? "bg-dark-charcoal text-white"
+                        : "text-medium-gray hover:text-dark-charcoal",
+                    )}
+                    aria-pressed={weightUnit === unit}
+                    onClick={() => setWeightUnit(unit)}
+                  >
+                    {unit}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Controller
+              name="weight"
+              control={control}
+              render={({ field }) => (
+                <Input
+                  id={weightFieldId}
+                  type="number"
+                  step="0.01"
+                  min={0}
+                  inputMode="decimal"
+                  placeholder={weightUnit === "kg" ? "e.g. 1.5" : "e.g. 3.3"}
+                  error={errors.weight?.message}
+                  hint={
+                    weightUnit === "kg"
+                      ? "Saved as pounds in the catalog"
+                      : undefined
+                  }
+                  value={weightToDisplay(field.value, weightUnit)}
+                  onChange={(event) => {
+                    const raw = event.target.value;
+                    if (raw.trim() === "") {
+                      field.onChange(null);
+                      return;
+                    }
+                    const next = Number(raw);
+                    if (!Number.isFinite(next)) return;
+                    field.onChange(displayToWeightLb(next, weightUnit));
+                  }}
+                  onBlur={field.onBlur}
+                  name={field.name}
+                  ref={field.ref}
+                />
+              )}
+            />
+          </div>
         </div>
       </FormSection>
 
@@ -986,9 +1082,11 @@ export function AdminProductForm({
         </div>
       </FormSection>
 
-      <div className="sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-3 border border-border-gray bg-white px-4 py-3 shadow-[0_-4px_16px_rgba(16,24,32,0.06)] sm:px-5">
+      <div className="relative sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-3 border border-[#cfd3d8] bg-[#eef0f3]/95 px-4 py-3 shadow-[0_-6px_20px_rgba(16,24,32,0.08)] backdrop-blur-sm sm:px-5">
         <p className="text-sm text-medium-gray">
-          {mode === "create" ? "Create a new catalog product" : "Save changes to this product"}
+          {mode === "create"
+            ? "Ready when the listing details look right."
+            : "Save to publish changes to the storefront."}
         </p>
         <div className="flex gap-2">
           {mode === "edit" && productId ? (
@@ -1056,8 +1154,8 @@ function FormSection({
   children: ReactNode;
 }) {
   return (
-    <section className="overflow-visible rounded-sm border border-border-gray bg-white">
-      <div className="flex items-start gap-3 border-b border-border-gray px-5 py-4">
+    <section className="relative overflow-visible rounded-sm border border-[#cfd3d8] bg-[#f3f4f6] shadow-[0_1px_0_rgba(255,255,255,0.65)]">
+      <div className="flex items-start gap-3 border-b border-[#d8dce1] bg-[#eceef1] px-5 py-4">
         <span className="mt-0.5 h-8 w-1 shrink-0 rounded-sm bg-titan-yellow" aria-hidden="true" />
         <div>
           <h2 className="font-heading text-lg font-semibold uppercase tracking-wide text-dark-charcoal">
@@ -1087,8 +1185,8 @@ function VisibilityChip({
       className={cn(
         "flex min-w-[10rem] cursor-pointer items-start gap-3 rounded-sm border px-3 py-3 transition-colors",
         checked
-          ? "border-titan-yellow bg-titan-yellow/10"
-          : "border-border-gray bg-white hover:border-dark-charcoal/40",
+          ? "border-titan-yellow bg-titan-yellow/15"
+          : "border-[#cfd3d8] bg-[#eef0f3] hover:border-dark-charcoal/40",
       )}
     >
       <input

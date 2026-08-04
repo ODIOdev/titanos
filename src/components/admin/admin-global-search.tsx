@@ -33,7 +33,7 @@ const QUICK_LINKS = [
   { label: "Products", href: "/admin/products", icon: Package },
   { label: "Orders", href: "/admin/orders", icon: ShoppingBag },
   { label: "Customers", href: "/admin/customers", icon: Users },
-  { label: "Categories", href: "/admin/categories", icon: FolderTree },
+  { label: "Dept./ Categories", href: "/admin/categories", icon: FolderTree },
 ] as const;
 
 /** Global admin header search with live typeahead results. */

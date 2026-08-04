@@ -1,36 +1,42 @@
 import { CategoryCard } from "@/components/home/category-card";
 import { SectionHeader } from "@/components/shared/section-header";
-import {
-  DEPARTMENT_OPTIONS,
-  departmentImagePath,
-} from "@/lib/data/catalog-options";
+import { departmentImagePath } from "@/lib/data/catalog-options";
 import { cn } from "@/lib/utils";
 
 export type CategoryGridProps = {
   className?: string;
 };
 
-/** Homepage tile wording, where it differs from the admin Department label. */
-const TILE_LABELS: Record<string, string> = {
-  "safety-equipment": "Construction",
-  "traffic-control": "Roadway & Traffic",
-  "foot-wear": "Work Boots",
-  signage: "Street Signs",
-};
+/** Homepage industry tiles — includes Foot Wear even when it’s hidden from the shop rail. */
+const HOME_INDUSTRY_TILES = [
+  {
+    slug: "safety-equipment",
+    name: "Construction",
+    href: `/shop?department=${encodeURIComponent("Safety Equipment")}`,
+    imageUrl: departmentImagePath("safety-equipment"),
+  },
+  {
+    slug: "traffic-control",
+    name: "Roadway & Traffic",
+    href: `/shop?department=${encodeURIComponent("Traffic Control")}`,
+    imageUrl: departmentImagePath("traffic-control"),
+  },
+  {
+    slug: "foot-wear",
+    name: "Work Boots",
+    href: `/shop?department=${encodeURIComponent("Safety Shoes & Boots")}`,
+    imageUrl: departmentImagePath("foot-wear"),
+  },
+  {
+    slug: "signage",
+    name: "Street Signs",
+    href: `/shop?department=${encodeURIComponent("Signage")}`,
+    imageUrl: "/images/categories/signage-industry-v4.jpg",
+  },
+] as const;
 
-/** Homepage browse strip — synced with admin Department options. */
+/** Homepage browse strip — industry entry points into the shop. */
 export function CategoryGrid({ className }: CategoryGridProps) {
-  const departments = DEPARTMENT_OPTIONS.map((d) => ({
-    slug: d.slug,
-    name: TILE_LABELS[d.slug] ?? d.label,
-    // Industry banners can differ from shop department rail thumbs.
-    imageUrl:
-      d.slug === "signage"
-        ? "/images/categories/signage-industry-v4.jpg"
-        : departmentImagePath(d.slug),
-    href: `/shop?department=${encodeURIComponent(d.value)}`,
-  }));
-
   return (
     <section
       className={cn("bg-white py-8 sm:py-10", className)}
@@ -46,7 +52,7 @@ export function CategoryGrid({ className }: CategoryGridProps) {
         />
 
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
-          {departments.map((department) => (
+          {HOME_INDUSTRY_TILES.map((department) => (
             <li key={department.slug}>
               <CategoryCard
                 name={department.name}

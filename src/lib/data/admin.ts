@@ -8,9 +8,11 @@ import {
   DEPARTMENT_OPTIONS,
   DEFAULT_PRIMARY_DEPARTMENTS,
   PRODUCT_TAG_OPTIONS,
+  SHOE_SIZE_OPTIONS,
   SIZE_OPTIONS,
   departmentForProductType,
   mergeCatalogOptions,
+  sortCatalogSizes,
   toDepartmentOption,
   type CatalogOption,
   type DepartmentOption,
@@ -153,8 +155,11 @@ export type AdminDepartment = {
   name: string;
   slug: string;
   productCount: number;
-  /** Canonical catalog option, custom (site_settings), or only found on products. */
-  source: "catalog" | "custom" | "product";
+  /**
+   * Catalog = live shop primary, custom = admin-defined live,
+   * offline = admin-only (hidden from storefront), product = inferred only.
+   */
+  source: "catalog" | "custom" | "offline" | "product";
 };
 
 /** In-memory custom tags for demo mode (no Supabase). */
@@ -203,6 +208,8 @@ export function setDemoCatalogSizes(sizes: string[]) {
 let demoCatalogDepartments: string[] = [];
 /** Admin-created catalog-source departments in demo mode. */
 let demoPrimaryCatalogDepartments: string[] = [...DEFAULT_PRIMARY_DEPARTMENTS];
+/** Departments hidden from the live shop in demo mode. */
+let demoOfflineCatalogDepartments: string[] = [];
 /** Built-in / custom departments removed from the catalog in demo mode. */
 let demoRemovedCatalogDepartments: string[] = [];
 
@@ -220,6 +227,14 @@ export function getDemoPrimaryCatalogDepartments(): string[] {
 
 export function setDemoPrimaryCatalogDepartments(departments: string[]) {
   demoPrimaryCatalogDepartments = [...departments];
+}
+
+export function getDemoOfflineCatalogDepartments(): string[] {
+  return [...demoOfflineCatalogDepartments];
+}
+
+export function setDemoOfflineCatalogDepartments(departments: string[]) {
+  demoOfflineCatalogDepartments = [...departments];
 }
 
 export function getDemoRemovedCatalogDepartments(): string[] {
@@ -2215,6 +2230,29 @@ async function getStoredPrimaryCatalogDepartments(): Promise<string[]> {
   return getDemoPrimaryCatalogDepartments();
 }
 
+async function getStoredOfflineCatalogDepartments(): Promise<string[]> {
+  if (isSupabaseConfigured()) {
+    try {
+      const { createClient } = await import("@/lib/supabase/server");
+      const supabase = await createClient();
+      const { data } = await supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "catalog_offline_departments")
+        .maybeSingle();
+      const value = data?.value as { departments?: unknown } | null;
+      if (Array.isArray(value?.departments)) {
+        return value.departments
+          .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+          .map((d) => d.trim());
+      }
+    } catch {
+      // Fall through
+    }
+  }
+  return getDemoOfflineCatalogDepartments();
+}
+
 async function getRemovedCatalogDepartments(): Promise<string[]> {
   if (isSupabaseConfigured()) {
     try {
@@ -2241,32 +2279,40 @@ async function getRemovedCatalogDepartments(): Promise<string[]> {
 /**
  * Department options for the product form and shop filters —
  * canonical + admin-added + departments already in use on products.
+ * Pass `liveOnly: true` for the storefront (excludes off-line departments).
  */
-export async function getCatalogDepartmentOptions(): Promise<DepartmentOption[]> {
-  const [products, customDepartments, primaryDepartments, removed] =
+export async function getCatalogDepartmentOptions(opts?: {
+  liveOnly?: boolean;
+}): Promise<DepartmentOption[]> {
+  const [products, customDepartments, primaryDepartments, offlineDepartments, removed] =
     await Promise.all([
       getAdminProducts({ active: "all" }),
       getStoredCatalogDepartments(),
       getStoredPrimaryCatalogDepartments(),
+      getStoredOfflineCatalogDepartments(),
       getRemovedCatalogDepartments(),
     ]);
   const removedKeys = new Set(removed.map((d) => d.toLowerCase()));
+  const offlineKeys = new Set(offlineDepartments.map((d) => d.toLowerCase()));
 
   const merged = new Map<string, DepartmentOption>();
   for (const option of DEPARTMENT_OPTIONS) {
     if (removedKeys.has(option.value.toLowerCase())) continue;
+    if (opts?.liveOnly && offlineKeys.has(option.value.toLowerCase())) continue;
     merged.set(option.value.toLowerCase(), option);
   }
   for (const name of [
     ...DEFAULT_PRIMARY_DEPARTMENTS,
     ...primaryDepartments,
     ...customDepartments,
+    ...(opts?.liveOnly ? [] : offlineDepartments),
     ...products
       .map((p) => p.department)
       .filter((d): d is string => Boolean(d?.trim())),
   ]) {
     const key = name.toLowerCase();
     if (removedKeys.has(key) || merged.has(key)) continue;
+    if (opts?.liveOnly && offlineKeys.has(key)) continue;
     merged.set(key, toDepartmentOption(name));
   }
   return Array.from(merged.values()).sort((a, b) =>
@@ -2276,14 +2322,16 @@ export async function getCatalogDepartmentOptions(): Promise<DepartmentOption[]>
 
 /** Department management rows for the Categories page. */
 export async function getAdminDepartments(): Promise<AdminDepartment[]> {
-  const [products, customDepartments, primaryDepartments, removed] =
+  const [products, customDepartments, primaryDepartments, offlineDepartments, removed] =
     await Promise.all([
       getAdminProducts({ active: "all" }),
       getStoredCatalogDepartments(),
       getStoredPrimaryCatalogDepartments(),
+      getStoredOfflineCatalogDepartments(),
       getRemovedCatalogDepartments(),
     ]);
   const removedKeys = new Set(removed.map((d) => d.toLowerCase()));
+  const offlineKeys = new Set(offlineDepartments.map((d) => d.toLowerCase()));
 
   const counts = new Map<string, number>();
   for (const product of products) {
@@ -2314,10 +2362,19 @@ export async function getAdminDepartments(): Promise<AdminDepartment[]> {
         return [option.value.toLowerCase(), option] as const;
       }),
   );
+  const offline = new Map(
+    offlineDepartments
+      .filter((name) => !removedKeys.has(name.toLowerCase()))
+      .map((name) => {
+        const option = toDepartmentOption(name);
+        return [option.value.toLowerCase(), option] as const;
+      }),
+  );
   const names = new Map<string, DepartmentOption>();
 
   for (const [key, option] of canonical) names.set(key, option);
   for (const [key, option] of custom) names.set(key, option);
+  for (const [key, option] of offline) names.set(key, option);
   for (const product of products) {
     const department = product.department?.trim();
     if (!department) continue;
@@ -2329,7 +2386,8 @@ export async function getAdminDepartments(): Promise<AdminDepartment[]> {
   return Array.from(names.entries())
     .map(([key, option]) => {
       let source: AdminDepartment["source"] = "product";
-      if (canonical.has(key)) source = "catalog";
+      if (offlineKeys.has(key) || offline.has(key)) source = "offline";
+      else if (canonical.has(key)) source = "catalog";
       else if (custom.has(key)) source = "custom";
       return {
         name: option.value,
@@ -2367,14 +2425,14 @@ export async function getCatalogSizeOptions(): Promise<CatalogOption[]> {
   ]);
 
   const merged = new Map<string, CatalogOption>();
-  for (const option of SIZE_OPTIONS) {
+  for (const option of [...SIZE_OPTIONS, ...SHOE_SIZE_OPTIONS]) {
     merged.set(option.value.toLowerCase(), option);
   }
   for (const size of [...customSizes, ...products.flatMap(productSizeValues)]) {
     const key = size.toLowerCase();
     if (!merged.has(key)) merged.set(key, { label: size, value: size });
   }
-  return Array.from(merged.values());
+  return sortCatalogSizes(Array.from(merged.values()));
 }
 
 /** Tag options for the product form — canonical + custom + tags already on products. */

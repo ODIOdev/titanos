@@ -10,6 +10,7 @@ export type ShopFilterOptions = {
   departments: FilterOption[];
   categories: FilterOption[];
   brands: FilterOption[];
+  genders: FilterOption[];
   productTypes: FilterOption[];
   ansiClasses: FilterOption[];
   colors: FilterOption[];
@@ -85,6 +86,14 @@ export function buildShopFilterChips(
       id: "brand",
       label: labelOf(options.brands, query.brand),
       remove: ["brand"],
+    });
+  }
+
+  if (query.gender) {
+    chips.push({
+      id: "gender",
+      label: labelOf(options.genders, query.gender),
+      remove: ["gender"],
     });
   }
 

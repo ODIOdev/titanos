@@ -19,6 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { ColorSwatch } from "@/components/shared/color-swatch";
+import { groupCatalogSizes } from "@/lib/data/catalog-options";
 
 export type FilterOption = {
   label: string;
@@ -30,6 +31,7 @@ export type ProductFiltersProps = {
   categories?: FilterOption[];
   brands?: FilterOption[];
   departments?: FilterOption[];
+  genders?: FilterOption[];
   productTypes?: FilterOption[];
   ansiClasses?: FilterOption[];
   colors?: FilterOption[];
@@ -45,6 +47,106 @@ const RATING_OPTIONS = [
   { label: "3 stars & up", value: "3" },
   { label: "2 stars & up", value: "2" },
 ] as const;
+
+function formatDollar(value: number) {
+  return `$${Math.round(value).toLocaleString("en-US")}`;
+}
+
+/** Dual-thumb dollar range slider for the shop price filter. */
+function PriceRangeSlider({
+  min,
+  max,
+  valueMin,
+  valueMax,
+  onCommit,
+}: {
+  min: number;
+  max: number;
+  valueMin: number;
+  valueMax: number;
+  onCommit: (nextMin: number, nextMax: number) => void;
+}) {
+  const span = Math.max(1, max - min);
+  const [draftMin, setDraftMin] = useState(valueMin);
+  const [draftMax, setDraftMax] = useState(valueMax);
+  const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    setDraftMin(valueMin);
+    setDraftMax(valueMax);
+  }, [valueMin, valueMax]);
+
+  useEffect(() => {
+    return () => {
+      if (commitTimer.current) clearTimeout(commitTimer.current);
+    };
+  }, []);
+
+  function scheduleCommit(nextMin: number, nextMax: number) {
+    if (commitTimer.current) clearTimeout(commitTimer.current);
+    commitTimer.current = setTimeout(() => {
+      onCommit(nextMin, nextMax);
+    }, 120);
+  }
+
+  function updateMin(raw: number) {
+    const nextMin = Math.min(raw, draftMax);
+    setDraftMin(nextMin);
+    scheduleCommit(nextMin, draftMax);
+  }
+
+  function updateMax(raw: number) {
+    const nextMax = Math.max(raw, draftMin);
+    setDraftMax(nextMax);
+    scheduleCommit(draftMin, nextMax);
+  }
+
+  const leftPct = ((draftMin - min) / span) * 100;
+  const rightPct = ((draftMax - min) / span) * 100;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2 text-sm tabular-nums text-dark-charcoal">
+        <span className="font-semibold">{formatDollar(draftMin)}</span>
+        <span className="text-medium-gray">–</span>
+        <span className="font-semibold">{formatDollar(draftMax)}</span>
+      </div>
+
+      <div className="relative h-8">
+        <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-border-gray" />
+        <div
+          className="pointer-events-none absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-titan-yellow"
+          style={{ left: `${leftPct}%`, right: `${100 - rightPct}%` }}
+        />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={1}
+          value={draftMin}
+          aria-label="Minimum price"
+          onChange={(event) => updateMin(Number(event.target.value))}
+          className="price-range-thumb absolute inset-0 z-[2] w-full appearance-none bg-transparent"
+        />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={1}
+          value={draftMax}
+          aria-label="Maximum price"
+          onChange={(event) => updateMax(Number(event.target.value))}
+          className="price-range-thumb absolute inset-0 z-[3] w-full appearance-none bg-transparent"
+        />
+      </div>
+
+      <div className="flex items-center justify-between text-xs text-medium-gray">
+        <span>{formatDollar(min)}</span>
+        <span>{formatDollar(max)}</span>
+      </div>
+    </div>
+  );
+}
 
 function FilterSection({
   title,
@@ -140,16 +242,100 @@ function OptionList({
   );
 }
 
+function SizePartition({
+  title,
+  children,
+  defaultOpen = false,
+  active = false,
+}: {
+  title: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+  active?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen || active);
+  const panelId = useId();
+
+  return (
+    <div className="rounded-sm border border-border-gray/80">
+      <button
+        type="button"
+        className="flex w-full items-center justify-between gap-2 px-2.5 py-2 text-left"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((prev) => !prev)}
+      >
+        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-medium-gray">
+          {title}
+          {active ? (
+            <span className="ml-2 inline-block size-1.5 rounded-full bg-titan-yellow align-middle" />
+          ) : null}
+        </span>
+        <ChevronDown
+          className={cn(
+            "size-3.5 shrink-0 text-medium-gray transition-transform duration-200",
+            open && "rotate-180",
+          )}
+          aria-hidden="true"
+        />
+      </button>
+      <div id={panelId} hidden={!open} className={cn(open && "px-2.5 pb-2.5")}>
+        {open ? children : null}
+      </div>
+    </div>
+  );
+}
+
+function GroupedSizeOptions({
+  options,
+  selected,
+  onToggle,
+}: {
+  options: FilterOption[];
+  selected: string | null;
+  onToggle: (key: string, value: string) => void;
+}) {
+  const groups = groupCatalogSizes(options);
+  if (groups.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      {groups.map((group) => {
+        const active = Boolean(
+          selected &&
+            group.options.some((option) => option.value === selected),
+        );
+        return (
+          <SizePartition
+            key={group.id}
+            title={group.title}
+            active={active}
+            defaultOpen={active}
+          >
+            <OptionList
+              options={group.options}
+              paramKey="size"
+              selected={selected}
+              onToggle={onToggle}
+            />
+          </SizePartition>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ProductFilters({
   categories = [],
   brands = [],
   departments = [],
+  genders = [],
   productTypes = [],
   ansiClasses = [],
   colors = [],
   sizes = [],
   className,
-  priceBounds = { min: 0, max: 500 },
+  priceBounds = { min: 0, max: 200 },
   activeCount = 0,
 }: ProductFiltersProps) {
   const router = useRouter();
@@ -168,6 +354,7 @@ export function ProductFilters({
       department: searchParams.get("department") ?? searchParams.get("group"),
       category: searchParams.get("category"),
       brand: searchParams.get("brand"),
+      gender: searchParams.get("gender"),
       minPrice: searchParams.get("minPrice") ?? "",
       maxPrice: searchParams.get("maxPrice") ?? "",
       productType: searchParams.get("productType"),
@@ -242,6 +429,20 @@ export function ProductFilters({
     [updateParams],
   );
 
+  const setPriceRange = useCallback(
+    (nextMin: number, nextMax: number) => {
+      updateParams((params) => {
+        const min = Math.max(priceBounds.min, Math.min(nextMin, nextMax));
+        const max = Math.min(priceBounds.max, Math.max(nextMin, nextMax));
+        if (min <= priceBounds.min) params.delete("minPrice");
+        else params.set("minPrice", String(Math.round(min)));
+        if (max >= priceBounds.max) params.delete("maxPrice");
+        else params.set("maxPrice", String(Math.round(max)));
+      });
+    },
+    [priceBounds.max, priceBounds.min, updateParams],
+  );
+
   const clearAll = useCallback(() => {
     setQuery("");
     setPushedQuery("");
@@ -252,6 +453,7 @@ export function ProductFilters({
         "group",
         "category",
         "brand",
+        "gender",
         "minPrice",
         "maxPrice",
         "productType",
@@ -265,6 +467,12 @@ export function ProductFilters({
   }, [updateParams]);
 
   const priceActive = Boolean(current.minPrice || current.maxPrice);
+  const urlMinPrice = current.minPrice
+    ? Number(current.minPrice)
+    : priceBounds.min;
+  const urlMaxPrice = current.maxPrice
+    ? Number(current.maxPrice)
+    : priceBounds.max;
 
   const filtersBody = (
     <div
@@ -353,8 +561,30 @@ export function ProductFilters({
         </FilterSection>
       ) : null}
 
+      {genders.length > 0 ? (
+        <FilterSection title="Gender" active={Boolean(current.gender)}>
+          <OptionList
+            options={genders}
+            paramKey="gender"
+            selected={current.gender}
+            onToggle={toggleParam}
+          />
+        </FilterSection>
+      ) : null}
+
       <FilterSection title="Price" active={priceActive}>
-        <div className="grid grid-cols-2 gap-2">
+        <PriceRangeSlider
+          min={priceBounds.min}
+          max={priceBounds.max}
+          valueMin={
+            Number.isFinite(urlMinPrice) ? urlMinPrice : priceBounds.min
+          }
+          valueMax={
+            Number.isFinite(urlMaxPrice) ? urlMaxPrice : priceBounds.max
+          }
+          onCommit={setPriceRange}
+        />
+        <div className="mt-3 grid grid-cols-2 gap-2">
           <div>
             <Label htmlFor="min-price" className="sr-only">
               Minimum price
@@ -364,7 +594,8 @@ export function ProductFilters({
               type="number"
               min={priceBounds.min}
               max={priceBounds.max}
-              placeholder={`Min ${priceBounds.min}`}
+              prefix="$"
+              placeholder={String(priceBounds.min)}
               value={current.minPrice}
               onChange={(event) => setPrice("minPrice", event.target.value)}
             />
@@ -378,7 +609,8 @@ export function ProductFilters({
               type="number"
               min={priceBounds.min}
               max={priceBounds.max}
-              placeholder={`Max ${priceBounds.max}`}
+              prefix="$"
+              placeholder={String(priceBounds.max)}
               value={current.maxPrice}
               onChange={(event) => setPrice("maxPrice", event.target.value)}
             />
@@ -425,9 +657,8 @@ export function ProductFilters({
 
       {sizes.length > 0 ? (
         <FilterSection title="Size" active={Boolean(current.size)}>
-          <OptionList
+          <GroupedSizeOptions
             options={sizes}
-            paramKey="size"
             selected={current.size}
             onToggle={toggleParam}
           />

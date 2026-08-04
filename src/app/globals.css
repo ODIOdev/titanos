@@ -278,4 +278,76 @@
       animation: none;
     }
   }
+
+  /* Dual price-range thumbs — only the thumb captures pointer events. */
+  .price-range-thumb {
+    pointer-events: none;
+    height: 2rem;
+    margin: 0;
+  }
+
+  .price-range-thumb::-webkit-slider-runnable-track {
+    height: 0.375rem;
+    background: transparent;
+  }
+
+  .price-range-thumb::-moz-range-track {
+    height: 0.375rem;
+    background: transparent;
+    border: none;
+  }
+
+  .price-range-thumb::-webkit-slider-thumb {
+    pointer-events: auto;
+    -webkit-appearance: none;
+    appearance: none;
+    width: 1.125rem;
+    height: 1.125rem;
+    margin-top: -0.375rem;
+    border-radius: 9999px;
+    border: 2px solid var(--dark-charcoal);
+    background: var(--titan-yellow);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.15);
+    cursor: pointer;
+  }
+
+  .price-range-thumb::-moz-range-thumb {
+    pointer-events: auto;
+    width: 1.125rem;
+    height: 1.125rem;
+    border-radius: 9999px;
+    border: 2px solid var(--dark-charcoal);
+    background: var(--titan-yellow);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.15);
+    cursor: pointer;
+  }
+
+  .price-range-thumb:focus-visible {
+    outline: none;
+  }
+
+  .price-range-thumb:focus-visible::-webkit-slider-thumb {
+    outline: 2px solid var(--titan-yellow);
+    outline-offset: 2px;
+  }
+
+  .price-range-thumb:focus-visible::-moz-range-thumb {
+    outline: 2px solid var(--titan-yellow);
+    outline-offset: 2px;
+  }
 }
+
+/* Warm product editor surfaces (create/edit) — light, not dark. */
+.admin-product-form input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.admin-product-form textarea,
+.admin-product-form select {
+  background-color: #f8f9fa;
+  border-color: #cfd3d8;
+}
+
+.admin-product-form input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):focus-visible,
+.admin-product-form textarea:focus-visible,
+.admin-product-form select:focus-visible {
+  border-color: var(--dark-charcoal);
+}
+

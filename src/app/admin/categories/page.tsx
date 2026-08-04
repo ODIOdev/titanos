@@ -7,8 +7,7 @@ import {
   PackageOpen,
   type LucideIcon,
 } from "lucide-react";
-import { AdminSearchForm } from "@/components/admin/admin-search-form";
-import { AddDepartmentButton } from "@/components/admin/add-department-button";
+import { AddCategoryButton } from "@/components/admin/add-category-button";
 import { CategoryRowActions } from "@/components/admin/category-row-actions";
 import { DataTable } from "@/components/admin/data-table";
 import { DepartmentsManagementCard } from "@/components/admin/departments-management-card";
@@ -20,14 +19,13 @@ import {
   getAdminDepartments,
   getAdminTags,
 } from "@/lib/data/admin";
-import { matchesQuery } from "@/lib/search";
 import { cn, formatCurrency } from "@/lib/utils";
 
 /** Status bars fill completely at this product count. */
 const STATUS_BAR_CAP = 100;
 
 type TabId = "all" | "active" | "inactive" | "empty";
-type SearchParams = Promise<{ q?: string; tab?: string }>;
+type SearchParams = Promise<{ tab?: string }>;
 
 type CategoryRow = {
   category: {
@@ -54,10 +52,9 @@ function parseTab(value: string | undefined): TabId {
   return "all";
 }
 
-function buildHref(opts: { tab?: TabId; q?: string }) {
+function buildHref(opts: { tab?: TabId }) {
   const params = new URLSearchParams();
   if (opts.tab && opts.tab !== "all") params.set("tab", opts.tab);
-  if (opts.q?.trim()) params.set("q", opts.q.trim());
   const qs = params.toString();
   return qs ? `/admin/categories?${qs}` : "/admin/categories";
 }
@@ -68,7 +65,6 @@ export default async function AdminCategoriesPage({
   searchParams: SearchParams;
 }) {
   const params = await searchParams;
-  const q = params.q ?? "";
   const tab = parseTab(params.tab);
 
   const [categories, tags, departments] = await Promise.all([
@@ -101,15 +97,7 @@ export default async function AdminCategoriesPage({
     empty,
   };
 
-  const query = q.trim().toLowerCase();
-  const visible = lists[tab].filter(({ category: c }) => {
-    if (!query) return true;
-    return (
-      matchesQuery(c.name, query) ||
-      matchesQuery(c.slug, query) ||
-      matchesQuery(c.description, query)
-    );
-  });
+  const visible = lists[tab];
 
   const total = Math.max(details.length, 1);
   const totalProducts = details.reduce((sum, d) => sum + d.productCount, 0);
@@ -146,8 +134,6 @@ export default async function AdminCategoriesPage({
     },
   };
 
-  const hasFilters = Boolean(query || tab !== "all");
-
   const departmentProductCount = departments.reduce(
     (sum, d) => sum + d.productCount,
     0,
@@ -162,24 +148,6 @@ export default async function AdminCategoriesPage({
   return (
     <div className="space-y-8">
       <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <AdminSearchForm
-            placeholder="Search categories…"
-            defaultValue={q}
-            label="Search categories"
-            hiddenFields={tab !== "all" ? { tab } : undefined}
-          />
-          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-            <AddDepartmentButton />
-            <Link
-              href="/admin/categories/new"
-              className="inline-flex h-10 items-center justify-center rounded-sm bg-titan-yellow px-4 font-heading text-sm font-semibold uppercase tracking-wide text-dark-charcoal hover:bg-[#e0b400]"
-            >
-              Add new category
-            </Link>
-          </div>
-        </div>
-
         <nav
           className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"
           aria-label="Category filters"
@@ -200,7 +168,7 @@ export default async function AdminCategoriesPage({
             ]}
           />
           <CategoryMetricCard
-            href={buildHref({ tab: "all", q })}
+            href={buildHref({ tab: "all" })}
             label="Categories"
             value={String(details.length)}
             hint={`${totalProducts} products across catalog`}
@@ -215,7 +183,7 @@ export default async function AdminCategoriesPage({
             ]}
           />
           <CategoryMetricCard
-            href={buildHref({ tab: "active", q })}
+            href={buildHref({ tab: "active" })}
             label="Active"
             value={String(active.length)}
             hint={`${activeProducts} products live`}
@@ -230,7 +198,7 @@ export default async function AdminCategoriesPage({
             ]}
           />
           <CategoryMetricCard
-            href={buildHref({ tab: "inactive", q })}
+            href={buildHref({ tab: "inactive" })}
             label="Inactive"
             value={String(inactive.length)}
             hint="Hidden from shop"
@@ -251,7 +219,7 @@ export default async function AdminCategoriesPage({
             ]}
           />
           <CategoryMetricCard
-            href={buildHref({ tab: "empty", q })}
+            href={buildHref({ tab: "empty" })}
             label="Empty"
             value={String(empty.length)}
             hint="No products assigned"
@@ -281,16 +249,19 @@ export default async function AdminCategoriesPage({
           <DepartmentsManagementCard departments={departments} />
 
           <div className="min-w-0 overflow-hidden rounded-sm border border-border-gray bg-white">
-            <div className="border-b border-border-gray px-4 py-4 sm:px-5">
-              <h2 className="font-heading text-lg font-semibold uppercase tracking-wide text-dark-charcoal">
-                {tabMeta[tab].title}
-              </h2>
-              <p className="mt-0.5 text-sm text-medium-gray">
-                {tabMeta[tab].description}
-                <span className="ml-1.5 tabular-nums text-dark-charcoal">
-                  · {visible.length} item{visible.length === 1 ? "" : "s"}
-                </span>
-              </p>
+            <div className="flex items-start justify-between gap-3 border-b border-border-gray px-4 py-4 sm:px-5">
+              <div className="min-w-0">
+                <h2 className="font-heading text-lg font-semibold uppercase tracking-wide text-dark-charcoal">
+                  {tabMeta[tab].title}
+                </h2>
+                <p className="mt-0.5 text-sm text-medium-gray">
+                  {tabMeta[tab].description}
+                  <span className="ml-1.5 tabular-nums text-dark-charcoal">
+                    · {visible.length} item{visible.length === 1 ? "" : "s"}
+                  </span>
+                </p>
+              </div>
+              <AddCategoryButton className="shrink-0" />
             </div>
             <DataTable
               className="rounded-none border-0"
@@ -305,11 +276,7 @@ export default async function AdminCategoriesPage({
                   className: "w-[24%] text-right",
                 },
               ]}
-              emptyMessage={
-                hasFilters && query
-                  ? `No categories match “${q.trim()}”.`
-                  : tabMeta[tab].empty
-              }
+              emptyMessage={tabMeta[tab].empty}
               rows={visible.map(({ category: c, productCount }) => [
                 <div key={`${c.id}-name`} className="min-w-0">
                   <Link

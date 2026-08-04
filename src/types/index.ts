@@ -194,6 +194,7 @@ export type ProductFilters = {
   category?: string;
   brand?: string;
   department?: string;
+  gender?: string;
   minPrice?: number;
   maxPrice?: number;
   productType?: string;

@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   createCatalogTag,
@@ -26,6 +26,8 @@ type TagsManagementCardProps = {
 
 export function TagsManagementCard({ tags }: TagsManagementCardProps) {
   const router = useRouter();
+  const panelId = useId();
+  const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [source, setSource] = useState<"catalog" | "custom">("custom");
   const [addOpen, setAddOpen] = useState(false);
@@ -99,124 +101,150 @@ export function TagsManagementCard({ tags }: TagsManagementCardProps) {
   }
 
   return (
-    <section className="space-y-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
+    <section className="overflow-hidden rounded-sm border border-border-gray bg-white">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => setOpen((prev) => !prev)}
+        className="flex w-full items-start justify-between gap-3 px-4 py-4 text-left transition-colors hover:bg-light-gray/60 sm:px-5"
+      >
+        <div className="min-w-0">
           <h2 className="font-heading text-lg font-semibold uppercase tracking-wide text-dark-charcoal">
             Tags
           </h2>
-          <p className="mt-1 text-sm text-medium-gray">
-            Tags selected on products sync here. Add custom tags to use them on
-            new products.
+          <p className="mt-0.5 text-sm text-medium-gray">
+            Tags selected on products sync here.
+            <span className="ml-1.5 tabular-nums text-dark-charcoal">
+              · {tags.length} item{tags.length === 1 ? "" : "s"}
+            </span>
           </p>
         </div>
-        <Button
-          type="button"
-          className="shrink-0"
-          onClick={() => setAddOpen(true)}
-        >
-          <Plus className="size-4" aria-hidden="true" />
-          Add tag
-        </Button>
-      </div>
+        <ChevronDown
+          className={cn(
+            "mt-1 size-5 shrink-0 text-medium-gray transition-transform",
+            open && "rotate-180",
+          )}
+          aria-hidden="true"
+        />
+      </button>
 
-      <DataTable
-        columns={[
-          { key: "name", header: "Name" },
-          { key: "products", header: "Products" },
-          { key: "source", header: "Source" },
-          { key: "actions", header: "Actions", className: "text-right" },
-        ]}
-        emptyMessage="No tags yet. Select a tag on a product or add one with Add tag."
-        rows={tags.map((tag) => [
-          editing === tag.name ? (
-            <form
-              key={`${tag.name}-edit`}
-              className="flex max-w-xs items-center gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                saveEdit(tag.name);
-              }}
-            >
-              <input
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                autoFocus
-                disabled={pending}
-                className="h-8 w-full rounded-sm border border-border-gray px-2 text-sm focus-visible:border-dark-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow/40"
-                aria-label={`Rename ${tag.name}`}
-              />
-              <button
-                type="submit"
-                disabled={pending}
-                className="h-8 rounded-sm bg-dark-charcoal px-2 text-xs font-semibold text-white disabled:opacity-50"
+      <div id={panelId} hidden={!open} className="border-t border-border-gray">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border-gray px-4 py-3 sm:px-5">
+          <p className="text-sm text-medium-gray">
+            Add custom tags to use them on new products.
+          </p>
+          <Button
+            type="button"
+            size="sm"
+            className="shrink-0"
+            onClick={() => setAddOpen(true)}
+          >
+            <Plus className="size-3.5" aria-hidden="true" />
+            Add tag
+          </Button>
+        </div>
+
+        <DataTable
+          className="rounded-none border-0"
+          compact
+          columns={[
+            { key: "name", header: "Name" },
+            { key: "products", header: "Products" },
+            { key: "source", header: "Source" },
+            { key: "actions", header: "Actions", className: "text-right" },
+          ]}
+          emptyMessage="No tags yet. Select a tag on a product or add one with Add tag."
+          rows={tags.map((tag) => [
+            editing === tag.name ? (
+              <form
+                key={`${tag.name}-edit`}
+                className="flex max-w-xs items-center gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  saveEdit(tag.name);
+                }}
               >
-                Save
+                <input
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  autoFocus
+                  disabled={pending}
+                  className="h-8 w-full rounded-sm border border-border-gray px-2 text-sm focus-visible:border-dark-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow/40"
+                  aria-label={`Rename ${tag.name}`}
+                />
+                <button
+                  type="submit"
+                  disabled={pending}
+                  className="h-8 rounded-sm bg-dark-charcoal px-2 text-xs font-semibold text-white disabled:opacity-50"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={cancelEdit}
+                  className="h-8 rounded-sm border border-border-gray px-2 text-xs font-semibold disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </form>
+            ) : (
+              <span
+                key={`${tag.name}-name`}
+                className={cn(
+                  "inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                  getTagPastelClasses(tag.name),
+                )}
+              >
+                {tag.name}
+              </span>
+            ),
+            <span key={`${tag.name}-count`}>{tag.productCount}</span>,
+            <Badge
+              key={`${tag.name}-source`}
+              variant={tag.source === "catalog" ? "success" : "default"}
+            >
+              {tag.source === "catalog"
+                ? "Catalog"
+                : tag.source === "custom"
+                  ? "Custom"
+                  : "From products"}
+            </Badge>,
+            <div
+              key={`${tag.name}-actions`}
+              className="flex items-center justify-end gap-1"
+            >
+              <button
+                type="button"
+                disabled={pending || editing === tag.name}
+                onClick={() => startEdit(tag.name)}
+                className="inline-flex size-8 items-center justify-center rounded-sm border border-border-gray text-dark-charcoal hover:bg-light-gray disabled:opacity-50"
+                aria-label={`Edit ${tag.name}`}
+                title="Edit"
+              >
+                <Pencil className="size-3.5" aria-hidden="true" />
               </button>
               <button
                 type="button"
                 disabled={pending}
-                onClick={cancelEdit}
-                className="h-8 rounded-sm border border-border-gray px-2 text-xs font-semibold disabled:opacity-50"
+                onClick={() => setDeleteTarget(tag.name)}
+                className="inline-flex size-8 items-center justify-center rounded-sm border border-border-gray text-dark-charcoal hover:bg-light-gray disabled:opacity-50"
+                aria-label={`Delete ${tag.name}`}
+                title="Delete"
               >
-                Cancel
+                <Trash2 className="size-3.5" aria-hidden="true" />
               </button>
-            </form>
-          ) : (
-            <span
-              key={`${tag.name}-name`}
-              className={cn(
-                "inline-flex items-center rounded-sm px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                getTagPastelClasses(tag.name),
-              )}
-            >
-              {tag.name}
-            </span>
-          ),
-          <span key={`${tag.name}-count`}>{tag.productCount}</span>,
-          <Badge
-            key={`${tag.name}-source`}
-            variant={tag.source === "catalog" ? "success" : "default"}
-          >
-            {tag.source === "catalog"
-              ? "Catalog"
-              : tag.source === "custom"
-                ? "Custom"
-                : "From products"}
-          </Badge>,
-          <div
-            key={`${tag.name}-actions`}
-            className="flex items-center justify-end gap-1"
-          >
-            <button
-              type="button"
-              disabled={pending || editing === tag.name}
-              onClick={() => startEdit(tag.name)}
-              className="inline-flex size-8 items-center justify-center rounded-sm border border-border-gray text-dark-charcoal hover:bg-light-gray disabled:opacity-50"
-              aria-label={`Edit ${tag.name}`}
-              title="Edit"
-            >
-              <Pencil className="size-3.5" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              disabled={pending}
-              onClick={() => setDeleteTarget(tag.name)}
-              className="inline-flex size-8 items-center justify-center rounded-sm border border-border-gray text-dark-charcoal hover:bg-light-gray disabled:opacity-50"
-              aria-label={`Delete ${tag.name}`}
-              title="Delete"
-            >
-              <Trash2 className="size-3.5" aria-hidden="true" />
-            </button>
-          </div>,
-        ])}
-      />
+            </div>,
+          ])}
+        />
+      </div>
 
       <Dialog
         open={addOpen}
-        onOpenChange={(open) => {
-          setAddOpen(open);
-          if (!open) {
+        onOpenChange={(next) => {
+          setAddOpen(next);
+          if (!next) {
             setName("");
             setSource("custom");
           }
@@ -269,8 +297,8 @@ export function TagsManagementCard({ tags }: TagsManagementCardProps) {
 
       <ConfirmDeleteDialog
         open={Boolean(deleteTarget)}
-        onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
+        onOpenChange={(next) => {
+          if (!next) setDeleteTarget(null);
         }}
         itemLabel={deleteTarget ?? ""}
         description="This tag will be removed from the catalog and cleared from any products using it."

@@ -24,6 +24,11 @@ export type ShopDepartmentRailProps = {
 const thumbFrameClass =
   "relative flex size-12 items-center justify-center overflow-hidden rounded-sm border bg-light-gray transition-[border-color,box-shadow] sm:size-14";
 
+/** Shop-rail-only thumbs (homepage industry tiles keep their own art). */
+const SHOP_RAIL_IMAGE_OVERRIDES: Record<string, string> = {
+  "traffic-control": "/images/categories/traffic-control-shop.png",
+};
+
 function departmentHref(basePath: string, value: string) {
   const params = new URLSearchParams({ department: value });
   return `${basePath}?${params.toString()}`;
@@ -89,7 +94,9 @@ export function ShopDepartmentRail({
           const option = toDepartmentOption(department.value);
           const active =
             activeDepartment?.toLowerCase() === department.value.toLowerCase();
-          const imageUrl = departmentImagePath(option.slug);
+          const imageUrl =
+            SHOP_RAIL_IMAGE_OVERRIDES[option.slug] ??
+            departmentImagePath(option.slug);
 
           return (
             <li key={department.value} className="w-14 sm:w-16">

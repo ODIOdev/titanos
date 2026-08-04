@@ -134,6 +134,7 @@ export const productFormSchema = z.object({
   bestseller: z.boolean().default(false),
   productType: z.string().optional(),
   department: z.string().optional(),
+  gender: z.string().optional(),
   tag: z.string().optional(),
   ansiClass: z.string().optional(),
   color: z.string().optional(),

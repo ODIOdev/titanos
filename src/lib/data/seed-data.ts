@@ -273,7 +273,7 @@ export const SEED_BRANDS: SeedBrand[] = [
     slug: '3m',
     description:
       'Trusted manufacturer of personal protective equipment, adhesives, and safety solutions.',
-    logo_url: '/images/brands/3m.png',
+    logo_url: '/images/brands/3m.svg',
     website: 'https://www.3m.com',
     active: true,
   },
@@ -303,7 +303,7 @@ export const SEED_BRANDS: SeedBrand[] = [
     slug: 'honeywell',
     description:
       'Industrial safety products spanning head, eye, hand, and fall protection.',
-    logo_url: '/images/brands/honeywell.png',
+    logo_url: '/images/brands/honeywell.svg',
     website: 'https://www.honeywell.com',
     active: true,
   },
@@ -363,7 +363,7 @@ export const SEED_BRANDS: SeedBrand[] = [
     slug: 'klein-tools',
     description:
       'Hand tools and PPE trusted by electricians and trades professionals.',
-    logo_url: '/images/brands/klein-tools.jpg',
+    logo_url: '/images/brands/klein-tools.png',
     website: 'https://www.kleintools.com',
     active: true,
   },
@@ -393,7 +393,7 @@ export const SEED_BRANDS: SeedBrand[] = [
     slug: 'red-wing',
     description:
       'Heritage work boots known for fit, toughness, and long service life.',
-    logo_url: '/images/brands/red-wing.png',
+    logo_url: '/images/brands/red-wing.svg',
     website: 'https://www.redwingshoes.com',
     active: true,
   },
@@ -463,7 +463,7 @@ export const SEED_BRANDS: SeedBrand[] = [
     slug: 'plasticade',
     description:
       'Traffic control products including cones, barricades, and channelizers.',
-    logo_url: '/images/brands/plasticade.png',
+    logo_url: '/images/brands/plasticade.svg',
     website: 'https://www.plasticade.com',
     active: true,
   },
@@ -473,7 +473,7 @@ export const SEED_BRANDS: SeedBrand[] = [
     slug: 'cortina',
     description:
       'Work-zone safety products for traffic control and roadway crews.',
-    logo_url: '/images/brands/cortina.png',
+    logo_url: '/images/brands/cortina.svg',
     website: 'https://www.cortinasafety.com',
     active: true,
   },
@@ -503,7 +503,7 @@ export const SEED_BRANDS: SeedBrand[] = [
     slug: 'wolverine',
     description:
       'Work boots and outdoor footwear built for tough conditions.',
-    logo_url: '/images/brands/wolverine.png',
+    logo_url: '/images/brands/wolverine.svg',
     website: 'https://www.wolverine.com',
     active: true,
   },
@@ -513,7 +513,7 @@ export const SEED_BRANDS: SeedBrand[] = [
     slug: 'keen',
     description:
       'Comfort-focused safety toe boots and shoes for long shifts.',
-    logo_url: '/images/brands/keen.jpg',
+    logo_url: '/images/brands/keen.png',
     website: 'https://www.keenfootwear.com',
     active: true,
   },
@@ -588,7 +588,7 @@ export const NAV_CATEGORIES: NavCategory[] = [
   },
   {
     label: 'Foot Wear',
-    href: '/shop?department=Foot%20Wear',
+    href: '/shop?department=Safety%20Shoes%20%26%20Boots',
     children: [
       {
         name: 'Steel Toe Boots',

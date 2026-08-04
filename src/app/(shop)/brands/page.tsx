@@ -38,13 +38,13 @@ export default async function BrandsPage() {
                 <Image
                   src={brand.logo_url!}
                   alt={`${brand.name} logo`}
-                  width={160}
-                  height={64}
-                  className="max-h-16 w-auto bg-transparent object-contain"
+                  width={200}
+                  height={80}
+                  className="max-h-16 w-auto bg-transparent object-contain [mix-blend-mode:multiply]"
                   unoptimized
                 />
               </div>
-              <div className="p-5">
+              <div className="border-t border-border-gray p-5">
                 <h2 className="font-heading text-xl uppercase tracking-wide text-dark-charcoal group-hover:underline group-hover:underline-offset-2">
                   {brand.name}
                 </h2>

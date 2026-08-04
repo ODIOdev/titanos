@@ -29,8 +29,12 @@ import { SEED_PRODUCTS } from "@/lib/data/seed-data";
 import {
   ANSI_CLASS_OPTIONS,
   COLOR_OPTIONS,
+  GENDER_OPTIONS,
   PRODUCT_TYPE_OPTIONS,
+  SHOE_SIZE_OPTIONS,
+  SHOP_HIDDEN_DEPARTMENTS,
   SIZE_OPTIONS,
+  compareCatalogSizes,
   mergeCatalogOptions,
 } from "@/lib/data/catalog-options";
 import { cn } from "@/lib/utils";
@@ -177,19 +181,23 @@ export async function ShopCatalog({
   const [categories, brands, departmentOptions] = await Promise.all([
     getCategories(),
     getBrands(),
-    getCatalogDepartmentOptions(),
+    getCatalogDepartmentOptions({ liveOnly: true }),
   ]);
 
   // Keep shop filters aligned with admin dropdowns (plus any legacy product values).
+  // Industry parents (e.g. Safety Equipment) stay on the homepage only.
   const filterOptions: ShopFilterOptions = {
-    departments: departmentOptions.map((d) => ({
-      label: d.label,
-      value: d.value,
-    })),
+    departments: departmentOptions
+      .filter((d) => !SHOP_HIDDEN_DEPARTMENTS.has(d.value.toLowerCase()))
+      .map((d) => ({
+        label: d.label,
+        value: d.value,
+      })),
     categories: categorySlug
       ? []
       : categories.map((c) => ({ label: c.name, value: c.slug })),
     brands: brands.map((b) => ({ label: b.name, value: b.slug })),
+    genders: GENDER_OPTIONS.map((g) => ({ label: g.label, value: g.value })),
     productTypes: mergeCatalogOptions(
       PRODUCT_TYPE_OPTIONS,
       SEED_PRODUCTS.map((p) => p.product_type),
@@ -203,8 +211,12 @@ export async function ShopCatalog({
       SEED_PRODUCTS.map((p) => p.color),
     ),
     sizes: mergeCatalogOptions(
-      SIZE_OPTIONS,
+      [...SIZE_OPTIONS, ...SHOE_SIZE_OPTIONS],
       SEED_PRODUCTS.map((p) => p.size),
+      {
+        compare: (a, b) =>
+          compareCatalogSizes(a.label || a.value, b.label || b.value),
+      },
     ),
   };
 
@@ -274,10 +286,20 @@ export async function ShopCatalog({
             departments={filterOptions.departments}
             categories={filterOptions.categories}
             brands={filterOptions.brands}
+            genders={filterOptions.genders}
             productTypes={filterOptions.productTypes}
             ansiClasses={filterOptions.ansiClasses}
             colors={filterOptions.colors}
             sizes={filterOptions.sizes}
+            priceBounds={{
+              min: 0,
+              max: Math.max(
+                350,
+                Math.ceil(
+                  Math.max(...SEED_PRODUCTS.map((p) => p.price), 350) / 10,
+                ) * 10,
+              ),
+            }}
             activeCount={chips.length}
           />
         </Suspense>
