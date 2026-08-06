@@ -11,6 +11,8 @@ export type SeedCategory = {
   image_url: string
   sort_order: number
   active: boolean
+  sku_prefix?: string | null
+  department?: string | null
 }
 
 export type SeedBrand = {
@@ -273,7 +275,7 @@ export const SEED_BRANDS: SeedBrand[] = [
     slug: '3m',
     description:
       'Trusted manufacturer of personal protective equipment, adhesives, and safety solutions.',
-    logo_url: '/images/brands/3m.svg',
+    logo_url: '/images/brands/3m.png',
     website: 'https://www.3m.com',
     active: true,
   },
@@ -303,7 +305,7 @@ export const SEED_BRANDS: SeedBrand[] = [
     slug: 'honeywell',
     description:
       'Industrial safety products spanning head, eye, hand, and fall protection.',
-    logo_url: '/images/brands/honeywell.svg',
+    logo_url: '/images/brands/honeywell.png',
     website: 'https://www.honeywell.com',
     active: true,
   },
@@ -334,8 +336,6 @@ export const SEED_BRANDS: SeedBrand[] = [
     description:
       'Affordable eye, head, and hearing protection for everyday jobsites.',
     logo_url: '/images/brands/pyramex.png',
-    website: 'https://www.pyramexsafety.com',
-    active: true,
   },
   {
     id: BRAND_IDS.radians,
@@ -373,7 +373,7 @@ export const SEED_BRANDS: SeedBrand[] = [
     slug: 'cat',
     description:
       'Rugged work boots and footwear built for construction and industrial use.',
-    logo_url: '/images/brands/cat.svg',
+    logo_url: '/images/brands/cat.png',
     website: 'https://www.catfootwear.com',
     active: true,
   },

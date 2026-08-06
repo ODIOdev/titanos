@@ -12,21 +12,25 @@ import {
   categoryFormSchema,
   type CategoryFormInput,
 } from "@/lib/validations";
+import { toSelectOptions } from "@/lib/data/catalog-options";
 import { cn, slugify } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 
 type AdminCategoryFormProps = {
   mode?: "create" | "edit";
   categoryId?: string;
   defaultValues?: Partial<CategoryFormInput>;
+  departmentOptions?: { label: string; value: string }[];
 };
 
 export function AdminCategoryForm({
   mode = "create",
   categoryId,
   defaultValues,
+  departmentOptions = [],
 }: AdminCategoryFormProps) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -49,11 +53,12 @@ export function AdminCategoryForm({
       description: "",
       imageUrl: "",
       sortOrder: 0,
-      active: true,
+      active: false,
+      skuPrefix: "",
+      department: "",
       ...defaultValues,
     },
   });
-  const active = watch("active");
   const imageUrl = watch("imageUrl");
   const displayUrl = previewUrl || (imageUrl?.trim() ? imageUrl : null);
 
@@ -138,17 +143,17 @@ export function AdminCategoryForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="max-w-2xl space-y-5 rounded-sm border border-border-gray bg-white p-6"
+      className="max-w-2xl space-y-4 rounded-sm border border-border-gray bg-white p-3 @5xl:space-y-5 @5xl:p-6"
       noValidate
     >
       <div>
         <p className="mb-2 text-sm font-medium text-dark-charcoal">
           Default image
         </p>
-        <div className="flex items-start gap-3">
+        <div className="flex flex-col gap-3 @5xl:flex-row @5xl:items-start">
           <div
             className={cn(
-              "relative size-28 shrink-0 overflow-hidden rounded-sm border border-border-gray bg-light-gray",
+              "relative mx-auto size-28 shrink-0 overflow-hidden rounded-sm border border-border-gray bg-light-gray @5xl:mx-0",
               dragOver && "border-titan-yellow ring-1 ring-titan-yellow",
             )}
             onDragOver={(e) => {
@@ -200,7 +205,7 @@ export function AdminCategoryForm({
               </button>
             )}
           </div>
-          <div className="min-w-0 pt-0.5">
+          <div className="min-w-0 text-center @5xl:pt-0.5 @5xl:text-left">
             <p className="text-xs text-medium-gray">
               Used on category cards and the shop grid. JPG, PNG, or WEBP · max
               8 MB.
@@ -209,7 +214,7 @@ export function AdminCategoryForm({
               type="button"
               variant="outline"
               size="sm"
-              className="mt-2"
+              className="mt-2 w-full @5xl:w-auto"
               disabled={uploading || pending}
               onClick={() => fileInputRef.current?.click()}
             >
@@ -245,6 +250,23 @@ export function AdminCategoryForm({
           },
         })}
       />
+      <Select
+        label="Department"
+        hint="Which merchandise department this category belongs to"
+        options={toSelectOptions(departmentOptions, "Select department")}
+        error={errors.department?.message}
+        {...register("department")}
+      />
+      <Input
+        label="SKU prefix"
+        placeholder="e.g. WGG"
+        error={errors.skuPrefix?.message}
+        hint="Used for new product SKUs (WGG-0001). Leave blank to use name initials."
+        {...register("skuPrefix", {
+          setValueAs: (value: string) =>
+            value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 12),
+        })}
+      />
       <Textarea
         label="Description"
         rows={4}
@@ -258,32 +280,31 @@ export function AdminCategoryForm({
         error={errors.sortOrder?.message}
         {...register("sortOrder")}
       />
-      <label className="inline-flex items-center gap-2 text-sm text-dark-charcoal">
-        <input
-          type="checkbox"
-          className="size-4 rounded-sm border-border-gray"
-          checked={active}
-          onChange={(e) =>
-            setValue("active", e.target.checked, { shouldValidate: true })
-          }
-        />
-        Active
-      </label>
-      <div className="flex flex-wrap gap-3 pt-2">
-        <Button type="submit" variant="primary" disabled={pending || uploading}>
-          {pending
-            ? "Saving…"
-            : mode === "edit"
-              ? "Save changes"
-              : "Create category"}
-        </Button>
+      <p className="text-xs text-medium-gray">
+        Status is automatic: inactive with no products, active once a product is
+        assigned.
+      </p>
+      <div className="flex flex-col-reverse gap-2 pt-2 @5xl:flex-row @5xl:flex-wrap @5xl:gap-3">
         <Button
           type="button"
           variant="outline"
           disabled={pending || uploading}
           onClick={() => router.push("/admin/categories")}
+          className="w-full @5xl:w-auto"
         >
           Cancel
+        </Button>
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={pending || uploading}
+          className="w-full @5xl:w-auto"
+        >
+          {pending
+            ? "Saving…"
+            : mode === "edit"
+              ? "Save changes"
+              : "Create category"}
         </Button>
       </div>
     </form>

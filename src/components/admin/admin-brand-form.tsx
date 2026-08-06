@@ -50,12 +50,11 @@ export function AdminBrandForm({
       description: "",
       logoUrl: "",
       website: "",
-      active: true,
+      active: false,
       ...defaultValues,
     },
   });
 
-  const active = watch("active");
   const logoUrl = watch("logoUrl");
   const displayUrl = previewUrl || (logoUrl?.trim() ? logoUrl : null);
 
@@ -125,7 +124,13 @@ export function AdminBrandForm({
         return;
       }
       toast.success(result.message);
-      router.push("/admin/brands");
+      if (mode === "edit" && brandId) {
+        router.push(`/admin/brands/${brandId}`);
+      } else if (result.id) {
+        router.push(`/admin/brands/${result.id}`);
+      } else {
+        router.push("/admin/brands");
+      }
       router.refresh();
     });
   });
@@ -268,17 +273,12 @@ export function AdminBrandForm({
             ) : null}
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-dark-charcoal">
-            <input
-              type="checkbox"
-              className="size-4 rounded-sm border-border-gray"
-              checked={active}
-              onChange={(e) =>
-                setValue("active", e.target.checked, { shouldDirty: true })
-              }
-            />
-            Active (visible in shop)
-          </label>
+          <p className="rounded-sm border border-border-gray bg-light-gray/50 px-3 py-2.5 text-sm text-medium-gray">
+            Visibility is automatic: brands with at least one product are{" "}
+            <span className="font-medium text-dark-charcoal">Active</span> and
+            show on the homepage. Brands with no products stay in Archives.
+          </p>
+          <input type="hidden" {...register("active")} />
         </div>
       </section>
 
@@ -286,7 +286,13 @@ export function AdminBrandForm({
         <Button
           type="button"
           variant="secondary"
-          onClick={() => router.push("/admin/brands")}
+          onClick={() =>
+            router.push(
+              mode === "edit" && brandId
+                ? `/admin/brands/${brandId}`
+                : "/admin/brands",
+            )
+          }
         >
           Cancel
         </Button>

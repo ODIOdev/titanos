@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { ChevronDown, Plus, Trash2 } from "lucide-react";
-import { COLOR_OPTIONS, SIZE_OPTIONS } from "@/lib/data/catalog-options";
+import { COLOR_OPTIONS, SIZE_OPTIONS, groupCatalogSizes } from "@/lib/data/catalog-options";
 import { ColorSwatch } from "@/components/shared/color-swatch";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,49 @@ function emptyRow(): VariantRow {
   return { color: "", size: "", qty: 0 };
 }
 
+/** Number input that clears a leading 0 so typing isn’t blocked. */
+function QtyInput({
+  value,
+  onChange,
+  ariaLabel,
+}: {
+  value: number;
+  onChange: (qty: number) => void;
+  ariaLabel: string;
+}) {
+  const [focused, setFocused] = useState(false);
+  const [draft, setDraft] = useState("");
+  const qty = Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+
+  return (
+    <Input
+      type="text"
+      inputMode="numeric"
+      pattern="[0-9]*"
+      aria-label={ariaLabel}
+      value={focused ? draft : qty === 0 ? "" : String(qty)}
+      placeholder="0"
+      onFocus={(e) => {
+        setFocused(true);
+        setDraft(qty === 0 ? "" : String(qty));
+        e.currentTarget.select();
+      }}
+      onBlur={() => {
+        setFocused(false);
+        const next = Math.max(0, Number.parseInt(draft, 10) || 0);
+        onChange(next);
+        setDraft("");
+      }}
+      onChange={(e) => {
+        const raw = e.target.value.replace(/\D/g, "");
+        setDraft(raw);
+        onChange(raw === "" ? 0 : Math.max(0, Number.parseInt(raw, 10) || 0));
+      }}
+      className="h-9"
+    />
+  );
+}
+
 function ColorSelect({
   value,
   onChange,
@@ -36,16 +80,65 @@ function ColorSelect({
   ariaLabel: string;
 }) {
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>({});
   const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLUListElement>(null);
   const listId = useId();
   const selected = COLOR_OPTIONS.find((opt) => opt.value === value);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open || !buttonRef.current) return;
+
+    function placeMenu() {
+      const button = buttonRef.current;
+      if (!button) return;
+      const rect = button.getBoundingClientRect();
+      const menuHeight = Math.min(224, window.innerHeight - 16);
+      const spaceBelow = window.innerHeight - rect.bottom - 8;
+      const openUp = spaceBelow < menuHeight && rect.top > spaceBelow;
+      const top = openUp
+        ? Math.max(8, rect.top - menuHeight - 4)
+        : rect.bottom + 4;
+
+      setMenuStyle({
+        position: "fixed",
+        top,
+        left: rect.left,
+        width: rect.width,
+        maxHeight: openUp
+          ? Math.min(menuHeight, rect.top - 12)
+          : Math.min(menuHeight, window.innerHeight - rect.bottom - 12),
+        zIndex: 80,
+      });
+    }
+
+    placeMenu();
+    window.addEventListener("resize", placeMenu);
+    // Capture scroll from overflow ancestors (matrix scroller, admin shell).
+    window.addEventListener("scroll", placeMenu, true);
+    return () => {
+      window.removeEventListener("resize", placeMenu);
+      window.removeEventListener("scroll", placeMenu, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
     if (!open) return;
     function onPointerDown(event: MouseEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false);
+      const target = event.target as Node;
+      if (
+        rootRef.current?.contains(target) ||
+        menuRef.current?.contains(target)
+      ) {
+        return;
       }
+      setOpen(false);
     }
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") setOpen(false);
@@ -58,9 +151,59 @@ function ColorSelect({
     };
   }, [open]);
 
+  const menu = open ? (
+    <ul
+      ref={menuRef}
+      id={listId}
+      role="listbox"
+      aria-label={ariaLabel}
+      style={menuStyle}
+      className="overflow-auto rounded-sm border border-border-gray bg-white py-1 shadow-md"
+    >
+      <li role="option" aria-selected={value === ""}>
+        <button
+          type="button"
+          className={cn(
+            "flex w-full items-center gap-2 px-2.5 py-2 text-left text-sm hover:bg-light-gray",
+            value === "" && "bg-light-gray",
+          )}
+          onClick={() => {
+            onChange("");
+            setOpen(false);
+          }}
+        >
+          <span className="size-4 shrink-0 rounded-sm border border-dashed border-medium-gray" />
+          <span className="text-medium-gray">Select color</span>
+        </button>
+      </li>
+      {COLOR_OPTIONS.map((opt) => {
+        const isSelected = value === opt.value;
+        return (
+          <li key={opt.value} role="option" aria-selected={isSelected}>
+            <button
+              type="button"
+              className={cn(
+                "flex w-full items-center gap-2 px-2.5 py-2 text-left text-sm hover:bg-light-gray",
+                isSelected && "bg-light-gray",
+              )}
+              onClick={() => {
+                onChange(opt.value);
+                setOpen(false);
+              }}
+            >
+              <ColorSwatch color={opt.value} size="md" />
+              <span className="font-medium text-dark-charcoal">{opt.label}</span>
+            </button>
+          </li>
+        );
+      })}
+    </ul>
+  ) : null;
+
   return (
     <div ref={rootRef} className="relative min-w-0">
       <button
+        ref={buttonRef}
         type="button"
         aria-label={ariaLabel}
         aria-haspopup="listbox"
@@ -91,54 +234,7 @@ function ColorSelect({
         />
       </button>
 
-      {open ? (
-        <ul
-          id={listId}
-          role="listbox"
-          aria-label={ariaLabel}
-          className="absolute left-0 right-0 z-30 mt-1 max-h-56 overflow-auto rounded-sm border border-border-gray bg-white py-1 shadow-md"
-        >
-          <li role="option" aria-selected={value === ""}>
-            <button
-              type="button"
-              className={cn(
-                "flex w-full items-center gap-2 px-2.5 py-2 text-left text-sm hover:bg-light-gray",
-                value === "" && "bg-light-gray",
-              )}
-              onClick={() => {
-                onChange("");
-                setOpen(false);
-              }}
-            >
-              <span className="size-4 shrink-0 rounded-sm border border-dashed border-medium-gray" />
-              <span className="text-medium-gray">Select color</span>
-            </button>
-          </li>
-          {COLOR_OPTIONS.map((opt) => {
-            const isSelected = value === opt.value;
-            return (
-              <li key={opt.value} role="option" aria-selected={isSelected}>
-                <button
-                  type="button"
-                  className={cn(
-                    "flex w-full items-center gap-2 px-2.5 py-2 text-left text-sm hover:bg-light-gray",
-                    isSelected && "bg-light-gray",
-                  )}
-                  onClick={() => {
-                    onChange(opt.value);
-                    setOpen(false);
-                  }}
-                >
-                  <ColorSwatch color={opt.value} size="md" />
-                  <span className="font-medium text-dark-charcoal">
-                    {opt.label}
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
-      ) : null}
+      {mounted && menu ? createPortal(menu, document.body) : null}
     </div>
   );
 }
@@ -179,7 +275,7 @@ export function VariantMatrixField({
             Size &amp; color matrix
           </p>
           <p className="mt-0.5 text-xs text-medium-gray">
-            Shoppers pick from these combinations on the product page.
+            Size is required for stock. Color is optional (saved as Default).
           </p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={addRow}>
@@ -188,7 +284,8 @@ export function VariantMatrixField({
         </Button>
       </div>
 
-      <div className="overflow-visible rounded-sm border border-border-gray">
+      <div className="overflow-x-auto rounded-sm border border-border-gray [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="min-w-[28rem]">
         <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.8fr)_5.5rem_2.5rem] gap-2 border-b border-border-gray bg-light-gray px-3 py-2 text-xs font-semibold uppercase tracking-wide text-medium-gray">
           <span>Color</span>
           <span>Size</span>
@@ -219,25 +316,21 @@ export function VariantMatrixField({
                 className="flex h-9 w-full appearance-none rounded-sm border border-border-gray bg-white px-2 py-1.5 text-sm text-near-black focus-visible:border-dark-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow/40"
               >
                 <option value="">Size</option>
-                {sizeOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
+                {groupCatalogSizes(sizeOptions).map((group) => (
+                  <optgroup key={group.id} label={group.title}>
+                    {group.options.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </optgroup>
                 ))}
               </select>
 
-              <Input
-                type="number"
-                min={0}
-                inputMode="numeric"
-                aria-label={`Quantity row ${index + 1}`}
-                value={Number.isFinite(row.qty) ? row.qty : 0}
-                onChange={(e) =>
-                  updateRow(index, {
-                    qty: Math.max(0, Number.parseInt(e.target.value, 10) || 0),
-                  })
-                }
-                className="h-9"
+              <QtyInput
+                value={row.qty}
+                ariaLabel={`Quantity row ${index + 1}`}
+                onChange={(qty) => updateRow(index, { qty })}
               />
 
               <button
@@ -251,13 +344,20 @@ export function VariantMatrixField({
             </li>
           ))}
         </ul>
+        </div>
       </div>
     </div>
   );
 }
 
 export function normalizeVariantRows(rows: VariantRow[]): VariantRow[] {
-  return rows.filter((row) => row.color.trim() && row.size.trim());
+  return rows
+    .filter((row) => row.size.trim())
+    .map((row) => ({
+      color: row.color.trim() || "Default",
+      size: row.size.trim(),
+      qty: Number.isFinite(row.qty) && row.qty >= 0 ? Math.floor(row.qty) : 0,
+    }));
 }
 
 export function parseVariantRows(raw: unknown): VariantRow[] {

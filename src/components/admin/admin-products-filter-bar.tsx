@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 type Option = { id: string; name: string };
 
@@ -17,6 +18,8 @@ type AdminProductsFilterBarProps = {
   brands: Option[];
   hasFilters: boolean;
   clearHref: string;
+  /** Tighter layout for mobile filter drawer. */
+  compact?: boolean;
 };
 
 function buildQuery(opts: {
@@ -46,6 +49,7 @@ export function AdminProductsFilterBar({
   brands,
   hasFilters,
   clearHref,
+  compact = false,
 }: AdminProductsFilterBarProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -117,7 +121,11 @@ export function AdminProductsFilterBar({
 
   return (
     <form
-      className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-end"
+      className={cn(
+        compact
+          ? "grid grid-cols-2 gap-2"
+          : "flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-end",
+      )}
       role="search"
       onSubmit={(e) => {
         e.preventDefault();
@@ -125,25 +133,32 @@ export function AdminProductsFilterBar({
         navigate({ q: query });
       }}
     >
-      <div className="min-w-[12rem] flex-1 lg:max-w-xs">
+      <div
+        className={cn(
+          compact ? "col-span-2" : "min-w-[12rem] flex-1 lg:max-w-xs",
+        )}
+      >
         <Input
           name="q"
           type="search"
-          label="Search"
-          placeholder="Name, SKU, brand, category, tag…"
+          label={compact ? undefined : "Search"}
+          placeholder="Name, SKU, brand…"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search products"
           aria-busy={pending || undefined}
         />
       </div>
-      <div className="min-w-[10rem] flex-1 sm:max-w-[12rem]">
-        <label className="mb-1.5 block text-sm font-medium text-dark-charcoal">
-          Category
-        </label>
+      <div className={cn(!compact && "min-w-[10rem] flex-1 sm:max-w-[12rem]")}>
+        {compact ? null : (
+          <label className="mb-1.5 block text-sm font-medium text-dark-charcoal">
+            Category
+          </label>
+        )}
         <select
           name="category"
           value={category}
+          aria-label="Category"
           onChange={(e) => {
             const value = e.target.value;
             setCategory(value);
@@ -159,13 +174,16 @@ export function AdminProductsFilterBar({
           ))}
         </select>
       </div>
-      <div className="min-w-[10rem] flex-1 sm:max-w-[12rem]">
-        <label className="mb-1.5 block text-sm font-medium text-dark-charcoal">
-          Brand
-        </label>
+      <div className={cn(!compact && "min-w-[10rem] flex-1 sm:max-w-[12rem]")}>
+        {compact ? null : (
+          <label className="mb-1.5 block text-sm font-medium text-dark-charcoal">
+            Brand
+          </label>
+        )}
         <select
           name="brand"
           value={brand}
+          aria-label="Brand"
           onChange={(e) => {
             const value = e.target.value;
             setBrand(value);
@@ -181,13 +199,20 @@ export function AdminProductsFilterBar({
           ))}
         </select>
       </div>
-      <div className="min-w-[9rem] flex-1 sm:max-w-[11rem]">
-        <label className="mb-1.5 block text-sm font-medium text-dark-charcoal">
-          Stock
-        </label>
+      <div
+        className={cn(
+          compact ? "col-span-2" : "min-w-[9rem] flex-1 sm:max-w-[11rem]",
+        )}
+      >
+        {compact ? null : (
+          <label className="mb-1.5 block text-sm font-medium text-dark-charcoal">
+            Stock
+          </label>
+        )}
         <select
           name="stock"
           value={stockFilter}
+          aria-label="Stock"
           onChange={(e) => {
             const value = e.target.value as typeof stockFilter;
             setStockFilter(value);
@@ -201,7 +226,7 @@ export function AdminProductsFilterBar({
           <option value="out">Out of stock</option>
         </select>
       </div>
-      {hasFilters ? (
+      {!compact && hasFilters ? (
         <Link
           href={clearHref}
           className="inline-flex h-10 shrink-0 items-center px-2 text-sm font-medium text-medium-gray hover:text-dark-charcoal"

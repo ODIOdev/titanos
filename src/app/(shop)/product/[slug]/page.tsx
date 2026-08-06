@@ -6,6 +6,7 @@ import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { ProductGallery } from "@/components/products/product-gallery";
 import { ProductGrid } from "@/components/products/product-grid";
 import { ProductPurchase } from "@/components/products/product-purchase";
+import { ProductReviewForm } from "@/components/products/product-review-form";
 import { ProductTabs } from "@/components/products/product-tabs";
 import { PriceDisplay } from "@/components/products/price-display";
 import { Badge } from "@/components/ui/badge";
@@ -15,7 +16,12 @@ import {
   getProductBySlug,
   getProducts,
 } from "@/lib/data/products";
+import {
+  getApprovedReviews,
+  getMyProductReview,
+} from "@/lib/data/reviews";
 import { FREE_SHIPPING_THRESHOLD, SITE_CONFIG } from "@/lib/data/seed-data";
+import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { absoluteUrl, formatCurrency } from "@/lib/utils";
 
 type ProductPageProps = {
@@ -36,32 +42,6 @@ function stockCopy(quantity: number, threshold: number) {
     label: `In stock (${quantity} available)`,
     className: "text-green-700",
   };
-}
-
-function placeholderReviews(productName: string, ratingAvg: number, count: number) {
-  const templates = [
-    {
-      author: "Marcus R.",
-      title: "Solid gear for our crew",
-      body: `${productName} held up through a full season of outdoor work. Comfortable and compliant.`,
-    },
-    {
-      author: "Priya S.",
-      title: "Exactly as described",
-      body: "Arrived fast, matched the specs on the listing, and our safety lead approved it immediately.",
-    },
-    {
-      author: "Jordan T.",
-      title: "Will reorder",
-      body: "Good value for professional-grade equipment. Packaging was clean and ready for the jobsite.",
-    },
-  ];
-
-  const n = Math.min(Math.max(count || 3, 1), templates.length);
-  return templates.slice(0, n).map((review, index) => ({
-    ...review,
-    rating: Math.min(5, Math.max(3, Math.round(ratingAvg || 4) - (index === 2 ? 1 : 0))),
-  }));
 }
 
 export async function generateMetadata({
@@ -138,12 +118,32 @@ export default async function ProductPage({ params }: ProductPageProps) {
     product.low_stock_threshold,
   );
 
-  const [relatedResult, featured] = await Promise.all([
-    product.category?.slug
-      ? getProducts({ category: product.category.slug, sort: "featured" }, 8)
-      : Promise.resolve({ products: [] as Awaited<ReturnType<typeof getProducts>>["products"] }),
-    getFeaturedProducts(6),
-  ]);
+  const [relatedResult, featured, reviews, myReview, authUser] =
+    await Promise.all([
+      product.category?.slug
+        ? getProducts({ category: product.category.slug, sort: "featured" }, 8)
+        : Promise.resolve({
+            products: [] as Awaited<
+              ReturnType<typeof getProducts>
+            >["products"],
+          }),
+      getFeaturedProducts(6),
+      getApprovedReviews(product.id),
+      getMyProductReview(product.id),
+      (async () => {
+        if (!isSupabaseConfigured()) return null;
+        try {
+          const { createClient } = await import("@/lib/supabase/server");
+          const supabase = await createClient();
+          const {
+            data: { user },
+          } = await supabase.auth.getUser();
+          return user;
+        } catch {
+          return null;
+        }
+      })(),
+    ]);
 
   const related = relatedResult.products
     .filter((p) => p.id !== product.id)
@@ -153,11 +153,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
     .filter((p) => p.id !== product.id)
     .slice(0, 3);
 
-  const reviews = placeholderReviews(
-    product.name,
-    product.rating_avg,
-    product.rating_count,
-  );
+  const isAuthenticated = Boolean(authUser);
 
   const jsonLd = {
     "@context": "https://schema.org",
@@ -236,16 +232,24 @@ export default async function ProductPage({ params }: ProductPageProps) {
               <p className="text-sm text-medium-gray">SKU: {product.sku}</p>
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <StarRating
-                rating={product.rating_avg}
-                count={product.rating_count}
-                showValue
+            <div className="space-y-3">
+              <ProductReviewForm
+                productId={product.id}
+                productSlug={product.slug}
+                ratingAvg={product.rating_avg}
+                ratingCount={product.rating_count}
+                isAuthenticated={isAuthenticated}
+                myReview={myReview}
+                variant="hero"
               />
-              {product.bestseller ? (
-                <Badge variant="bestseller">Bestseller</Badge>
-              ) : null}
-              {product.featured ? <Badge variant="default">Featured</Badge> : null}
+              <div className="flex flex-wrap items-center gap-2">
+                {product.bestseller ? (
+                  <Badge variant="bestseller">Bestseller</Badge>
+                ) : null}
+                {product.featured ? (
+                  <Badge variant="default">Featured</Badge>
+                ) : null}
+              </div>
             </div>
 
             <PriceDisplay
@@ -309,36 +313,61 @@ export default async function ProductPage({ params }: ProductPageProps) {
                 Customer Reviews
               </h2>
               <p className="mt-2 text-sm text-medium-gray">
-                Based on {product.rating_count || reviews.length} reviews
+                {product.rating_count > 0
+                  ? `Based on ${product.rating_count} rating${product.rating_count === 1 ? "" : "s"}`
+                  : "No ratings yet — be the first."}
               </p>
             </div>
             <StarRating
-              rating={product.rating_avg || 4.5}
-              count={product.rating_count || reviews.length}
+              rating={product.rating_avg}
+              count={product.rating_count}
               showValue
               size="lg"
             />
           </div>
 
-          <ul className="grid gap-4 md:grid-cols-3">
-            {reviews.map((review) => (
-              <li
-                key={review.author}
-                className="rounded-sm border border-border-gray bg-white p-5"
-              >
-                <StarRating rating={review.rating} size="sm" />
-                <p className="mt-3 font-heading text-sm uppercase tracking-wide text-dark-charcoal">
-                  {review.title}
-                </p>
-                <p className="mt-2 text-sm leading-relaxed text-medium-gray">
-                  {review.body}
-                </p>
-                <p className="mt-4 text-xs font-semibold tracking-wide text-medium-gray uppercase">
-                  {review.author}
-                </p>
-              </li>
-            ))}
-          </ul>
+          <ProductReviewForm
+            productId={product.id}
+            productSlug={product.slug}
+            ratingAvg={product.rating_avg}
+            ratingCount={product.rating_count}
+            isAuthenticated={isAuthenticated}
+            myReview={myReview}
+            variant="section"
+            className="mb-6"
+          />
+
+          {reviews.length > 0 ? (
+            <ul className="grid gap-4 md:grid-cols-3">
+              {reviews.map((review) => (
+                <li
+                  key={review.id}
+                  className="rounded-sm border border-border-gray bg-white p-5"
+                >
+                  <StarRating rating={review.rating} size="sm" />
+                  {review.title ? (
+                    <p className="mt-3 font-heading text-sm uppercase tracking-wide text-dark-charcoal">
+                      {review.title}
+                    </p>
+                  ) : null}
+                  {review.body ? (
+                    <p className="mt-2 text-sm leading-relaxed text-medium-gray">
+                      {review.body}
+                    </p>
+                  ) : null}
+                  <p className="mt-4 text-xs font-semibold tracking-wide text-medium-gray uppercase">
+                    {review.author_name}
+                    {review.verified_purchase ? " · Verified purchase" : ""}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="rounded-sm border border-dashed border-border-gray bg-light-gray/40 px-4 py-6 text-sm text-medium-gray">
+              Ratings appear here after customers submit them. Use the stars
+              above to leave yours.
+            </p>
+          )}
         </section>
 
         {frequentlyBought.length > 0 ? (

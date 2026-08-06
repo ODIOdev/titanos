@@ -39,7 +39,8 @@ export function NewsletterForm({ className }: NewsletterFormProps) {
         return;
       }
       toast.success(
-        result.message ?? "You're subscribed. Watch your inbox for safety updates.",
+        result.message ??
+          "You're subscribed. Watch your inbox for safety updates.",
       );
       reset();
     } catch {
@@ -51,20 +52,23 @@ export function NewsletterForm({ className }: NewsletterFormProps) {
 
   return (
     <section
-      className={cn("section-y border-t border-border-gray bg-muted-gray", className)}
+      className={cn(
+        "section-y border-t border-border-gray bg-muted-gray",
+        className,
+      )}
       aria-labelledby="newsletter-heading"
     >
       <div className="container-titan">
-        <div className="grid items-center gap-8 lg:grid-cols-[1fr_1.1fr] lg:gap-12">
+        <div className="grid items-center gap-6 @5xl:grid-cols-[1fr_1.1fr] @5xl:gap-12">
           <div>
             <p className="eyebrow">Stay informed</p>
             <h2
               id="newsletter-heading"
-              className="mt-2 font-heading text-3xl uppercase tracking-wide text-dark-charcoal sm:text-4xl"
+              className="mt-2 font-heading text-2xl uppercase tracking-wide text-dark-charcoal @3xl:text-3xl @5xl:text-4xl"
             >
               Safety updates delivered to your inbox.
             </h2>
-            <p className="mt-3 max-w-md text-base text-medium-gray">
+            <p className="mt-2 max-w-md text-sm text-medium-gray @3xl:mt-3 @3xl:text-base">
               Product alerts, compliance tips, and volume-pricing offers — no
               fluff.
             </p>
@@ -73,7 +77,7 @@ export function NewsletterForm({ className }: NewsletterFormProps) {
           <div>
             <form
               onSubmit={onSubmit}
-              className="flex flex-col gap-3 sm:flex-row sm:items-start"
+              className="flex flex-col gap-3 @3xl:flex-row @3xl:items-start"
               noValidate
             >
               <div className="flex-1 text-left">
@@ -92,7 +96,7 @@ export function NewsletterForm({ className }: NewsletterFormProps) {
                 variant="primary"
                 size="lg"
                 disabled={isSubmitting}
-                className="w-full shrink-0 sm:w-auto"
+                className="w-full shrink-0 @3xl:w-auto"
               >
                 {isSubmitting ? "Subscribing…" : "Subscribe"}
               </Button>

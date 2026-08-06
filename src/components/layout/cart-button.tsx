@@ -14,7 +14,7 @@ export function CartButton({ className }: { className?: string }) {
     <Link
       href="/cart"
       className={cn(
-        "relative inline-flex size-10 items-center justify-center rounded-sm text-dark-charcoal transition-colors hover:bg-light-gray",
+        "relative inline-flex size-10 items-center justify-center rounded-sm text-dark-charcoal transition-colors",
         className
       )}
       aria-label={count > 0 ? `Cart, ${count} items` : "Cart"}

@@ -4,22 +4,26 @@ import {
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   useTransition,
   type ReactNode,
 } from "react";
+import { createPortal } from "react-dom";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown, Filter, X } from "lucide-react";
+import { ChevronDown, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { ColorSwatch } from "@/components/shared/color-swatch";
 import { groupCatalogSizes } from "@/lib/data/catalog-options";
+
+/** Mount target above the department rail on the shop catalog. */
+export const SHOP_FILTERS_MOBILE_ROOT_ID = "shop-filters-mobile-root";
 
 export type FilterOption = {
   label: string;
@@ -32,8 +36,8 @@ export type ProductFiltersProps = {
   brands?: FilterOption[];
   departments?: FilterOption[];
   genders?: FilterOption[];
-  productTypes?: FilterOption[];
   ansiClasses?: FilterOption[];
+  materials?: FilterOption[];
   colors?: FilterOption[];
   sizes?: FilterOption[];
   className?: string;
@@ -161,17 +165,35 @@ function FilterSection({
 }) {
   const [open, setOpen] = useState(defaultOpen || active);
   const panelId = useId();
+  const sectionRef = useRef<HTMLDivElement>(null);
 
   return (
-    <div className="border-b border-border-gray pb-3">
+    <div
+      ref={sectionRef}
+      className="scroll-mt-3 border-b border-border-gray pb-3 last:border-b-0"
+    >
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-2 py-2 text-left"
+        className="flex w-full items-center justify-between gap-2 overflow-visible py-2.5 text-left"
         aria-expanded={open}
         aria-controls={panelId}
-        onClick={() => setOpen((prev) => !prev)}
+        onClick={() => {
+          setOpen((prev) => {
+            const next = !prev;
+            if (next) {
+              // Keep the section title in view after expand in the sticky / mobile scrollers.
+              requestAnimationFrame(() => {
+                sectionRef.current?.scrollIntoView({
+                  block: "nearest",
+                  behavior: "smooth",
+                });
+              });
+            }
+            return next;
+          });
+        }}
       >
-        <span className="font-heading text-sm uppercase tracking-wide text-dark-charcoal">
+        <span className="min-w-0 font-heading text-sm uppercase leading-normal tracking-wide text-dark-charcoal">
           {title}
           {active ? (
             <span className="ml-2 inline-block size-1.5 rounded-full bg-titan-yellow align-middle" />
@@ -188,7 +210,7 @@ function FilterSection({
       <div
         id={panelId}
         hidden={!open}
-        className={cn("space-y-3 pb-2", open && "pt-1")}
+        className={cn("space-y-3 pb-3", open && "pt-1.5")}
       >
         {open ? children : null}
       </div>
@@ -212,7 +234,7 @@ function OptionList({
   if (options.length === 0) return null;
 
   return (
-    <ul className="space-y-2">
+    <ul className="space-y-2.5">
       {options.map((option) => {
         const checked = selected === option.value;
         const text =
@@ -260,12 +282,12 @@ function SizePartition({
     <div className="rounded-sm border border-border-gray/80">
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-2 px-2.5 py-2 text-left"
+        className="flex w-full items-center justify-between gap-2 overflow-visible px-2.5 py-2.5 text-left"
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((prev) => !prev)}
       >
-        <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-medium-gray">
+        <span className="text-[11px] font-semibold uppercase leading-normal tracking-[0.14em] text-medium-gray">
           {title}
           {active ? (
             <span className="ml-2 inline-block size-1.5 rounded-full bg-titan-yellow align-middle" />
@@ -330,8 +352,8 @@ export function ProductFilters({
   brands = [],
   departments = [],
   genders = [],
-  productTypes = [],
   ansiClasses = [],
+  materials = [],
   colors = [],
   sizes = [],
   className,
@@ -347,6 +369,7 @@ export function ProductFilters({
   const [syncedQuery, setSyncedQuery] = useState(searchParams.get("q") ?? "");
   const [pushedQuery, setPushedQuery] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mobileRoot = useShopFiltersMobileRoot();
 
   const current = useMemo(
     () => ({
@@ -355,10 +378,11 @@ export function ProductFilters({
       category: searchParams.get("category"),
       brand: searchParams.get("brand"),
       gender: searchParams.get("gender"),
+      touchScreen: searchParams.get("touchScreen"),
       minPrice: searchParams.get("minPrice") ?? "",
       maxPrice: searchParams.get("maxPrice") ?? "",
-      productType: searchParams.get("productType"),
       ansiClass: searchParams.get("ansiClass"),
+      material: searchParams.get("material"),
       color: searchParams.get("color"),
       size: searchParams.get("size"),
       availability: searchParams.get("availability"),
@@ -454,10 +478,12 @@ export function ProductFilters({
         "category",
         "brand",
         "gender",
+        "touchScreen",
         "minPrice",
         "maxPrice",
         "productType",
         "ansiClass",
+        "material",
         "color",
         "size",
         "availability",
@@ -476,11 +502,11 @@ export function ProductFilters({
 
   const filtersBody = (
     <div
-      className={cn("space-y-1", isPending && "opacity-70", className)}
+      className={cn("space-y-0.5", isPending && "opacity-70", className)}
       aria-busy={isPending}
     >
       <div className="mb-3 flex items-center justify-between gap-2 border-b border-border-gray pb-4">
-        <h2 className="flex items-center gap-2 font-heading text-lg uppercase tracking-wide text-dark-charcoal">
+        <h2 className="flex items-center gap-2 font-heading text-lg uppercase leading-normal tracking-wide text-dark-charcoal">
           Filters
           {activeCount > 0 ? (
             <span className="inline-flex min-w-5 items-center justify-center rounded-sm bg-titan-yellow px-1.5 text-xs font-semibold tabular-nums text-near-black">
@@ -499,11 +525,11 @@ export function ProductFilters({
         ) : null}
       </div>
 
-      <FilterSection title="Search" defaultOpen active={Boolean(current.q)}>
+      <FilterSection title="Search" active={Boolean(current.q)} defaultOpen>
         <Input
           name="q"
           type="search"
-          placeholder="Name, SKU, brand, category, tag…"
+          placeholder="name, SKU, brand, category"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           aria-label="Search products"
@@ -514,7 +540,6 @@ export function ProductFilters({
       {departments.length > 0 ? (
         <FilterSection
           title="Department"
-          defaultOpen
           active={Boolean(current.department)}
         >
           <OptionList
@@ -538,7 +563,6 @@ export function ProductFilters({
       {categories.length > 0 ? (
         <FilterSection
           title="Category"
-          defaultOpen
           active={Boolean(current.category)}
         >
           <OptionList
@@ -571,6 +595,21 @@ export function ProductFilters({
           />
         </FilterSection>
       ) : null}
+
+      <FilterSection
+        title="Touch screen"
+        active={Boolean(current.touchScreen)}
+      >
+        <OptionList
+          options={[
+            { label: "Yes", value: "yes" },
+            { label: "No", value: "no" },
+          ]}
+          paramKey="touchScreen"
+          selected={current.touchScreen}
+          onToggle={toggleParam}
+        />
+      </FilterSection>
 
       <FilterSection title="Price" active={priceActive}>
         <PriceRangeSlider
@@ -618,26 +657,26 @@ export function ProductFilters({
         </div>
       </FilterSection>
 
-      {productTypes.length > 0 ? (
+      {ansiClasses.length > 0 ? (
         <FilterSection
-          title="Product type"
-          active={Boolean(current.productType)}
+          title="Additional ANSI certification"
+          active={Boolean(current.ansiClass)}
         >
           <OptionList
-            options={productTypes}
-            paramKey="productType"
-            selected={current.productType}
+            options={ansiClasses}
+            paramKey="ansiClass"
+            selected={current.ansiClass}
             onToggle={toggleParam}
           />
         </FilterSection>
       ) : null}
 
-      {ansiClasses.length > 0 ? (
-        <FilterSection title="ANSI class" active={Boolean(current.ansiClass)}>
+      {materials.length > 0 ? (
+        <FilterSection title="Materials" active={Boolean(current.material)}>
           <OptionList
-            options={ansiClasses}
-            paramKey="ansiClass"
-            selected={current.ansiClass}
+            options={materials}
+            paramKey="material"
+            selected={current.material}
             onToggle={toggleParam}
           />
         </FilterSection>
@@ -692,63 +731,87 @@ export function ProductFilters({
     </div>
   );
 
-  return (
-    <>
-      <div className="lg:hidden">
-        <Button
-          type="button"
-          variant="outline"
-          size="md"
-          className="w-full justify-between"
-          onClick={() => setMobileOpen(true)}
-        >
-          <span className="inline-flex items-center gap-2">
-            <Filter aria-hidden="true" />
-            Filters
-          </span>
+  const mobileFilters = (
+    <div className="shop-filters-mobile">
+      <Button
+        type="button"
+        variant="outline"
+        size="md"
+        className="w-full justify-between"
+        aria-expanded={mobileOpen}
+        aria-controls="shop-filters-panel"
+        onClick={() => setMobileOpen((open) => !open)}
+      >
+        <span className="inline-flex items-center gap-2">
+          <Filter aria-hidden="true" />
+          Filters
           {activeCount > 0 ? (
             <span className="inline-flex min-w-5 items-center justify-center rounded-sm bg-titan-yellow px-1.5 text-xs font-semibold tabular-nums text-near-black">
               {activeCount}
             </span>
           ) : null}
-        </Button>
-      </div>
+        </span>
+        <ChevronDown
+          className={cn(
+            "size-4 shrink-0 text-medium-gray transition-transform duration-200",
+            mobileOpen && "rotate-180",
+          )}
+          aria-hidden="true"
+        />
+      </Button>
 
+      {mobileOpen ? (
+        <div
+          id="shop-filters-panel"
+          className="mt-3 overflow-hidden rounded-sm border border-border-gray bg-white"
+        >
+          <div className="max-h-[min(75dvh,32rem)] overflow-y-auto overscroll-contain scroll-pt-2 px-3 py-3 [scrollbar-gutter:stable]">
+            {filtersBody}
+          </div>
+          <div className="flex gap-2 border-t border-border-gray bg-white p-3">
+            {activeCount > 0 ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={clearAll}
+              >
+                Clear all
+              </Button>
+            ) : null}
+            <Button
+              type="button"
+              variant="primary"
+              className="flex-1"
+              onClick={() => setMobileOpen(false)}
+            >
+              Done
+            </Button>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+
+  return (
+    <>
+      {mobileRoot ? createPortal(mobileFilters, mobileRoot) : null}
       <aside
-        className="hidden lg:sticky lg:top-20 lg:block lg:max-h-[calc(100vh-6rem)] lg:self-start lg:overflow-y-auto lg:pr-1"
+        className="shop-filters-desktop hidden @5xl:sticky @5xl:top-20 @5xl:block @5xl:max-h-[calc(100vh-6rem)] @5xl:self-start @5xl:overflow-y-auto @5xl:overscroll-contain @5xl:scroll-pt-2 @5xl:pr-1 @5xl:pb-4 [scrollbar-gutter:stable]"
         aria-label="Product filters"
       >
         {filtersBody}
       </aside>
-
-      <Dialog
-        open={mobileOpen}
-        onOpenChange={setMobileOpen}
-        title="Filters"
-        description="Narrow results by category, brand, price, and more."
-        className="max-w-md"
-      >
-        <div className="max-h-[70vh] overflow-y-auto pr-1">{filtersBody}</div>
-        <div className="mt-4 flex gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className="flex-1"
-            onClick={() => setMobileOpen(false)}
-          >
-            <X aria-hidden="true" />
-            Close
-          </Button>
-          <Button
-            type="button"
-            variant="primary"
-            className="flex-1"
-            onClick={() => setMobileOpen(false)}
-          >
-            View results
-          </Button>
-        </div>
-      </Dialog>
     </>
   );
+}
+
+function useShopFiltersMobileRoot() {
+  const [root, setRoot] = useState<HTMLElement | null>(null);
+
+  useLayoutEffect(() => {
+    setRoot(document.getElementById(SHOP_FILTERS_MOBILE_ROOT_ID));
+  }, []);
+
+  return root;
 }

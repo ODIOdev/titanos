@@ -2,17 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut } from "lucide-react";
+import { LogOut, Smartphone } from "lucide-react";
 import { logout } from "@/lib/actions/auth";
 import { cn } from "@/lib/utils";
 import { HomeButton } from "@/components/layout/home-button";
 import { ADMIN_NAV, isAdminNavActive } from "@/components/admin/admin-nav-items";
+import {
+  designShellAllowed,
+  openDevIphonePreview,
+} from "@/components/dev/dev-iphone-shell";
 
 export function AdminSidebar() {
   const pathname = usePathname();
+  const showPhonePreview = designShellAllowed();
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col self-start bg-dark-charcoal text-white lg:flex">
+    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col self-start bg-dark-charcoal text-white @5xl:flex">
       <div className="border-b border-white/10 px-5 py-5">
         <Link href="/admin" className="block">
           <p className="font-heading text-xl font-semibold uppercase tracking-wide text-titan-yellow">
@@ -41,6 +46,17 @@ export function AdminSidebar() {
             </Link>
           );
         })}
+        {showPhonePreview ? (
+          <button
+            type="button"
+            onClick={openDevIphonePreview}
+            className="flex w-full items-center gap-2.5 rounded-sm px-3 py-2.5 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
+            title="Open local iPhone UI simulator (design only)"
+          >
+            <Smartphone className="size-4 shrink-0" aria-hidden="true" />
+            iPhone preview
+          </button>
+        ) : null}
       </nav>
 
       <div className="space-y-0.5 border-t border-white/10 p-3">

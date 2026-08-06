@@ -6,22 +6,30 @@ import { useRouter } from "next/navigation";
 import { ImagePlus, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { createCategory, uploadCategoryImage } from "@/lib/actions/admin";
+import { toSelectOptions } from "@/lib/data/catalog-options";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { cn, slugify } from "@/lib/utils";
 
 /** Opens a dialog to create a catalog category. */
-export function AddCategoryButton({ className }: { className?: string }) {
+export function AddCategoryButton({
+  className,
+  departmentOptions = [],
+}: {
+  className?: string;
+  departmentOptions?: { label: string; value: string }[];
+}) {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [department, setDepartment] = useState("");
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [active, setActive] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [pending, startTransition] = useTransition();
 
@@ -29,9 +37,9 @@ export function AddCategoryButton({ className }: { className?: string }) {
 
   function resetForm() {
     setName("");
+    setDepartment("");
     setDescription("");
     setImageUrl("");
-    setActive(true);
     if (previewUrl?.startsWith("blob:")) {
       URL.revokeObjectURL(previewUrl);
     }
@@ -102,8 +110,9 @@ export function AddCategoryButton({ className }: { className?: string }) {
         slug: slugify(value),
         description: description.trim() || undefined,
         imageUrl: imageUrl.trim() || undefined,
+        department: department.trim() || undefined,
         sortOrder: 0,
-        active,
+        active: false,
       });
       if (!result.success) {
         toast.error(result.message);
@@ -124,7 +133,8 @@ export function AddCategoryButton({ className }: { className?: string }) {
         className={cn(buttonVariants({ variant: "primary", size: "sm" }), className)}
       >
         <Plus className="size-3.5" aria-hidden="true" />
-        Add category
+        <span className="@5xl:hidden">Add</span>
+        <span className="hidden @5xl:inline">Add category</span>
       </button>
 
       <Dialog
@@ -225,6 +235,13 @@ export function AddCategoryButton({ className }: { className?: string }) {
             autoFocus
             required
           />
+          <Select
+            label="Department"
+            hint="Which merchandise department this category belongs to"
+            options={toSelectOptions(departmentOptions, "Select department")}
+            value={department}
+            onChange={(event) => setDepartment(event.target.value)}
+          />
           <Textarea
             label="Description"
             rows={3}
@@ -232,15 +249,9 @@ export function AddCategoryButton({ className }: { className?: string }) {
             value={description}
             onChange={(event) => setDescription(event.target.value)}
           />
-          <label className="inline-flex items-center gap-2 text-sm text-dark-charcoal">
-            <input
-              type="checkbox"
-              className="size-4 rounded-sm border-border-gray"
-              checked={active}
-              onChange={(event) => setActive(event.target.checked)}
-            />
-            Active
-          </label>
+          <p className="text-xs text-medium-gray">
+            New categories stay inactive until a product is assigned.
+          </p>
 
           <div className="flex justify-end gap-2">
             <Button

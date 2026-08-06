@@ -72,7 +72,7 @@ export function ColorPaletteField({
       </button>
 
       <div id={panelId} hidden={!open}>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2 @5xl:grid-cols-3">
           <label
             className={cn(
               "flex cursor-pointer items-center gap-2 rounded-sm border px-2.5 py-2 text-sm transition-colors",

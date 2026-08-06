@@ -11,7 +11,7 @@ import {
 import type { AdminDepartment } from "@/lib/data/admin";
 import { AddDepartmentButton } from "@/components/admin/add-department-button";
 import { Badge } from "@/components/ui/badge";
-import { DataTable } from "@/components/admin/data-table";
+import { LoadMoreDataTable } from "@/components/admin/load-more-data-table";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
 
 type DepartmentsManagementCardProps = {
@@ -57,6 +57,8 @@ export function DepartmentsManagementCard({
   const [editSource, setEditSource] = useState<EditSource>("custom");
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  const [mobileVisible, setMobileVisible] = useState(8);
 
   function startEdit(department: AdminDepartment) {
     setEditing(department.name);
@@ -107,143 +109,255 @@ export function DepartmentsManagementCard({
       id="departments"
       className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-sm border border-border-gray bg-white scroll-mt-4"
     >
-      <div className="flex items-start justify-between gap-3 border-b border-border-gray px-4 py-4 sm:px-5">
+      <div className="flex items-start justify-between gap-2 border-b border-border-gray px-3 py-3 @5xl:gap-3 @5xl:px-5 @5xl:py-4">
         <div className="min-w-0">
-          <h2 className="font-heading text-lg font-semibold uppercase tracking-wide text-dark-charcoal">
+          <h2 className="font-heading text-base font-semibold uppercase tracking-wide text-dark-charcoal @5xl:text-lg">
             Departments
           </h2>
-          <p className="mt-0.5 text-sm text-medium-gray">
-            Top-level shop groupings for products.
-            <span className="ml-1.5 tabular-nums text-dark-charcoal">
-              · {departments.length} item
-              {departments.length === 1 ? "" : "s"}
-            </span>
+          <p className="mt-0.5 text-xs tabular-nums text-medium-gray @5xl:text-sm">
+            {departments.length} item
+            {departments.length === 1 ? "" : "s"}
           </p>
         </div>
         <AddDepartmentButton className="shrink-0" />
       </div>
 
-      <DataTable
-        className="rounded-none border-0"
-        compact
-        columns={[
-          { key: "name", header: "Name", className: "w-[42%]" },
-          { key: "products", header: "Products", className: "w-[14%]" },
-          { key: "source", header: "Source", className: "w-[20%]" },
-          { key: "actions", header: "Actions", className: "w-[24%] text-right" },
-        ]}
-        emptyMessage="No departments yet. Add one to organize the catalog."
-        rows={departments.map((department) => [
-          editing === department.name ? (
-            <form
-              key={`${department.name}-edit`}
-              id={`edit-department-${department.slug}`}
-              className="flex min-w-0 items-center gap-1.5"
-              onSubmit={(event) => {
-                event.preventDefault();
-                saveEdit(department.name);
-              }}
+      <div className="@5xl:hidden">
+        {departments.length === 0 ? (
+          <p className="px-3 py-8 text-center text-sm text-medium-gray">
+            No departments yet. Add one to organize the catalog.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border-gray">
+            {departments.slice(0, mobileVisible).map((department) => (
+              <li key={department.slug} className="px-3 py-3">
+                {editing === department.name ? (
+                  <form
+                    className="space-y-2.5"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      saveEdit(department.name);
+                    }}
+                  >
+                    <input
+                      value={editValue}
+                      onChange={(event) => setEditValue(event.target.value)}
+                      autoFocus
+                      disabled={pending}
+                      className="h-9 w-full rounded-sm border border-border-gray px-2.5 text-sm focus-visible:border-dark-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow/40"
+                      aria-label={`Rename ${department.name}`}
+                    />
+                    <select
+                      value={editSource}
+                      disabled={pending}
+                      onChange={(event) =>
+                        setEditSource(parseEditSource(event.target.value))
+                      }
+                      className="h-9 w-full rounded-sm border border-border-gray bg-white px-2 text-xs font-semibold uppercase tracking-wide text-dark-charcoal focus-visible:border-dark-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow/40"
+                      aria-label={`Source for ${department.name}`}
+                    >
+                      <option value="custom">Custom</option>
+                      <option value="catalog">Catalog</option>
+                      <option value="offline">Off-line</option>
+                    </select>
+                    <div className="flex gap-2">
+                      <button
+                        type="submit"
+                        disabled={pending}
+                        className="h-9 flex-1 rounded-sm bg-dark-charcoal text-xs font-semibold text-white disabled:opacity-50"
+                      >
+                        Save
+                      </button>
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={cancelEdit}
+                        className="h-9 flex-1 rounded-sm border border-border-gray text-xs font-semibold disabled:opacity-50"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-medium text-dark-charcoal">
+                          {department.name}
+                        </p>
+                        <p className="truncate text-[0.65rem] text-medium-gray">
+                          {department.slug} · {department.productCount} products
+                        </p>
+                      </div>
+                      <Badge
+                        variant={sourceBadgeVariant(department.source)}
+                        className="shrink-0"
+                      >
+                        {sourceLabel(department.source)}
+                      </Badge>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => startEdit(department)}
+                        className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-sm border border-border-gray text-xs font-semibold text-dark-charcoal disabled:opacity-50"
+                      >
+                        <Pencil className="size-3.5" aria-hidden="true" />
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        disabled={pending}
+                        onClick={() => setDeleteTarget(department.name)}
+                        className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-sm border border-border-gray text-xs font-semibold text-dark-charcoal disabled:opacity-50"
+                      >
+                        <Trash2 className="size-3.5" aria-hidden="true" />
+                        Delete
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+        {departments.length > mobileVisible ? (
+          <div className="border-t border-border-gray px-3 py-3">
+            <button
+              type="button"
+              onClick={() => setMobileVisible((count) => count + 8)}
+              className="h-9 w-full rounded-sm border border-border-gray text-xs font-semibold uppercase tracking-wide text-dark-charcoal"
             >
-              <input
-                value={editValue}
-                onChange={(event) => setEditValue(event.target.value)}
-                autoFocus
-                disabled={pending}
-                className="h-8 min-w-0 w-full rounded-sm border border-border-gray px-2 text-sm focus-visible:border-dark-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow/40"
-                aria-label={`Rename ${department.name}`}
-              />
-            </form>
-          ) : (
-            <div key={`${department.name}-name`} className="min-w-0">
-              <p className="truncate font-medium text-dark-charcoal">
-                {department.name}
-              </p>
-              <p className="truncate text-xs text-medium-gray">
-                {department.slug}
-              </p>
-            </div>
-          ),
-          <span
-            key={`${department.name}-products`}
-            className="tabular-nums"
-          >
-            {department.productCount}
-          </span>,
-          editing === department.name ? (
-            <select
-              key={`${department.name}-source-edit`}
-              form={`edit-department-${department.slug}`}
-              value={editSource}
-              disabled={pending}
-              onChange={(event) =>
-                setEditSource(parseEditSource(event.target.value))
-              }
-              className="h-8 max-w-full rounded-sm border border-border-gray bg-white px-1.5 text-[10px] font-semibold uppercase tracking-wide text-dark-charcoal focus-visible:border-dark-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow/40"
-              aria-label={`Source for ${department.name}`}
+              Load more · {departments.length - mobileVisible}
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="hidden @5xl:block">
+        <LoadMoreDataTable
+          className="rounded-none border-0"
+          compact
+          columns={[
+            { key: "name", header: "Name", className: "w-[42%]" },
+            { key: "products", header: "Products", className: "w-[14%]" },
+            { key: "source", header: "Source", className: "w-[20%]" },
+            { key: "actions", header: "Actions", className: "w-[24%] text-right" },
+          ]}
+          emptyMessage="No departments yet. Add one to organize the catalog."
+          rows={departments.map((department) => [
+            editing === department.name ? (
+              <form
+                key={`${department.name}-edit`}
+                id={`edit-department-${department.slug}`}
+                className="flex min-w-0 items-center gap-1.5"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  saveEdit(department.name);
+                }}
+              >
+                <input
+                  value={editValue}
+                  onChange={(event) => setEditValue(event.target.value)}
+                  autoFocus
+                  disabled={pending}
+                  className="h-8 min-w-0 w-full rounded-sm border border-border-gray px-2 text-sm focus-visible:border-dark-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow/40"
+                  aria-label={`Rename ${department.name}`}
+                />
+              </form>
+            ) : (
+              <div key={`${department.name}-name`} className="min-w-0">
+                <p className="truncate font-medium text-dark-charcoal">
+                  {department.name}
+                </p>
+                <p className="truncate text-xs text-medium-gray">
+                  {department.slug}
+                </p>
+              </div>
+            ),
+            <span
+              key={`${department.name}-products`}
+              className="tabular-nums"
             >
-              <option value="custom">Custom</option>
-              <option value="catalog">Catalog</option>
-              <option value="offline">Off-line</option>
-            </select>
-          ) : (
-            <Badge
-              key={`${department.name}-source`}
-              variant={sourceBadgeVariant(department.source)}
-            >
-              {sourceLabel(department.source)}
-            </Badge>
-          ),
-          editing === department.name ? (
-            <div
-              key={`${department.name}-actions-edit`}
-              className="flex flex-wrap items-center justify-end gap-1"
-            >
-              <button
-                type="submit"
+              {department.productCount}
+            </span>,
+            editing === department.name ? (
+              <select
+                key={`${department.name}-source-edit`}
                 form={`edit-department-${department.slug}`}
+                value={editSource}
                 disabled={pending}
-                className="h-8 rounded-sm bg-dark-charcoal px-2 text-xs font-semibold text-white disabled:opacity-50"
+                onChange={(event) =>
+                  setEditSource(parseEditSource(event.target.value))
+                }
+                className="h-8 max-w-full rounded-sm border border-border-gray bg-white px-1.5 text-[10px] font-semibold uppercase tracking-wide text-dark-charcoal focus-visible:border-dark-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow/40"
+                aria-label={`Source for ${department.name}`}
               >
-                Save
-              </button>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={cancelEdit}
-                className="h-8 rounded-sm border border-border-gray px-2 text-xs font-semibold disabled:opacity-50"
+                <option value="custom">Custom</option>
+                <option value="catalog">Catalog</option>
+                <option value="offline">Off-line</option>
+              </select>
+            ) : (
+              <Badge
+                key={`${department.name}-source`}
+                variant={sourceBadgeVariant(department.source)}
               >
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <div
-              key={`${department.name}-actions`}
-              className="flex items-center justify-end gap-1"
-            >
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => startEdit(department)}
-                className="inline-flex size-8 items-center justify-center rounded-sm border border-border-gray text-dark-charcoal hover:bg-light-gray disabled:opacity-50"
-                aria-label={`Edit ${department.name}`}
-                title="Edit"
+                {sourceLabel(department.source)}
+              </Badge>
+            ),
+            editing === department.name ? (
+              <div
+                key={`${department.name}-actions-edit`}
+                className="flex flex-wrap items-center justify-end gap-1"
               >
-                <Pencil className="size-3.5" aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => setDeleteTarget(department.name)}
-                className="inline-flex size-8 items-center justify-center rounded-sm border border-border-gray text-dark-charcoal hover:bg-light-gray disabled:opacity-50"
-                aria-label={`Delete ${department.name}`}
-                title="Delete"
+                <button
+                  type="submit"
+                  form={`edit-department-${department.slug}`}
+                  disabled={pending}
+                  className="h-8 rounded-sm bg-dark-charcoal px-2 text-xs font-semibold text-white disabled:opacity-50"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={cancelEdit}
+                  className="h-8 rounded-sm border border-border-gray px-2 text-xs font-semibold disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div
+                key={`${department.name}-actions`}
+                className="flex items-center justify-end gap-1"
               >
-                <Trash2 className="size-3.5" aria-hidden="true" />
-              </button>
-            </div>
-          ),
-        ])}
-      />
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => startEdit(department)}
+                  className="inline-flex size-8 items-center justify-center rounded-sm border border-border-gray text-dark-charcoal hover:bg-light-gray disabled:opacity-50"
+                  aria-label={`Edit ${department.name}`}
+                  title="Edit"
+                >
+                  <Pencil className="size-3.5" aria-hidden="true" />
+                </button>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => setDeleteTarget(department.name)}
+                  className="inline-flex size-8 items-center justify-center rounded-sm border border-border-gray text-dark-charcoal hover:bg-light-gray disabled:opacity-50"
+                  aria-label={`Delete ${department.name}`}
+                  title="Delete"
+                >
+                  <Trash2 className="size-3.5" aria-hidden="true" />
+                </button>
+              </div>
+            ),
+          ])}
+        />
+      </div>
 
       <ConfirmDeleteDialog
         open={Boolean(deleteTarget)}

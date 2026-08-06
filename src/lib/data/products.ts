@@ -1,4 +1,11 @@
-import { departmentForProductType, productGender } from "@/lib/data/catalog-options";
+import {
+  departmentForProductType,
+  productGender,
+  productMatchesAnsiFilter,
+  productMatchesMaterial,
+  productTouchScreen,
+} from "@/lib/data/catalog-options";
+import { getProductStockQuantity } from "@/lib/catalog/product-stock";
 import {
   SEED_BRANDS,
   SEED_CATEGORIES,
@@ -94,6 +101,12 @@ function filterSeedProducts(filters: ProductFilters = {}): Product[] {
     );
   }
 
+  if (filters.touchScreen === "yes") {
+    products = products.filter((p) => productTouchScreen(p));
+  } else if (filters.touchScreen === "no") {
+    products = products.filter((p) => !productTouchScreen(p));
+  }
+
   if (filters.minPrice != null) {
     products = products.filter((p) => p.price >= filters.minPrice!);
   }
@@ -104,7 +117,14 @@ function filterSeedProducts(filters: ProductFilters = {}): Product[] {
     products = products.filter((p) => p.product_type === filters.productType);
   }
   if (filters.ansiClass) {
-    products = products.filter((p) => p.ansi_class === filters.ansiClass);
+    products = products.filter((p) =>
+      productMatchesAnsiFilter(p, filters.ansiClass!),
+    );
+  }
+  if (filters.material) {
+    products = products.filter((p) =>
+      productMatchesMaterial(p, filters.material!),
+    );
   }
   if (filters.color) {
     products = products.filter(
@@ -117,7 +137,7 @@ function filterSeedProducts(filters: ProductFilters = {}): Product[] {
     );
   }
   if (filters.availability === "in_stock") {
-    products = products.filter((p) => p.inventory_quantity > 0);
+    products = products.filter((p) => getProductStockQuantity(p) > 0);
   }
   if (filters.rating) {
     products = products.filter((p) => p.rating_avg >= filters.rating!);
@@ -194,10 +214,18 @@ export async function getProducts(
       if (filters.gender) {
         query = query.eq("metadata->>gender", filters.gender);
       }
+      if (filters.touchScreen === "yes") {
+        query = query.eq("metadata->>touchScreen", "true");
+      } else if (filters.touchScreen === "no") {
+        query = query.or(
+          "metadata->>touchScreen.eq.false,metadata->>touchScreen.is.null",
+        );
+      }
       if (filters.minPrice != null) query = query.gte("price", filters.minPrice);
       if (filters.maxPrice != null) query = query.lte("price", filters.maxPrice);
       if (filters.productType) query = query.eq("product_type", filters.productType);
-      if (filters.ansiClass) query = query.eq("ansi_class", filters.ansiClass);
+      // ANSI / certification filter is applied in memory (matches ansi_class +
+      // metadata.certifications) so pagination stays accurate.
       if (filters.color) query = query.ilike("color", filters.color);
       if (filters.size) query = query.ilike("size", filters.size);
       if (filters.availability === "in_stock") query = query.gt("inventory_quantity", 0);
@@ -206,6 +234,10 @@ export async function getProducts(
       if (filters.bestseller) query = query.eq("bestseller", true);
 
       const hasTextSearch = Boolean(filters.q?.trim());
+      const hasAnsiFilter = Boolean(filters.ansiClass?.trim());
+      const hasMaterialFilter = Boolean(filters.material?.trim());
+      const needsInMemoryFilter =
+        hasTextSearch || hasAnsiFilter || hasMaterialFilter;
 
       switch (filters.sort) {
         case "newest":
@@ -227,9 +259,9 @@ export async function getProducts(
           query = query.order("featured", { ascending: false }).order("name");
       }
 
-      // Text search spans brand/category/tag — load the filtered set then paginate in memory.
+      // Text / ANSI certification filters need the full candidate set before paging.
       const from = (page - 1) * pageSize;
-      const { data, count, error } = hasTextSearch
+      const { data, count, error } = needsInMemoryFilter
         ? await query
         : await query.range(from, from + pageSize - 1);
       if (error) throw error;
@@ -247,8 +279,20 @@ export async function getProducts(
         } satisfies Product;
       });
 
-      if (hasTextSearch) {
-        products = products.filter((p) => productMatchesQuery(p, filters.q!));
+      if (needsInMemoryFilter) {
+        if (hasTextSearch) {
+          products = products.filter((p) => productMatchesQuery(p, filters.q!));
+        }
+        if (hasAnsiFilter) {
+          products = products.filter((p) =>
+            productMatchesAnsiFilter(p, filters.ansiClass!),
+          );
+        }
+        if (hasMaterialFilter) {
+          products = products.filter((p) =>
+            productMatchesMaterial(p, filters.material!),
+          );
+        }
         const total = products.length;
         return {
           products: products.slice(from, from + pageSize),
@@ -361,7 +405,7 @@ export async function getCategoryBySlug(slug: string): Promise<Category | null> 
 
 export async function getBrands(): Promise<Brand[]> {
   const withLogo = (brands: Brand[]) =>
-    brands.filter((b) => Boolean(b.logo_url?.trim()));
+    brands.filter((b) => b.active && Boolean(b.logo_url?.trim()));
 
   if (isSupabaseConfigured()) {
     try {
@@ -373,7 +417,7 @@ export async function getBrands(): Promise<Brand[]> {
         .eq("active", true)
         .order("name");
       if (error) throw error;
-      // Live site only surfaces brands that have an uploaded logo.
+      // Live site only surfaces active brands that have an uploaded logo.
       if (data) return withLogo(data as Brand[]);
     } catch {
       // Fall through

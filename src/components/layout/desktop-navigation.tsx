@@ -102,7 +102,7 @@ export function DesktopNavigation({ className }: { className?: string }) {
       ref={navRef}
       aria-label="Primary"
       className={cn(
-        "hidden min-w-0 flex-1 items-center justify-center gap-1 lg:flex xl:gap-1.5",
+        "hidden min-w-0 flex-1 items-center justify-center gap-1 @5xl:flex xl:gap-1.5",
         className,
       )}
     >

@@ -54,13 +54,20 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="admin-shell flex min-h-screen overflow-x-clip bg-light-gray">
+    <div className="admin-shell @container flex min-h-screen bg-light-gray">
       <AdminSidebar />
-      {/* clip, not hidden: hidden would make this a scroll container and break sticky children */}
-      <div className="flex min-w-0 flex-1 flex-col overflow-x-clip">
-        <AdminMobileNav />
-        <AdminPathHeader />
-        <main className="min-w-0 flex-1 p-4 sm:p-6">{children}</main>
+      <div className="flex min-w-0 flex-1 flex-col">
+        {/*
+          Mobile / phone-preview: fixed viewport column with internal scroll.
+          Desktop (@5xl): wrappers use `contents` so the page scrolls normally.
+        */}
+        <div className="admin-mobile-scrollport flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden @5xl:contents">
+          <AdminMobileNav />
+          <div className="admin-content-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden @5xl:contents">
+            <AdminPathHeader />
+            <main className="min-w-0 flex-1 p-4 @5xl:p-6">{children}</main>
+          </div>
+        </div>
       </div>
     </div>
   );

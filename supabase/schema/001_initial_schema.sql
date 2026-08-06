@@ -145,6 +145,8 @@ CREATE TABLE public.categories (
   parent_id UUID REFERENCES public.categories(id) ON DELETE SET NULL,
   sort_order INTEGER NOT NULL DEFAULT 0,
   active BOOLEAN NOT NULL DEFAULT TRUE,
+  sku_prefix TEXT,
+  department TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -153,6 +155,7 @@ CREATE INDEX idx_categories_slug ON public.categories (slug);
 CREATE INDEX idx_categories_parent_id ON public.categories (parent_id);
 CREATE INDEX idx_categories_active ON public.categories (active);
 CREATE INDEX idx_categories_sort_order ON public.categories (sort_order);
+CREATE INDEX idx_categories_department ON public.categories (department);
 
 CREATE TRIGGER categories_updated_at
   BEFORE UPDATE ON public.categories

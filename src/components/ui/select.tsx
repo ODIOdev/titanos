@@ -9,13 +9,32 @@ export interface SelectOption {
   disabled?: boolean;
 }
 
+export interface SelectOptionGroup {
+  label: string;
+  options: SelectOption[];
+}
+
 export interface SelectProps
   extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>, "children"> {
   label?: string;
   error?: string;
   hint?: string;
   options: SelectOption[];
+  /** When set, options are rendered inside labeled `<optgroup>` partitions. */
+  optionGroups?: SelectOptionGroup[];
   placeholder?: string;
+}
+
+function OptionNodes({ options }: { options: SelectOption[] }) {
+  return options.map((option) => (
+    <option
+      key={option.value || option.label}
+      value={option.value}
+      disabled={option.disabled}
+    >
+      {option.label}
+    </option>
+  ));
 }
 
 const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
@@ -27,6 +46,7 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
       hint,
       id,
       options,
+      optionGroups,
       placeholder,
       ...props
     },
@@ -36,6 +56,10 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
     const selectId = id ?? generatedId;
     const errorId = error ? `${selectId}-error` : undefined;
     const hintId = hint && !error ? `${selectId}-hint` : undefined;
+    const hasGroups = Boolean(optionGroups?.length);
+    const emptyOptions = hasGroups
+      ? options.filter((option) => option.value === "")
+      : options;
 
     return (
       <div className="w-full">
@@ -67,15 +91,18 @@ const Select = React.forwardRef<HTMLSelectElement, SelectProps>(
                 {placeholder}
               </option>
             ) : null}
-            {options.map((option) => (
-              <option
-                key={option.value}
-                value={option.value}
-                disabled={option.disabled}
-              >
-                {option.label}
-              </option>
-            ))}
+            {hasGroups ? (
+              <>
+                <OptionNodes options={emptyOptions} />
+                {optionGroups!.map((group) => (
+                  <optgroup key={group.label} label={group.label}>
+                    <OptionNodes options={group.options} />
+                  </optgroup>
+                ))}
+              </>
+            ) : (
+              <OptionNodes options={options} />
+            )}
           </select>
           <ChevronDown
             className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 text-medium-gray"

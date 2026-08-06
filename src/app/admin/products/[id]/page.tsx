@@ -1,5 +1,8 @@
 import { notFound } from "next/navigation";
-import { parseCertificationAnswers } from "@/lib/catalog/certifications";
+import {
+  parseCertificationAnswers,
+} from "@/lib/catalog/certifications";
+import { parseAnsiClasses, parseProductTags } from "@/lib/data/catalog-options";
 import { AdminProductForm } from "@/components/admin/admin-product-form";
 import { ADMIN_RETURN_PARAM, adminReturnTarget } from "@/lib/admin/return-to";
 import {
@@ -102,9 +105,18 @@ export default async function AdminEditProductPage({
           typeof product.metadata?.gender === "string"
             ? product.metadata.gender
             : "",
-        tag:
-          typeof product.metadata?.tag === "string" ? product.metadata.tag : "",
-        ansiClass: product.ansi_class ?? "",
+        touchScreen: product.metadata?.touchScreen === true,
+        tags: parseProductTags(product.metadata),
+        primaryCertifications: (() => {
+          const fromMeta = parseCertificationAnswers(
+            product.metadata?.primaryCertifications,
+          );
+          if (fromMeta.length > 0) return fromMeta;
+          return parseAnsiClasses(product.ansi_class).map((name) => ({
+            name,
+            value: "",
+          }));
+        })(),
         color: product.color ?? "",
         size: product.size ?? "",
         hasMultipleSizes: product.metadata?.hasMultipleSizes === true,
@@ -131,6 +143,12 @@ export default async function AdminEditProductPage({
           name: spec.name,
           value: spec.value,
         })),
+        materials: Array.isArray(product.metadata?.materials)
+          ? product.metadata.materials.filter(
+              (item): item is string =>
+                typeof item === "string" && Boolean(item.trim()),
+            )
+          : [],
         certifications: parseCertificationAnswers(
           product.metadata?.certifications,
         ),

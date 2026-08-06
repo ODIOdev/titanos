@@ -7,12 +7,9 @@ import {
   PackageOpen,
   type LucideIcon,
 } from "lucide-react";
-import { AddCategoryButton } from "@/components/admin/add-category-button";
-import { CategoryRowActions } from "@/components/admin/category-row-actions";
-import { DataTable } from "@/components/admin/data-table";
+import { CategoriesManagementCard } from "@/components/admin/categories-management-card";
 import { DepartmentsManagementCard } from "@/components/admin/departments-management-card";
 import { TagsManagementCard } from "@/components/admin/tags-management-card";
-import { Badge } from "@/components/ui/badge";
 import {
   getAdminCategories,
   getAdminCategoryDetail,
@@ -20,6 +17,7 @@ import {
   getAdminTags,
 } from "@/lib/data/admin";
 import { cn, formatCurrency } from "@/lib/utils";
+import type { Category } from "@/types";
 
 /** Status bars fill completely at this product count. */
 const STATUS_BAR_CAP = 100;
@@ -28,13 +26,7 @@ type TabId = "all" | "active" | "inactive" | "empty";
 type SearchParams = Promise<{ tab?: string }>;
 
 type CategoryRow = {
-  category: {
-    id: string;
-    name: string;
-    slug: string;
-    description: string | null;
-    active: boolean;
-  };
+  category: Category;
   productCount: number;
   brandCount: number;
   inventory: number;
@@ -56,7 +48,8 @@ function buildHref(opts: { tab?: TabId }) {
   const params = new URLSearchParams();
   if (opts.tab && opts.tab !== "all") params.set("tab", opts.tab);
   const qs = params.toString();
-  return qs ? `/admin/categories?${qs}` : "/admin/categories";
+  const path = qs ? `/admin/categories?${qs}` : "/admin/categories";
+  return `${path}#categories`;
 }
 
 export default async function AdminCategoriesPage({
@@ -110,26 +103,22 @@ export default async function AdminCategoriesPage({
 
   const tabMeta: Record<
     TabId,
-    { title: string; description: string; empty: string }
+    { title: string; empty: string }
   > = {
     all: {
       title: "All categories",
-      description: "Full catalog taxonomy and performance.",
       empty: "No categories found.",
     },
     active: {
       title: "Active categories",
-      description: "Visible and available for product assignment.",
       empty: "No active categories.",
     },
     inactive: {
       title: "Inactive categories",
-      description: "Hidden from storefront browsing.",
       empty: "No inactive categories.",
     },
     empty: {
       title: "Empty categories",
-      description: "Categories with no products assigned yet.",
       empty: "Every category has at least one product.",
     },
   };
@@ -146,10 +135,10 @@ export default async function AdminCategoriesPage({
   ).length;
 
   return (
-    <div className="space-y-8">
-      <div className="space-y-4">
+    <div className="space-y-5 @5xl:space-y-8">
+      <div className="space-y-3 @5xl:space-y-4">
         <nav
-          className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"
+          className="grid grid-cols-1 gap-1.5 @5xl:grid-cols-5 @5xl:gap-3"
           aria-label="Category filters"
         >
           <CategoryMetricCard
@@ -245,65 +234,38 @@ export default async function AdminCategoriesPage({
           />
         </nav>
 
-        <div className="grid min-w-0 gap-4 xl:grid-cols-2 xl:items-start">
+        <div className="grid min-w-0 gap-3 @5xl:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] @5xl:items-start @5xl:gap-4">
           <DepartmentsManagementCard departments={departments} />
 
-          <div className="min-w-0 overflow-hidden rounded-sm border border-border-gray bg-white">
-            <div className="flex items-start justify-between gap-3 border-b border-border-gray px-4 py-4 sm:px-5">
-              <div className="min-w-0">
-                <h2 className="font-heading text-lg font-semibold uppercase tracking-wide text-dark-charcoal">
-                  {tabMeta[tab].title}
-                </h2>
-                <p className="mt-0.5 text-sm text-medium-gray">
-                  {tabMeta[tab].description}
-                  <span className="ml-1.5 tabular-nums text-dark-charcoal">
-                    · {visible.length} item{visible.length === 1 ? "" : "s"}
-                  </span>
-                </p>
-              </div>
-              <AddCategoryButton className="shrink-0" />
-            </div>
-            <DataTable
-              className="rounded-none border-0"
-              compact
-              columns={[
-                { key: "name", header: "Name", className: "w-[42%]" },
-                { key: "products", header: "Products", className: "w-[14%]" },
-                { key: "status", header: "Status", className: "w-[20%]" },
-                {
-                  key: "actions",
-                  header: "Actions",
-                  className: "w-[24%] text-right",
-                },
-              ]}
-              emptyMessage={tabMeta[tab].empty}
-              rows={visible.map(({ category: c, productCount }) => [
-                <div key={`${c.id}-name`} className="min-w-0">
-                  <Link
-                    href={`/admin/categories/${c.id}`}
-                    className="block truncate font-medium text-dark-charcoal hover:text-titan-yellow"
-                  >
-                    {c.name}
-                  </Link>
-                  <p className="truncate text-xs text-medium-gray">{c.slug}</p>
-                </div>,
-                <span key={`${c.id}-products`} className="tabular-nums">
-                  {productCount}
-                </span>,
-                <Badge
-                  key={`${c.id}-status`}
-                  variant={c.active ? "success" : "default"}
-                >
-                  {c.active ? "Active" : "Inactive"}
-                </Badge>,
-                <CategoryRowActions
-                  key={`${c.id}-actions`}
-                  categoryId={c.id}
-                  categoryName={c.name}
-                />,
-              ])}
-            />
-          </div>
+          <CategoriesManagementCard
+            listKey={tab}
+            title={tabMeta[tab].title}
+            emptyMessage={tabMeta[tab].empty}
+            departmentOptions={departments.map((d) => ({
+              label: d.name,
+              value: d.name,
+            }))}
+            categories={[...visible]
+              .sort((a, b) => {
+                if (a.category.active !== b.category.active) {
+                  return a.category.active ? -1 : 1;
+                }
+                return a.category.name.localeCompare(b.category.name, undefined, {
+                  sensitivity: "base",
+                });
+              })
+              .map(({ category: c, productCount }) => ({
+                id: c.id,
+                name: c.name,
+                slug: c.slug,
+                description: c.description,
+                imageUrl: c.image_url,
+                sortOrder: c.sort_order,
+                active: c.active,
+                productCount,
+                department: c.department ?? null,
+              }))}
+          />
         </div>
       </div>
 
@@ -339,54 +301,89 @@ function CategoryMetricCard({
     <Link
       href={href}
       className={cn(
-        "group relative overflow-hidden rounded-sm border bg-white p-4 transition-colors",
+        "group relative min-w-0 overflow-hidden rounded-sm border bg-white px-3 py-2 transition-colors @5xl:p-4",
         active
           ? "border-titan-yellow ring-1 ring-titan-yellow"
           : "border-border-gray hover:border-dark-charcoal/30",
       )}
       aria-current={active ? "page" : undefined}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-xs font-semibold uppercase tracking-wide text-medium-gray">
-            {label}
-          </p>
-          <p className="mt-1.5 font-heading text-3xl font-semibold tabular-nums text-dark-charcoal">
-            {value}
-          </p>
-          <p className="mt-1 text-xs text-medium-gray">{hint}</p>
-        </div>
-        <span
-          className={cn(
-            "flex size-10 shrink-0 items-center justify-center rounded-sm",
-            accent,
-          )}
-        >
-          <Icon className="size-5" aria-hidden="true" />
-        </span>
-      </div>
-
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        {spark.map((item) => (
-          <div
-            key={item.label}
-            className="rounded-sm bg-light-gray/70 px-2 py-1.5"
+      {/* Mobile: compact single-row strip + status bar */}
+      <div className="@5xl:hidden">
+        <div className="flex items-center gap-2.5">
+          <span
+            className={cn(
+              "flex size-7 shrink-0 items-center justify-center rounded-sm",
+              accent,
+            )}
           >
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-medium-gray">
-              {item.label}
+            <Icon className="size-3.5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[0.65rem] font-semibold uppercase tracking-wide text-medium-gray">
+              {label}
             </p>
-            <p className="mt-0.5 truncate text-sm font-semibold tabular-nums text-dark-charcoal">
-              {item.value}
+            <p className="mt-0.5 line-clamp-1 text-[0.65rem] text-medium-gray">
+              {hint}
             </p>
           </div>
-        ))}
+          <p className="shrink-0 font-heading text-xl font-semibold tabular-nums leading-none text-dark-charcoal">
+            {value}
+          </p>
+        </div>
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-light-gray">
+          <div
+            className={cn("h-full rounded-full transition-all", barClass)}
+            style={{ width: `${Math.min(100, Math.max(0, share))}%` }}
+            aria-hidden="true"
+          />
+        </div>
       </div>
 
-      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-light-gray">
-        <div
-          className={cn("h-full rounded-full transition-all", barClass)}
-          style={{ width: `${Math.min(100, Math.max(0, share))}%` }}
-        />
+      {/* Desktop: original card layout */}
+      <div className="hidden @5xl:block">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="truncate text-xs font-semibold uppercase tracking-wide text-medium-gray">
+              {label}
+            </p>
+            <p className="mt-1.5 font-heading text-3xl font-semibold tabular-nums text-dark-charcoal">
+              {value}
+            </p>
+            <p className="mt-1 text-xs text-medium-gray">{hint}</p>
+          </div>
+          <span
+            className={cn(
+              "flex size-10 shrink-0 items-center justify-center rounded-sm",
+              accent,
+            )}
+          >
+            <Icon className="size-5" aria-hidden="true" />
+          </span>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          {spark.map((item) => (
+            <div
+              key={item.label}
+              className="rounded-sm bg-light-gray/70 px-2 py-1.5"
+            >
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-medium-gray">
+                {item.label}
+              </p>
+              <p className="mt-0.5 truncate text-sm font-semibold tabular-nums text-dark-charcoal">
+                {item.value}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-light-gray">
+          <div
+            className={cn("h-full rounded-full transition-all", barClass)}
+            style={{ width: `${Math.min(100, Math.max(0, share))}%` }}
+          />
+        </div>
       </div>
     </Link>
   );

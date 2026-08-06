@@ -56,6 +56,7 @@ export interface SearchBarProps {
   inputId?: string;
   variant?: "default" | "onDark";
   size?: "md" | "lg";
+  placeholder?: string;
   autoFocus?: boolean;
   onNavigate?: () => void;
 }
@@ -66,6 +67,7 @@ export function SearchBar({
   inputId = "site-search",
   variant = "default",
   size = "md",
+  placeholder = "Search safety gear, boots, signs…",
   autoFocus,
   onNavigate,
 }: SearchBarProps) {
@@ -249,7 +251,7 @@ export function SearchBar({
             value={query}
             autoFocus={autoFocus}
             autoComplete="off"
-            placeholder="Search safety gear, boots, signs…"
+            placeholder={placeholder}
             className={cn(
               "w-full rounded-sm border py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow/40",
               "[&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none",

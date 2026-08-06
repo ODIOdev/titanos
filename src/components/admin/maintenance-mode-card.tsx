@@ -127,6 +127,15 @@ export function MaintenanceModeCard({
             </Button>
           )}
 
+          <a
+            href="/maintenance-preview"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-sm border border-border-gray bg-white px-4 font-heading text-sm font-semibold uppercase tracking-wide text-dark-charcoal transition-[color,background-color,border-color] hover:border-dark-charcoal hover:bg-light-gray"
+          >
+            Preview page
+          </a>
+
           {copyChanged ? (
             <Button
               type="button"

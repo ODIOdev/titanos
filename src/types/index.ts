@@ -41,6 +41,10 @@ export type Category = {
   parent_id: string | null;
   sort_order: number;
   active: boolean;
+  /** Optional SKU abbreviation override (e.g. WGG). Null = derive from name. */
+  sku_prefix?: string | null;
+  /** Merchandise department this category belongs to. */
+  department?: string | null;
 };
 
 export type Brand = {
@@ -190,15 +194,31 @@ export type Resource = {
   created_at: string;
 };
 
+export type ProductReview = {
+  id: string;
+  product_id: string;
+  user_id: string;
+  rating: number;
+  title: string | null;
+  body: string | null;
+  verified_purchase: boolean;
+  approved: boolean;
+  created_at: string;
+  author_name: string;
+};
+
 export type ProductFilters = {
   category?: string;
   brand?: string;
   department?: string;
   gender?: string;
+  /** `yes` | `no` — filters products by metadata.touchScreen. */
+  touchScreen?: "yes" | "no";
   minPrice?: number;
   maxPrice?: number;
   productType?: string;
   ansiClass?: string;
+  material?: string;
   color?: string;
   size?: string;
   availability?: "in_stock" | "all";

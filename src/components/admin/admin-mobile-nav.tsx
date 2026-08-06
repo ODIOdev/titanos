@@ -3,11 +3,15 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut, Menu, X } from "lucide-react";
+import { LogOut, Menu, Smartphone, X } from "lucide-react";
 import { logout } from "@/lib/actions/auth";
 import { cn } from "@/lib/utils";
 import { HomeButton } from "@/components/layout/home-button";
 import { ADMIN_NAV, isAdminNavActive } from "@/components/admin/admin-nav-items";
+import {
+  designShellAllowed,
+  openDevIphonePreview,
+} from "@/components/dev/dev-iphone-shell";
 
 /** Drawer replacement for the desktop sidebar below `lg`. */
 export function AdminMobileNav() {
@@ -25,43 +29,45 @@ export function AdminMobileNav() {
     panelRef.current?.focus();
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        setOpen(false);
-      }
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setOpen(false);
     }
 
-    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown, true);
     return () => {
-      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keydown", onKeyDown, true);
       document.body.style.overflow = previousOverflow;
     };
   }, [open]);
 
   return (
     <>
-      <div className="sticky top-0 z-40 flex items-center gap-3 border-b border-white/10 bg-dark-charcoal px-4 py-3 text-white lg:hidden">
-        <button
-          type="button"
-          className="inline-flex size-10 shrink-0 items-center justify-center rounded-sm text-white hover:bg-white/10"
-          aria-label="Open admin menu"
-          aria-expanded={open}
-          onClick={() => setOpen(true)}
-        >
-          <Menu className="size-5" aria-hidden="true" />
-        </button>
-        <Link href="/admin" className="min-w-0">
-          <p className="font-heading text-base font-semibold uppercase tracking-wide text-titan-yellow">
-            Titan Safety
-          </p>
-          <p className="truncate text-xs text-white/60">
-            {current?.label ?? "Admin Dashboard"}
-          </p>
-        </Link>
+      <div className="admin-mobile-topbar shrink-0 bg-dark-charcoal text-white @5xl:hidden">
+        <div className="flex items-center gap-3 border-b border-white/10 px-4 pb-3 pt-[calc(0.75rem+var(--phone-safe-top,0px)+env(safe-area-inset-top,0px))]">
+          <button
+            type="button"
+            className="inline-flex size-10 shrink-0 items-center justify-center rounded-sm text-white hover:bg-white/10"
+            aria-label="Open admin menu"
+            aria-expanded={open}
+            onClick={() => setOpen(true)}
+          >
+            <Menu className="size-5" aria-hidden="true" />
+          </button>
+          <Link href="/admin" className="min-w-0">
+            <p className="font-heading text-base font-semibold uppercase tracking-wide text-titan-yellow">
+              Titan Safety
+            </p>
+            <p className="truncate text-xs text-white/60">
+              {current?.label ?? "Admin Dashboard"}
+            </p>
+          </Link>
+        </div>
       </div>
 
       {open ? (
-        <div className="fixed inset-0 z-[60] lg:hidden">
+        <div className="admin-mobile-drawer fixed inset-0 z-[60] @5xl:hidden">
           <button
             type="button"
             aria-label="Close admin menu"
@@ -74,9 +80,15 @@ export function AdminMobileNav() {
             aria-modal="true"
             aria-label="Admin navigation"
             tabIndex={-1}
-            className="absolute inset-y-0 left-0 flex w-[min(17rem,85vw)] flex-col bg-dark-charcoal text-white shadow-xl outline-none"
+            className="absolute inset-y-0 left-0 flex w-[min(17rem,85%)] max-w-full flex-col bg-dark-charcoal text-white shadow-xl outline-none"
           >
-            <div className="flex items-center justify-between border-b border-white/10 px-4 py-4">
+            <div
+              className="flex shrink-0 items-center justify-between border-b border-white/10 px-4 pb-4"
+              style={{
+                paddingTop:
+                  "calc(1rem + var(--phone-safe-top, 0px) + env(safe-area-inset-top, 0px))",
+              }}
+            >
               <Link href="/admin" onClick={() => setOpen(false)}>
                 <p className="font-heading text-lg font-semibold uppercase tracking-wide text-titan-yellow">
                   Titan Safety
@@ -94,7 +106,7 @@ export function AdminMobileNav() {
             </div>
 
             <nav
-              className="flex-1 space-y-0.5 overflow-y-auto p-3"
+              className="flex-1 space-y-0.5 overflow-y-auto p-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
               aria-label="Admin"
             >
               {ADMIN_NAV.map(({ href, label, icon: Icon }) => {
@@ -116,6 +128,20 @@ export function AdminMobileNav() {
                   </Link>
                 );
               })}
+              {designShellAllowed() ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    openDevIphonePreview();
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-sm px-3 py-2.5 text-left text-sm text-white/80 hover:bg-white/10 hover:text-white"
+                  title="Open local iPhone UI simulator (design only)"
+                >
+                  <Smartphone className="size-4 shrink-0" aria-hidden="true" />
+                  iPhone preview
+                </button>
+              ) : null}
             </nav>
 
             <div className="space-y-0.5 border-t border-white/10 p-3">

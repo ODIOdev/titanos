@@ -1,16 +1,19 @@
 import { SiteSettingsFormClient } from "@/components/admin/site-settings-form";
+import { ApiStacksCard } from "@/components/admin/api-stacks-card";
 import { CsvImportExportCard } from "@/components/admin/csv-import-export-card";
 import { MaintenanceModeCard } from "@/components/admin/maintenance-mode-card";
 import { PromoDiscountCard } from "@/components/admin/promo-discount-card";
 import { ResetPlatformCard } from "@/components/admin/reset-platform-card";
 import { getPromoDiscountSettings, getSiteSettings } from "@/lib/data/admin";
+import { getApiStackReports } from "@/lib/data/api-stacks";
 import { getMaintenanceSettings } from "@/lib/data/maintenance";
 
 export default async function AdminSettingsPage() {
-  const [settings, promoDiscounts, maintenance] = await Promise.all([
+  const [settings, promoDiscounts, maintenance, apiStacks] = await Promise.all([
     getSiteSettings(),
     getPromoDiscountSettings(),
     getMaintenanceSettings(),
+    getApiStackReports(),
   ]);
 
   return (
@@ -31,6 +34,11 @@ export default async function AdminSettingsPage() {
           </div>
           <div className="space-y-4">
             <PromoDiscountCard settings={promoDiscounts} />
+            <ApiStacksCard
+              stacks={apiStacks.stacks}
+              summary={apiStacks.summary}
+              checkedAt={apiStacks.checkedAt}
+            />
             <CsvImportExportCard />
             <ResetPlatformCard />
           </div>

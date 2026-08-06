@@ -21,6 +21,16 @@ import {
   MAINTENANCE_SETTINGS_KEY,
 } from "@/lib/data/maintenance";
 import {
+  serializeAnsiClasses,
+  serializeProductTags,
+  sortDepartmentNames,
+} from "@/lib/data/catalog-options";
+import { serializeCertificationAnswers } from "@/lib/catalog/certifications";
+import {
+  normalizeStockVariants,
+  sumVariantQuantities,
+} from "@/lib/catalog/product-stock";
+import {
   absoluteUrl,
   generateOrderNumber,
   isMasterAdmin,
@@ -97,6 +107,20 @@ function mapProductPayload(
   const status = (input.catalogStatus ??
     (input.active ? "active" : "archived")) as CatalogStatus;
   const active = status === "active";
+  const touchScreen = Boolean(input.touchScreen);
+  let tagList = [...(input.tags ?? [])];
+  if (touchScreen) {
+    if (!tagList.some((t) => t.trim().toLowerCase() === "touch screen")) {
+      tagList = [...tagList, "Touch Screen"];
+    }
+  } else {
+    tagList = tagList.filter(
+      (t) => t.trim().toLowerCase() !== "touch screen",
+    );
+  }
+  const { tags: resolvedTags, tag: resolvedTag } =
+    serializeProductTags(tagList);
+
   return {
     name: input.name,
     slug: input.slug || slugify(input.name),
@@ -109,9 +133,8 @@ function mapProductPayload(
     compare_at_price: input.compareAtPrice ?? null,
     cost: input.cost ?? null,
     inventory_quantity: input.hasMultipleSizes
-      ? (input.variants ?? [])
-          .filter((row) => row.color.trim() && row.size.trim())
-          .reduce((sum, row) => sum + (row.qty || 0), 0)
+      ? sumVariantQuantities(input.variants) ||
+        Math.max(0, Number(input.inventoryQuantity) || 0)
       : input.inventoryQuantity,
     low_stock_threshold: input.lowStockThreshold ?? 10,
     weight: input.weight ?? null,
@@ -121,31 +144,39 @@ function mapProductPayload(
     bestseller: input.bestseller ?? false,
     product_type: input.productType || null,
     department: input.department || null,
-    ansi_class: input.ansiClass || null,
+    ansi_class: serializeAnsiClasses(
+      (input.primaryCertifications ?? []).map((row) => row.name),
+    ),
     color: input.hasMultipleSizes
-      ? (input.variants ?? []).find((row) => row.color.trim())?.color || null
+      ? (input.variants ?? []).find((row) => row.color.trim())?.color ||
+        input.color ||
+        null
       : input.color || null,
     size: input.size || null,
     metadata: {
       ...(existingMetadata ?? {}),
       status,
-      ...(input.tag ? { tag: input.tag } : { tag: null }),
+      tag: resolvedTag,
+      tags: resolvedTags,
       ...(input.gender?.trim()
         ? { gender: input.gender.trim() }
         : { gender: null }),
+      touchScreen,
       hasMultipleSizes: Boolean(input.hasMultipleSizes),
       variants: input.hasMultipleSizes
-        ? (input.variants ?? []).filter(
-            (row) => row.color.trim() && row.size.trim(),
-          )
+        ? normalizeStockVariants(input.variants)
         : [],
-      certifications: (input.certifications ?? [])
-        .filter((row) => row.name.trim())
-        .map((row) =>
-          row.value.trim()
-            ? `${row.name.trim()}: ${row.value.trim()}`
-            : row.name.trim(),
+      primaryCertifications: serializeCertificationAnswers(
+        input.primaryCertifications ?? [],
+      ),
+      certifications: serializeCertificationAnswers(input.certifications ?? []),
+      materials: [
+        ...new Set(
+          (input.materials ?? [])
+            .map((item) => item.trim())
+            .filter(Boolean),
         ),
+      ],
     },
   };
 }
@@ -171,7 +202,16 @@ export async function createCategory(raw: CategoryFormInput): Promise<ActionResu
       description: parsed.data.description || null,
       image_url: parsed.data.imageUrl || null,
       sort_order: parsed.data.sortOrder ?? 0,
-      active: parsed.data.active ?? true,
+      // Empty categories stay inactive until a product is assigned.
+      active: false,
+      department: parsed.data.department?.trim() || null,
+      ...(parsed.data.skuPrefix !== undefined
+        ? {
+            sku_prefix: parsed.data.skuPrefix.trim()
+              ? parsed.data.skuPrefix.trim().toUpperCase()
+              : null,
+          }
+        : {}),
     };
 
     const { data, error } = await supabase
@@ -217,7 +257,14 @@ export async function updateCategory(
       description: parsed.data.description || null,
       image_url: parsed.data.imageUrl || null,
       sort_order: parsed.data.sortOrder ?? 0,
-      active: parsed.data.active ?? true,
+      department: parsed.data.department?.trim() || null,
+      ...(parsed.data.skuPrefix !== undefined
+        ? {
+            sku_prefix: parsed.data.skuPrefix.trim()
+              ? parsed.data.skuPrefix.trim().toUpperCase()
+              : null,
+          }
+        : {}),
     };
 
     const { error } = await supabase
@@ -226,6 +273,9 @@ export async function updateCategory(
       .eq("id", id);
 
     if (error) throw error;
+
+    // Active flag follows product assignment (empty → inactive).
+    await syncCategoryActiveFromProducts(supabase, [id]);
 
     revalidatePath("/admin/categories");
     revalidatePath(`/admin/categories/${id}`);
@@ -236,6 +286,62 @@ export async function updateCategory(
     return {
       success: false,
       message: err instanceof Error ? err.message : "Failed to update category.",
+    };
+  }
+}
+
+export async function updateCategorySkuPrefix(
+  id: string,
+  rawPrefix: string,
+): Promise<ActionResult> {
+  const { normalizeCategorySkuPrefix } = await import(
+    "@/lib/admin/category-sku"
+  );
+  const skuPrefix = normalizeCategorySkuPrefix(rawPrefix);
+  if (!skuPrefix) {
+    return {
+      success: false,
+      message: "Enter a SKU prefix using letters and numbers.",
+    };
+  }
+
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    if (!isSupabaseConfigured()) {
+      const { setDemoCategorySkuPrefix } = await import("@/lib/data/admin");
+      setDemoCategorySkuPrefix(id, skuPrefix);
+      revalidatePath("/admin/categories");
+      revalidatePath(`/admin/categories/${id}`);
+      revalidatePath(`/admin/categories/${id}/edit`);
+      revalidatePath("/admin/products/new");
+      return {
+        success: true,
+        message: "SKU prefix updated (demo). Connect Supabase to persist.",
+      };
+    }
+    return auth.result;
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+    const { error } = await supabase
+      .from("categories")
+      .update({ sku_prefix: skuPrefix })
+      .eq("id", id);
+    if (error) throw error;
+
+    revalidatePath("/admin/categories");
+    revalidatePath(`/admin/categories/${id}`);
+    revalidatePath(`/admin/categories/${id}/edit`);
+    revalidatePath("/admin/products/new");
+    revalidatePath("/shop");
+    return { success: true, message: "SKU prefix updated." };
+  } catch (err) {
+    return {
+      success: false,
+      message:
+        err instanceof Error ? err.message : "Failed to update SKU prefix.",
     };
   }
 }
@@ -278,6 +384,63 @@ export async function deleteCategory(id: string): Promise<ActionResult> {
   }
 }
 
+async function syncCategoryActiveFromProducts(
+  supabase: Awaited<
+    ReturnType<typeof import("@/lib/supabase/admin").createServiceClient>
+  >,
+  categoryIds: Array<string | null | undefined>,
+) {
+  const ids = [
+    ...new Set(
+      categoryIds.filter((id): id is string => Boolean(id?.trim())),
+    ),
+  ];
+  if (ids.length === 0) return;
+
+  for (const categoryId of ids) {
+    const { count, error: countError } = await supabase
+      .from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("category_id", categoryId);
+    if (countError) throw countError;
+
+    const active = (count ?? 0) > 0;
+    const { error } = await supabase
+      .from("categories")
+      .update({ active })
+      .eq("id", categoryId);
+    if (error) throw error;
+  }
+}
+
+/** Brands with products stay active (homepage); brands with none stay archived. */
+async function syncBrandActiveFromProducts(
+  supabase: Awaited<
+    ReturnType<typeof import("@/lib/supabase/admin").createServiceClient>
+  >,
+  brandIds: Array<string | null | undefined>,
+) {
+  const ids = [
+    ...new Set(brandIds.filter((id): id is string => Boolean(id?.trim()))),
+  ];
+  if (ids.length === 0) return;
+
+  for (const brandId of ids) {
+    const { count, error: countError } = await supabase
+      .from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("brand_id", brandId);
+    if (countError) throw countError;
+
+    const active = (count ?? 0) > 0;
+    const { error } = await supabase
+      .from("brands")
+      .update({ active })
+      .eq("id", brandId);
+    if (error) throw error;
+  }
+}
+
 export async function createProduct(
   raw: ProductFormInput,
   images: { url: string; altText?: string; isPrimary?: boolean }[] = [],
@@ -293,9 +456,10 @@ export async function createProduct(
   try {
     const { createServiceClient } = await import("@/lib/supabase/admin");
     const supabase = createServiceClient();
+    const payload = mapProductPayload(parsed.data);
     const { data, error } = await supabase
       .from("products")
-      .insert(mapProductPayload(parsed.data))
+      .insert(payload)
       .select("id")
       .single();
 
@@ -308,10 +472,14 @@ export async function createProduct(
       data.id,
       parsed.data.specifications ?? [],
     );
+    await syncCategoryActiveFromProducts(supabase, [payload.category_id]);
+    await syncBrandActiveFromProducts(supabase, [payload.brand_id]);
 
     revalidatePath("/admin/products");
     revalidatePath("/admin/categories");
+    revalidatePath("/admin/brands");
     revalidatePath("/shop");
+    revalidatePath("/");
     return { success: true, message: "Product created.", id: data.id };
   } catch (err) {
     return {
@@ -339,16 +507,17 @@ export async function updateProduct(
     const supabase = createServiceClient();
     const { data: existing } = await supabase
       .from("products")
-      .select("metadata")
+      .select("metadata, category_id, brand_id")
       .eq("id", id)
       .maybeSingle();
     const existingMetadata =
       existing?.metadata && typeof existing.metadata === "object"
         ? (existing.metadata as Record<string, unknown>)
         : {};
+    const payload = mapProductPayload(parsed.data, existingMetadata);
     const { error } = await supabase
       .from("products")
-      .update(mapProductPayload(parsed.data, existingMetadata))
+      .update(payload)
       .eq("id", id);
 
     if (error) throw error;
@@ -357,11 +526,21 @@ export async function updateProduct(
       await syncProductImages(id, images);
     }
     await syncProductSpecifications(id, parsed.data.specifications ?? []);
+    await syncCategoryActiveFromProducts(supabase, [
+      existing?.category_id,
+      payload.category_id,
+    ]);
+    await syncBrandActiveFromProducts(supabase, [
+      existing?.brand_id,
+      payload.brand_id,
+    ]);
 
     revalidatePath("/admin/products");
     revalidatePath(`/admin/products/${id}`);
     revalidatePath("/admin/categories");
+    revalidatePath("/admin/brands");
     revalidatePath("/shop");
+    revalidatePath("/");
     return { success: true, message: "Product updated.", id };
   } catch (err) {
     return {
@@ -376,6 +555,7 @@ export async function deleteProduct(id: string): Promise<ActionResult> {
   if (!auth.ok) {
     if (!isSupabaseConfigured()) {
       revalidatePath("/admin/products");
+      revalidatePath("/admin/categories");
       return {
         success: true,
         message: "Product deleted (demo). Connect Supabase to persist.",
@@ -387,13 +567,22 @@ export async function deleteProduct(id: string): Promise<ActionResult> {
   try {
     const { createServiceClient } = await import("@/lib/supabase/admin");
     const supabase = createServiceClient();
+    const { data: existing } = await supabase
+      .from("products")
+      .select("category_id, brand_id")
+      .eq("id", id)
+      .maybeSingle();
     const { error } = await supabase.from("products").delete().eq("id", id);
     if (error) throw error;
+    await syncCategoryActiveFromProducts(supabase, [existing?.category_id]);
+    await syncBrandActiveFromProducts(supabase, [existing?.brand_id]);
 
     revalidatePath("/admin/products");
     revalidatePath("/admin/inventory");
     revalidatePath("/admin/categories");
+    revalidatePath("/admin/brands");
     revalidatePath("/shop");
+    revalidatePath("/");
     return { success: true, message: "Product deleted." };
   } catch (err) {
     return {
@@ -517,7 +706,8 @@ export async function createBrand(raw: BrandFormInput): Promise<ActionResult> {
       description: parsed.data.description || null,
       logo_url: parsed.data.logoUrl || null,
       website: parsed.data.website || null,
-      active: parsed.data.active ?? true,
+      // New brands stay archived until a product is assigned.
+      active: false,
     };
 
     const { data, error } = await supabase
@@ -531,7 +721,12 @@ export async function createBrand(raw: BrandFormInput): Promise<ActionResult> {
     revalidatePath("/admin/brands");
     revalidatePath("/brands");
     revalidatePath("/shop");
-    return { success: true, message: "Brand created.", id: data.id };
+    revalidatePath("/");
+    return {
+      success: true,
+      message: "Brand created. It stays in Archives until a product uses it.",
+      id: data.id,
+    };
   } catch (err) {
     return {
       success: false,
@@ -564,23 +759,128 @@ export async function updateBrand(
       description: parsed.data.description || null,
       logo_url: parsed.data.logoUrl || null,
       website: parsed.data.website || null,
-      active: parsed.data.active ?? true,
     };
 
     const { error } = await supabase.from("brands").update(payload).eq("id", id);
 
     if (error) throw error;
 
+    // Active/archived follows whether any product uses this brand.
+    await syncBrandActiveFromProducts(supabase, [id]);
+
     revalidatePath("/admin/brands");
     revalidatePath(`/admin/brands/${id}`);
     revalidatePath(`/admin/brands/${id}/edit`);
     revalidatePath("/brands");
     revalidatePath("/shop");
+    revalidatePath("/");
     return { success: true, message: "Brand updated.", id };
   } catch (err) {
     return {
       success: false,
       message: err instanceof Error ? err.message : "Failed to update brand.",
+    };
+  }
+}
+
+export async function archiveBrand(id: string): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    if (!isSupabaseConfigured()) {
+      revalidatePath("/admin/brands");
+      return {
+        success: true,
+        message: "Brand archived (demo). Connect Supabase to persist.",
+      };
+    }
+    return auth.result;
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const { count, error: countError } = await supabase
+      .from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("brand_id", id);
+    if (countError) throw countError;
+
+    if ((count ?? 0) > 0) {
+      return {
+        success: false,
+        message:
+          "This brand still has products. Remove the brand from those products to archive it.",
+      };
+    }
+
+    const { error } = await supabase
+      .from("brands")
+      .update({ active: false })
+      .eq("id", id);
+    if (error) throw error;
+
+    revalidatePath("/admin/brands");
+    revalidatePath(`/admin/brands/${id}`);
+    revalidatePath("/brands");
+    revalidatePath("/shop");
+    revalidatePath("/");
+    return { success: true, message: "Brand archived." };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to archive brand.",
+    };
+  }
+}
+
+export async function restoreBrand(id: string): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    if (!isSupabaseConfigured()) {
+      revalidatePath("/admin/brands");
+      return {
+        success: true,
+        message: "Brand restored (demo). Connect Supabase to persist.",
+      };
+    }
+    return auth.result;
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const { count, error: countError } = await supabase
+      .from("products")
+      .select("id", { count: "exact", head: true })
+      .eq("brand_id", id);
+    if (countError) throw countError;
+
+    if ((count ?? 0) === 0) {
+      return {
+        success: false,
+        message:
+          "Assign this brand to a product first — brands with no products stay in Archives.",
+      };
+    }
+
+    const { error } = await supabase
+      .from("brands")
+      .update({ active: true })
+      .eq("id", id);
+    if (error) throw error;
+
+    revalidatePath("/admin/brands");
+    revalidatePath(`/admin/brands/${id}`);
+    revalidatePath("/brands");
+    revalidatePath("/shop");
+    revalidatePath("/");
+    return { success: true, message: "Brand restored." };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to restore brand.",
     };
   }
 }
@@ -774,7 +1074,7 @@ export async function replenishProduct(
     const supabase = createServiceClient();
     const { data: existing, error: fetchError } = await supabase
       .from("products")
-      .select("inventory_quantity, name")
+      .select("inventory_quantity, name, metadata")
       .eq("id", id)
       .maybeSingle();
 
@@ -783,10 +1083,45 @@ export async function replenishProduct(
       return { success: false, message: "Product not found." };
     }
 
-    const nextQty = Math.max(0, Number(existing.inventory_quantity) || 0) + qty;
+    const metadata: Record<string, unknown> =
+      existing.metadata &&
+      typeof existing.metadata === "object" &&
+      !Array.isArray(existing.metadata)
+        ? { ...(existing.metadata as Record<string, unknown>) }
+        : {};
+
+    let nextQty = Math.max(0, Number(existing.inventory_quantity) || 0) + qty;
+
+    if (metadata.hasMultipleSizes === true && Array.isArray(metadata.variants)) {
+      const variants = metadata.variants.map((item) => {
+        if (!item || typeof item !== "object") return item;
+        return { ...(item as Record<string, unknown>) };
+      });
+      const target = variants.find((item) => {
+        if (!item || typeof item !== "object") return false;
+        const row = item as Record<string, unknown>;
+        return (
+          typeof row.color === "string" &&
+          row.color.trim() &&
+          typeof row.size === "string" &&
+          row.size.trim()
+        );
+      }) as Record<string, unknown> | undefined;
+      if (target) {
+        target.qty = Math.max(0, Number(target.qty) || 0) + qty;
+        metadata.variants = variants;
+        nextQty = sumVariantQuantities(
+          variants as { color?: string; size?: string; qty?: number }[],
+        );
+      }
+    }
+
     const { error } = await supabase
       .from("products")
-      .update({ inventory_quantity: nextQty })
+      .update({
+        inventory_quantity: nextQty,
+        metadata: metadata as import("@/types/database").Json,
+      })
       .eq("id", id);
 
     if (error) throw error;
@@ -794,6 +1129,7 @@ export async function replenishProduct(
     revalidatePath("/admin/products");
     revalidatePath(`/admin/products/${id}`);
     revalidatePath("/admin/inventory");
+    revalidatePath("/admin/categories");
     revalidatePath("/shop");
     return {
       success: true,
@@ -1271,6 +1607,161 @@ export async function convertQuoteToOrder(quoteId: string): Promise<ActionResult
   redirect(`/admin/orders/${orderId}`);
 }
 
+export type CreateAdminOrderItemInput = {
+  productId?: string | null;
+  productName: string;
+  sku?: string;
+  quantity: number;
+  unitPrice: number;
+};
+
+export type CreateAdminOrderInput = {
+  email: string;
+  status?: OrderStatus;
+  shippingAmount?: number;
+  taxAmount?: number;
+  discountAmount?: number;
+  internalNotes?: string;
+  shippingAddress?: {
+    first_name: string;
+    last_name: string;
+    company?: string;
+    line1: string;
+    line2?: string;
+    city: string;
+    state: string;
+    postal_code: string;
+    country?: string;
+    phone?: string;
+  } | null;
+  items: CreateAdminOrderItemInput[];
+};
+
+export async function createAdminOrder(
+  input: CreateAdminOrderInput,
+): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.result;
+
+  const email = input.email?.trim().toLowerCase();
+  if (!email || !email.includes("@")) {
+    return { success: false, message: "Enter a valid customer email." };
+  }
+
+  const items = (input.items ?? []).filter(
+    (item) =>
+      item.productName?.trim() &&
+      Number(item.quantity) > 0 &&
+      Number(item.unitPrice) >= 0,
+  );
+
+  if (items.length === 0) {
+    return {
+      success: false,
+      message: "Add at least one line item with a name, qty, and price.",
+    };
+  }
+
+  const status: OrderStatus = input.status ?? "pending";
+  const shipping = Number(input.shippingAmount) || 0;
+  const tax = Number(input.taxAmount) || 0;
+  const discount = Number(input.discountAmount) || 0;
+  const subtotal = items.reduce(
+    (sum, item) => sum + Number(item.unitPrice) * Number(item.quantity),
+    0,
+  );
+  const total = Number(
+    Math.max(0, subtotal - discount + shipping + tax).toFixed(2),
+  );
+  const orderNumber = generateOrderNumber();
+  const paidLike = status === "paid" || status === "processing" || status === "shipped" || status === "delivered";
+
+  let orderId: string;
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const address = input.shippingAddress;
+    const shippingAddress =
+      address?.line1?.trim() && address.city?.trim()
+        ? {
+            first_name: address.first_name?.trim() || "",
+            last_name: address.last_name?.trim() || "",
+            company: address.company?.trim() || null,
+            line1: address.line1.trim(),
+            line2: address.line2?.trim() || null,
+            city: address.city.trim(),
+            state: address.state?.trim() || "",
+            postal_code: address.postal_code?.trim() || "",
+            country: address.country?.trim() || "US",
+            phone: address.phone?.trim() || null,
+          }
+        : null;
+
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .insert({
+        order_number: orderNumber,
+        email,
+        status,
+        payment_status: paidLike ? "paid" : "unpaid",
+        fulfillment_status:
+          status === "shipped" || status === "delivered"
+            ? "fulfilled"
+            : "unfulfilled",
+        subtotal: Number(subtotal.toFixed(2)),
+        shipping_amount: shipping,
+        tax_amount: tax,
+        discount_amount: discount,
+        total,
+        currency: "USD",
+        shipping_address: shippingAddress,
+        internal_notes: input.internalNotes?.trim() || null,
+      })
+      .select("id")
+      .single();
+
+    if (orderError || !order) {
+      throw orderError ?? new Error("Order create failed");
+    }
+
+    const { error: itemsError } = await supabase.from("order_items").insert(
+      items.map((item) => ({
+        order_id: order.id,
+        product_id: item.productId || null,
+        product_name: item.productName.trim(),
+        sku: item.sku?.trim() || "",
+        quantity: Number(item.quantity),
+        unit_price: Number(item.unitPrice),
+        total_price: Number(
+          (Number(item.unitPrice) * Number(item.quantity)).toFixed(2),
+        ),
+      })),
+    );
+
+    if (itemsError) throw itemsError;
+
+    await supabase.from("order_status_history").insert({
+      order_id: order.id,
+      status,
+      notes: "Created manually in admin",
+      created_by: auth.userId,
+    });
+
+    orderId = order.id;
+    revalidatePath("/admin/orders");
+    revalidatePath(`/admin/orders/${orderId}`);
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : "Failed to create order.",
+    };
+  }
+
+  redirect(`/admin/orders/${orderId}`);
+}
+
 export async function saveSiteSettings(formData: FormData): Promise<ActionResult> {
   const auth = await requireAdmin();
   if (!auth.ok) {
@@ -1292,7 +1783,16 @@ export async function saveSiteSettings(formData: FormData): Promise<ActionResult
     const tagline = String(formData.get("tagline") ?? "");
     const supportEmail = String(formData.get("supportEmail") ?? "");
     const phone = String(formData.get("phone") ?? "");
-    const freeShippingThreshold = Number(formData.get("freeShippingThreshold") ?? 199);
+    const freeShippingRaw = String(
+      formData.get("freeShippingThreshold") ?? "199",
+    ).replace(/,/g, "");
+    const freeShippingThreshold = Number(freeShippingRaw);
+    if (!Number.isFinite(freeShippingThreshold) || freeShippingThreshold < 0) {
+      return {
+        success: false,
+        message: "Enter a valid free shipping threshold.",
+      };
+    }
 
     const rows = [
       {
@@ -1538,6 +2038,7 @@ export async function importProductsCsv(
 
     let imported = 0;
     let updated = 0;
+    const touchedBrandIds = new Set<string>();
 
     for (const row of rows) {
       const sku = row.sku?.trim();
@@ -1551,6 +2052,11 @@ export async function importProductsCsv(
 
       const price = parseNumber(row.price ?? "");
       if (price == null || price < 0) continue;
+
+      const brandId = row.brand_slug
+        ? (brandBySlug.get(row.brand_slug.toLowerCase()) ?? null)
+        : null;
+      if (brandId) touchedBrandIds.add(brandId);
 
       const payload = {
         sku,
@@ -1582,16 +2088,16 @@ export async function importProductsCsv(
         category_id: row.category_slug
           ? (categoryBySlug.get(row.category_slug.toLowerCase()) ?? null)
           : null,
-        brand_id: row.brand_slug
-          ? (brandBySlug.get(row.brand_slug.toLowerCase()) ?? null)
-          : null,
+        brand_id: brandId,
       };
 
       const { data: existing } = await supabase
         .from("products")
-        .select("id")
+        .select("id, brand_id")
         .eq("sku", sku)
         .maybeSingle();
+
+      if (existing?.brand_id) touchedBrandIds.add(existing.brand_id);
 
       if (existing?.id) {
         const { error } = await supabase
@@ -1607,9 +2113,13 @@ export async function importProductsCsv(
       }
     }
 
+    await syncBrandActiveFromProducts(supabase, [...touchedBrandIds]);
+
     revalidatePath("/admin/products");
     revalidatePath("/admin/inventory");
+    revalidatePath("/admin/brands");
     revalidatePath("/shop");
+    revalidatePath("/");
 
     return {
       success: true,
@@ -1984,7 +2494,7 @@ export async function addCatalogDepartment(
     const { error: removedError } = await supabase.from("site_settings").upsert(
       {
         key: "catalog_departments_removed",
-        value: { departments: nextRemoved },
+        value: { departments: sortDepartmentNames(nextRemoved) },
       },
       { onConflict: "key" },
     );
@@ -2017,12 +2527,13 @@ export async function addCatalogDepartment(
         : departmentSource === "offline"
           ? "catalog_offline_departments"
           : "catalog_departments";
-    const next =
+    const next = sortDepartmentNames(
       departmentSource === "catalog"
         ? [...currentPrimary, trimmed]
         : departmentSource === "offline"
           ? [...currentOffline, trimmed]
-          : [...currentCustom, trimmed];
+          : [...currentCustom, trimmed],
+    );
 
     const { error } = await supabase.from("site_settings").upsert(
       { key, value: { departments: next } },
@@ -2208,22 +2719,34 @@ export async function renameCatalogDepartment(
     }
 
     const { error: customError } = await supabase.from("site_settings").upsert(
-      { key: "catalog_departments", value: { departments: custom } },
+      {
+        key: "catalog_departments",
+        value: { departments: sortDepartmentNames(custom) },
+      },
       { onConflict: "key" },
     );
     if (customError) throw customError;
     const { error: primaryError } = await supabase.from("site_settings").upsert(
-      { key: "catalog_primary_departments", value: { departments: primary } },
+      {
+        key: "catalog_primary_departments",
+        value: { departments: sortDepartmentNames(primary) },
+      },
       { onConflict: "key" },
     );
     if (primaryError) throw primaryError;
     const { error: offlineError } = await supabase.from("site_settings").upsert(
-      { key: "catalog_offline_departments", value: { departments: offline } },
+      {
+        key: "catalog_offline_departments",
+        value: { departments: sortDepartmentNames(offline) },
+      },
       { onConflict: "key" },
     );
     if (offlineError) throw offlineError;
     const { error: removedError } = await supabase.from("site_settings").upsert(
-      { key: "catalog_departments_removed", value: { departments: removed } },
+      {
+        key: "catalog_departments_removed",
+        value: { departments: sortDepartmentNames(removed) },
+      },
       { onConflict: "key" },
     );
     if (removedError) throw removedError;
@@ -2375,14 +2898,17 @@ export async function deleteCatalogDepartment(
       : [...currentRemoved, trimmed];
 
     const { error: customError } = await supabase.from("site_settings").upsert(
-      { key: "catalog_departments", value: { departments: nextCustom } },
+      {
+        key: "catalog_departments",
+        value: { departments: sortDepartmentNames(nextCustom) },
+      },
       { onConflict: "key" },
     );
     if (customError) throw customError;
     const { error: primaryError } = await supabase.from("site_settings").upsert(
       {
         key: "catalog_primary_departments",
-        value: { departments: nextPrimary },
+        value: { departments: sortDepartmentNames(nextPrimary) },
       },
       { onConflict: "key" },
     );
@@ -2390,7 +2916,7 @@ export async function deleteCatalogDepartment(
     const { error: offlineError } = await supabase.from("site_settings").upsert(
       {
         key: "catalog_offline_departments",
-        value: { departments: nextOffline },
+        value: { departments: sortDepartmentNames(nextOffline) },
       },
       { onConflict: "key" },
     );
@@ -2398,7 +2924,7 @@ export async function deleteCatalogDepartment(
     const { error: removedError } = await supabase.from("site_settings").upsert(
       {
         key: "catalog_departments_removed",
-        value: { departments: nextRemoved },
+        value: { departments: sortDepartmentNames(nextRemoved) },
       },
       { onConflict: "key" },
     );
@@ -2466,10 +2992,33 @@ async function remapProductTags(
       raw && typeof raw === "object" && !Array.isArray(raw)
         ? { ...(raw as Record<string, unknown>) }
         : {};
-    const current =
-      typeof metadata.tag === "string" ? metadata.tag.trim() : "";
-    if (current.toLowerCase() !== fromKey) continue;
-    metadata.tag = toName;
+    const currentTags = Array.isArray(metadata.tags)
+      ? metadata.tags.filter(
+          (item): item is string => typeof item === "string",
+        )
+      : [];
+    const nextTags = currentTags
+      .map((tag) => (tag.trim().toLowerCase() === fromKey ? toName : tag))
+      .filter((tag): tag is string => typeof tag === "string" && Boolean(tag?.trim()));
+    const hadLegacy =
+      typeof metadata.tag === "string" &&
+      metadata.tag.trim().toLowerCase() === fromKey;
+    if (
+      !hadLegacy &&
+      !currentTags.some((tag) => tag.trim().toLowerCase() === fromKey)
+    ) {
+      continue;
+    }
+    if (toName) {
+      if (!nextTags.some((tag) => tag.trim().toLowerCase() === toName.toLowerCase())) {
+        nextTags.push(toName);
+      }
+      metadata.tag = nextTags[0] ?? toName;
+      metadata.tags = nextTags;
+    } else {
+      metadata.tag = nextTags[0] ?? null;
+      metadata.tags = nextTags;
+    }
     const { error: updateError } = await supabase
       .from("products")
       .update({
@@ -2967,6 +3516,37 @@ export async function setMaintenanceMode(input: {
         err instanceof Error
           ? err.message
           : "Failed to change maintenance mode.",
+    };
+  }
+}
+
+/** Re-run API stack probes. Sticky lights only upgrade to green when healthy. */
+export async function recheckApiStacks(): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    if (!isSupabaseConfigured()) {
+      const { getApiStackReports } = await import("@/lib/data/api-stacks");
+      await getApiStackReports();
+      revalidatePath("/admin/settings");
+      return { success: true, message: "API stacks rechecked." };
+    }
+    return auth.result;
+  }
+
+  try {
+    const { getApiStackReports } = await import("@/lib/data/api-stacks");
+    await getApiStackReports();
+    revalidatePath("/admin/settings");
+    return {
+      success: true,
+      message:
+        "API stacks rechecked. Lights only turn green when the probe confirms the issue is resolved.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message:
+        err instanceof Error ? err.message : "Failed to recheck API stacks.",
     };
   }
 }

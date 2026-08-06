@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { PackageSearch } from "lucide-react";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
-import { ProductFilters } from "@/components/products/product-filters";
+import { ProductFilters, SHOP_FILTERS_MOBILE_ROOT_ID } from "@/components/products/product-filters";
 import { ProductGrid } from "@/components/products/product-grid";
 import { ProductGridSkeleton } from "@/components/products/product-grid-skeleton";
 import { ProductSort } from "@/components/products/product-sort";
@@ -27,15 +27,17 @@ import {
 import type { ProductFilters as ProductFiltersType } from "@/types";
 import { SEED_PRODUCTS } from "@/lib/data/seed-data";
 import {
-  ANSI_CLASS_OPTIONS,
   COLOR_OPTIONS,
   GENDER_OPTIONS,
-  PRODUCT_TYPE_OPTIONS,
   SHOE_SIZE_OPTIONS,
+  SHOP_ANSI_CERTIFICATION_OPTIONS,
+  SHOP_MATERIAL_OPTIONS,
   SHOP_HIDDEN_DEPARTMENTS,
   SIZE_OPTIONS,
   compareCatalogSizes,
   mergeCatalogOptions,
+  parseAnsiClasses,
+  productMaterialValues,
 } from "@/lib/data/catalog-options";
 import { cn } from "@/lib/utils";
 
@@ -83,26 +85,85 @@ async function ResultCount({
 }) {
   const { total, page, pageSize, error } = await results;
 
-  if (error) return <p className="text-sm text-medium-gray">—</p>;
+  if (error) return <p className="truncate text-sm text-medium-gray">—</p>;
   if (total === 0) {
-    return <p className="text-sm text-medium-gray">No products</p>;
+    return (
+      <p className="truncate text-sm text-medium-gray">No products</p>
+    );
   }
 
   const start = (page - 1) * pageSize + 1;
   const end = Math.min(page * pageSize, total);
 
   return (
-    <p className="text-sm text-medium-gray">
-      Showing{" "}
-      <span className="font-semibold text-dark-charcoal tabular-nums">
-        {start}–{end}
-      </span>{" "}
-      of{" "}
-      <span className="font-semibold text-dark-charcoal tabular-nums">
-        {total}
-      </span>{" "}
-      products
+    <p className="shop-result-count truncate text-sm text-medium-gray">
+      <span className="shop-result-count-compact @3xl:hidden">
+        <span className="font-semibold text-dark-charcoal tabular-nums">
+          {total}
+        </span>{" "}
+        products
+      </span>
+      <span className="shop-result-count-full hidden @3xl:inline">
+        Showing{" "}
+        <span className="font-semibold text-dark-charcoal tabular-nums">
+          {start}–{end}
+        </span>{" "}
+        of{" "}
+        <span className="font-semibold text-dark-charcoal tabular-nums">
+          {total}
+        </span>{" "}
+        products
+      </span>
     </p>
+  );
+}
+
+function ShopResultsToolbar({
+  results,
+  resultsKey,
+  basePath,
+  chipsCount,
+  className,
+}: {
+  results: Promise<CatalogResults>;
+  resultsKey: string;
+  basePath: string;
+  chipsCount: number;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "shop-results-toolbar flex flex-col gap-2.5 rounded-sm border border-border-gray bg-white/95 px-3 py-2.5 shadow-sm backdrop-blur @3xl:flex-row @3xl:items-center @3xl:justify-between @3xl:gap-4 @3xl:px-4",
+        className,
+      )}
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <Suspense
+          key={resultsKey}
+          fallback={
+            <span className="h-4 w-40 animate-pulse rounded-sm bg-light-gray" />
+          }
+        >
+          <ResultCount results={results} />
+        </Suspense>
+        {chipsCount > 0 ? (
+          <Link
+            href={basePath}
+            className="hidden shrink-0 text-sm font-medium text-medium-gray underline-offset-2 hover:text-dark-charcoal hover:underline @3xl:block"
+          >
+            Clear all
+          </Link>
+        ) : null}
+      </div>
+      <Suspense
+        fallback={
+          <div className="h-10 w-full animate-pulse rounded-sm bg-light-gray @3xl:w-44" />
+        }
+      >
+        <ProductSort layout="inline" className="w-full min-w-0 @3xl:w-auto" />
+      </Suspense>
+    </div>
   );
 }
 
@@ -198,13 +259,21 @@ export async function ShopCatalog({
       : categories.map((c) => ({ label: c.name, value: c.slug })),
     brands: brands.map((b) => ({ label: b.name, value: b.slug })),
     genders: GENDER_OPTIONS.map((g) => ({ label: g.label, value: g.value })),
-    productTypes: mergeCatalogOptions(
-      PRODUCT_TYPE_OPTIONS,
-      SEED_PRODUCTS.map((p) => p.product_type),
-    ),
     ansiClasses: mergeCatalogOptions(
-      ANSI_CLASS_OPTIONS,
-      SEED_PRODUCTS.map((p) => p.ansi_class),
+      SHOP_ANSI_CERTIFICATION_OPTIONS,
+      [
+        ...SEED_PRODUCTS.flatMap((p) => parseAnsiClasses(p.ansi_class)),
+        ...SEED_PRODUCTS.flatMap((p) => p.certifications),
+      ],
+    ),
+    materials: mergeCatalogOptions(
+      SHOP_MATERIAL_OPTIONS,
+      SEED_PRODUCTS.flatMap((p) =>
+        productMaterialValues({
+          metadata: null,
+          specifications: p.specifications,
+        }),
+      ),
     ),
     colors: mergeCatalogOptions(
       COLOR_OPTIONS,
@@ -235,29 +304,74 @@ export async function ShopCatalog({
     ][],
   ).toString();
 
-  return (
-    <div className="container-titan py-6 lg:py-10">
-      <Breadcrumbs
-        className="mb-5"
-        items={[
-          { label: "Home", href: "/" },
-          { label: "Shop", href: "/shop" },
-          ...(breadcrumbLabel
-            ? [{ label: breadcrumbLabel, href: basePath }]
-            : []),
-        ]}
-      />
+  const departmentValue = query.department ?? query.group;
+  const departmentLabel = departmentValue
+    ? filterOptions.departments.find((d) => d.value === departmentValue)
+        ?.label ?? departmentValue
+    : null;
+  const brandLabel = query.brand
+    ? filterOptions.brands.find((b) => b.value === query.brand)?.label ??
+      query.brand
+    : null;
 
-      <header className="border-b border-border-gray pb-6">
-        <div className="max-w-4xl border-l-4 border-titan-yellow pl-4 sm:pl-5">
-          <p className="font-heading text-[11px] font-semibold uppercase tracking-[0.2em] text-medium-gray">
+  const breadcrumbTrail: { label: string; href?: string }[] = [
+    { label: "Home", href: "/" },
+    { label: "Shop", href: "/shop" },
+  ];
+
+  if (breadcrumbLabel) {
+    breadcrumbTrail.push({
+      label: breadcrumbLabel,
+      href: departmentLabel || brandLabel || query.q ? basePath : undefined,
+    });
+  }
+
+  if (departmentLabel) {
+    breadcrumbTrail.push({
+      label: departmentLabel,
+      href: brandLabel || query.q
+        ? `${basePath}?department=${encodeURIComponent(departmentValue!)}`
+        : undefined,
+    });
+  }
+
+  if (brandLabel) {
+    breadcrumbTrail.push({
+      label: brandLabel,
+      href: query.q
+        ? (() => {
+            const params = new URLSearchParams();
+            if (departmentValue) params.set("department", departmentValue);
+            params.set("brand", query.brand!);
+            return `${basePath}?${params.toString()}`;
+          })()
+        : undefined,
+    });
+  }
+
+  if (query.q) {
+    breadcrumbTrail.push({ label: `“${query.q}”` });
+  } else if (!breadcrumbLabel && !departmentLabel && !brandLabel) {
+    // Base /shop — keep Shop as the parent link and name the product catalog.
+    breadcrumbTrail.push({ label: "All Products" });
+  }
+
+  return (
+    <div className="container-titan py-6 @5xl:py-10">
+      <Breadcrumbs className="mb-5" items={breadcrumbTrail} />
+
+      <header className="border-b border-border-gray pb-3 @5xl:pb-6">
+        <div className="max-w-4xl border-l-2 border-titan-yellow pl-3 @5xl:border-l-4 @5xl:pl-5">
+          <p className="font-heading text-[10px] font-semibold uppercase tracking-[0.18em] text-medium-gray @5xl:text-[11px] @5xl:tracking-[0.2em]">
             {breadcrumbLabel ? "Category" : "Full catalog"}
           </p>
-          <h1 className="mt-1.5 font-heading text-4xl uppercase leading-[1.05] text-dark-charcoal md:text-5xl">
+          <h1 className="mt-0.5 font-heading text-2xl uppercase leading-[1.1] text-dark-charcoal @5xl:mt-1.5 @5xl:text-5xl @5xl:leading-[1.05]">
             {title}
           </h1>
           {description ? (
-            <p className="mt-3 text-medium-gray line-clamp-1">{description}</p>
+            <p className="shop-catalog-description mt-3 hidden text-medium-gray line-clamp-1 @5xl:block">
+              {description}
+            </p>
           ) : null}
         </div>
       </header>
@@ -266,8 +380,20 @@ export async function ShopCatalog({
         departments={filterOptions.departments}
         activeDepartment={query.department}
         basePath={basePath}
-        className="mt-5"
+        className="mt-4 @5xl:mt-5"
       />
+
+      <div
+        className="shop-filters-mobile-root sticky top-[calc(3.5rem+var(--phone-safe-top,0px)+env(safe-area-inset-top,0px))] z-20 mt-4 space-y-2.5 @5xl:hidden"
+      >
+        <div id={SHOP_FILTERS_MOBILE_ROOT_ID} />
+        <ShopResultsToolbar
+          results={results}
+          resultsKey={resultsKey}
+          basePath={basePath}
+          chipsCount={chips.length}
+        />
+      </div>
 
       <ShopActiveFilters
         basePath={basePath}
@@ -276,10 +402,10 @@ export async function ShopCatalog({
         className="mt-4"
       />
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[16rem_1fr] lg:gap-8 xl:grid-cols-[18rem_1fr]">
+      <div className="mt-6 grid gap-6 @5xl:grid-cols-[16rem_1fr] @5xl:gap-8 xl:grid-cols-[18rem_1fr]">
         <Suspense
           fallback={
-            <div className="hidden h-96 animate-pulse rounded-sm bg-light-gray lg:block" />
+            <div className="hidden h-96 animate-pulse rounded-sm bg-light-gray @5xl:block" />
           }
         >
           <ProductFilters
@@ -287,8 +413,8 @@ export async function ShopCatalog({
             categories={filterOptions.categories}
             brands={filterOptions.brands}
             genders={filterOptions.genders}
-            productTypes={filterOptions.productTypes}
             ansiClasses={filterOptions.ansiClasses}
+            materials={filterOptions.materials}
             colors={filterOptions.colors}
             sizes={filterOptions.sizes}
             priceBounds={{
@@ -305,33 +431,13 @@ export async function ShopCatalog({
         </Suspense>
 
         <div className="min-w-0">
-          <div className="sticky top-14 z-20 mb-5 flex items-center justify-between gap-4 rounded-sm border border-border-gray bg-white/95 px-3 py-2.5 shadow-sm backdrop-blur sm:px-4 lg:top-16">
-            <div className="flex min-w-0 items-center gap-3">
-              <Suspense
-                key={resultsKey}
-                fallback={
-                  <span className="h-4 w-40 animate-pulse rounded-sm bg-light-gray" />
-                }
-              >
-                <ResultCount results={results} />
-              </Suspense>
-              {chips.length > 0 ? (
-                <Link
-                  href={basePath}
-                  className="hidden shrink-0 text-sm font-medium text-medium-gray underline-offset-2 hover:text-dark-charcoal hover:underline sm:block"
-                >
-                  Clear all
-                </Link>
-              ) : null}
-            </div>
-            <Suspense
-              fallback={
-                <div className="h-10 w-44 animate-pulse rounded-sm bg-light-gray" />
-              }
-            >
-              <ProductSort layout="inline" />
-            </Suspense>
-          </div>
+          <ShopResultsToolbar
+            results={results}
+            resultsKey={resultsKey}
+            basePath={basePath}
+            chipsCount={chips.length}
+            className="sticky top-16 z-20 mb-5 hidden @5xl:flex"
+          />
 
           <Suspense key={resultsKey} fallback={<ProductGridSkeleton />}>
             <ResultGrid

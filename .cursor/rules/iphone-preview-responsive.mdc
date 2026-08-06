@@ -1,0 +1,27 @@
+---
+description: iPhone preview edits apply only to official mobile/responsive UI (storefront + admin)
+alwaysApply: true
+---
+
+# iPhone preview = official mobile responsive
+
+The local iPhone design shell (`?shell=1` / `DevIphoneShell`) is the **source of truth for mobile UI** on both:
+
+- Storefront (shop layout)
+- Admin dashboard (`admin-shell`)
+
+## Rules
+
+1. **Edits made in iPhone preview must ship as real responsive mobile styles** — same composition on real phones / narrow containers, with or without the shell.
+2. **Do not** implement preview-only visuals with `html.phone-sim { ... }` except for shell infrastructure (clipping, scroll lock, forcing mobile chrome when a wide desktop viewport hosts the preview).
+3. Prefer **`@container` queries** on shop layout / `admin-shell` (`@3xl` ≈ tablet+, `@5xl` ≈ desktop chrome) instead of viewport `sm:` / `lg:` for layout that must match the phone frame.
+4. Desktop layouts stay behind `@5xl:` (or equivalent). Mobile is the default / `@5xl:hidden` branch.
+5. When changing UI while the shell is open, assume the change is **mobile-only** unless the user explicitly asks for desktop too.
+
+## Shell CSS allowlist
+
+`html.phone-sim` may only:
+
+- Set `--phone-safe-top` / `--phone-safe-bottom`
+- Clip / contain overlays inside the glass
+- Force mobile chrome visibility on a desktop-width preview viewport

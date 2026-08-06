@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { AdminProductsFilterBar } from "@/components/admin/admin-products-filter-bar";
 import { AdminProductsTable } from "@/components/admin/admin-products-table";
+import { ProductsMobileChrome } from "@/components/admin/products-mobile-chrome";
 import { Pagination } from "@/components/products/pagination";
 import {
   getAdminBrands,
@@ -14,6 +15,12 @@ import {
   getAdminProducts,
 } from "@/lib/data/admin";
 import { productSearchScore } from "@/lib/search";
+import {
+  formatProductStockBySize,
+  getProductStockBySize,
+  getProductStockQuantity,
+  getProductStockState,
+} from "@/lib/catalog/product-stock";
 import {
   cn,
   formatCurrency,
@@ -76,11 +83,10 @@ function buildHref(opts: {
 
 function matchesStock(p: Product, stock: StockFilter) {
   if (stock === "all") return true;
-  const qty = p.inventory_quantity ?? 0;
-  const threshold = p.low_stock_threshold ?? 0;
-  if (stock === "out") return qty <= 0;
-  if (stock === "low") return qty > 0 && qty <= threshold;
-  return qty > threshold;
+  const state = getProductStockState(p);
+  if (stock === "out") return state === "out";
+  if (stock === "low") return state === "low";
+  return state === "ok";
 }
 
 function AnalyticTab({
@@ -168,11 +174,11 @@ export default async function AdminProductsPage({
   const archived = products.filter((p) => getCatalogStatus(p) === "archived");
   const lowStock = active.filter((p) => matchesStock(p, "low"));
   const inventoryUnits = active.reduce(
-    (sum, p) => sum + (p.inventory_quantity ?? 0),
+    (sum, p) => sum + getProductStockQuantity(p),
     0,
   );
   const catalogValue = active.reduce(
-    (sum, p) => sum + Number(p.price ?? 0) * (p.inventory_quantity ?? 0),
+    (sum, p) => sum + Number(p.price ?? 0) * getProductStockQuantity(p),
     0,
   );
 
@@ -236,11 +242,79 @@ export default async function AdminProductsPage({
   };
 
   const filterState = { tab, q, category: categoryId, brand: brandId, stock };
+  const isEmptyCatalog =
+    !hasFilters &&
+    tab === "active" &&
+    stock === "all" &&
+    active.length === 0 &&
+    drafts.length === 0 &&
+    archived.length === 0;
+
+  const statusChips = [
+    {
+      kind: "products" as const,
+      href: buildHref({ ...filterState, tab: "active" as const, stock: "all" as const }),
+      label: "Products",
+      count: active.length,
+      active: tab === "active" && stock === "all",
+    },
+    {
+      kind: "drafts" as const,
+      href: buildHref({ ...filterState, tab: "draft" as const, stock: "all" as const }),
+      label: "Drafts",
+      count: drafts.length,
+      active: tab === "draft",
+    },
+    {
+      kind: "archived" as const,
+      href: buildHref({
+        ...filterState,
+        tab: "archived" as const,
+        stock: "all" as const,
+      }),
+      label: "Archived",
+      count: archived.length,
+      active: tab === "archived",
+    },
+    {
+      kind: "lowStock" as const,
+      href: buildHref({
+        ...filterState,
+        tab: "active" as const,
+        stock: "low" as const,
+      }),
+      label: "Low stock",
+      count: lowStock.length,
+      active: stock === "low",
+      alert: lowStock.length > 0,
+    },
+  ];
+
+  const rangeLabel =
+    visible.length > 0 ? `showing ${rangeStart}–${rangeEnd}` : "";
 
   return (
     <div>
-      {/* Not sticky below lg: it would sit under the sticky admin mobile bar. */}
-      <div className="static z-20 space-y-5 bg-light-gray pb-0 pt-1 lg:sticky lg:top-0">
+      <ProductsMobileChrome
+        title={tabMeta[tab].title}
+        description={tabMeta[tab].description}
+        itemCount={visible.length}
+        rangeLabel={rangeLabel}
+        statusChips={statusChips}
+        tab={tab}
+        q={q}
+        categoryId={categoryId}
+        brandId={brandId}
+        stock={stock}
+        categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+        brands={brands.map((b) => ({ id: b.id, name: b.name }))}
+        hasFilters={hasFilters}
+        clearHref={buildHref({ tab })}
+        isEmptyCatalog={isEmptyCatalog}
+      />
+
+      {/* Not sticky below @5xl: it would sit under the sticky admin mobile bar. */}
+      <div className="admin-products-desktop-chrome static z-20 hidden space-y-5 bg-light-gray pb-0 pt-1 @5xl:sticky @5xl:top-0 @5xl:block">
         <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
           <AnalyticTab
             href={buildHref({ ...filterState, tab: "active", stock: "all" })}
@@ -332,7 +406,14 @@ export default async function AdminProductsPage({
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-b-sm border border-t-0 border-border-gray bg-white">
+      <div
+        className={cn(
+          "overflow-hidden border border-border-gray bg-white",
+          isEmptyCatalog
+            ? "mt-3 hidden rounded-sm @5xl:mt-0 @5xl:block @5xl:rounded-b-sm @5xl:rounded-t-none @5xl:border-t-0"
+            : "rounded-b-sm border-t-0",
+        )}
+      >
         <AdminProductsTable
           tab={tab}
           emptyMessage={
@@ -345,11 +426,16 @@ export default async function AdminProductsPage({
             name: p.name,
             sku: p.sku,
             categoryName: p.category?.name ?? null,
+            brandName: p.brand?.name ?? null,
             price: Number(p.price ?? 0),
-            inventoryQuantity: p.inventory_quantity ?? 0,
+            inventoryQuantity: getProductStockQuantity(p),
             lowStockThreshold: p.low_stock_threshold ?? 0,
+            stockBySize: formatProductStockBySize(p),
+            stockSizes: getProductStockBySize(p),
             status: getCatalogStatus(p),
             imageUrl: productImageUrl(p),
+            shortDescription: p.short_description,
+            editHref: `/admin/products/${p.id}`,
           }))}
         />
 

@@ -187,7 +187,7 @@ export function CategorySpecsField({
               <li
                 key={row.name}
                 className={cn(
-                  "grid gap-2 px-3 py-2 sm:grid-cols-[12rem_minmax(0,1fr)] sm:items-center",
+                  "grid gap-2 px-3 py-2 @5xl:grid-cols-[12rem_minmax(0,1fr)] @5xl:items-center",
                   index % 2 === 0 ? "bg-white" : "bg-light-gray/70",
                 )}
               >
@@ -209,7 +209,7 @@ export function CategorySpecsField({
 
       <p className="text-xs text-medium-gray">
         Pick multiple fields from the checklist, then fill in each answer.
-        These appear on the product specifications tab.
+        These appear with the product listing details.
       </p>
     </div>
   );

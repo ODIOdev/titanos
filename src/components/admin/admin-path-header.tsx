@@ -85,11 +85,22 @@ const TITLES: RouteMeta[] = [
     description: "Promo code partners and redemptions",
   },
   {
-    match: /^\/admin\/orders\/[^/]+$/,
-    title: "Order details",
+    match: /^\/admin\/orders\/new$/,
+    title: "Create order",
+    description: "Manual / phone / wholesale order",
     back: () => ({ href: "/admin/orders", label: "Back to orders" }),
   },
-  { match: /^\/admin\/orders$/, title: "Orders" },
+  {
+    match: /^\/admin\/orders\/[^/]+$/,
+    title: "Order details",
+    description: "Process, ship, or return",
+    back: () => ({ href: "/admin/orders", label: "Back to orders" }),
+  },
+  {
+    match: /^\/admin\/orders$/,
+    title: "Orders",
+    description: "Process → pack → ship → deliver",
+  },
   {
     match: /^\/admin\/customers\/([^/]+)\/edit$/,
     title: "Edit customer",
@@ -117,6 +128,17 @@ const TITLES: RouteMeta[] = [
   {
     match: /^\/admin\/brands\/[^/]+\/edit$/,
     title: "Edit brand",
+    back: (pathname) => {
+      const id = pathname.split("/")[3];
+      return id
+        ? { href: `/admin/brands/${id}`, label: "Back to brand" }
+        : { href: "/admin/brands", label: "Back to brands" };
+    },
+  },
+  {
+    match: /^\/admin\/brands\/[^/]+$/,
+    title: "Brand details",
+    description: "Logo, products, and linked categories",
     back: () => ({ href: "/admin/brands", label: "Back to brands" }),
   },
   { match: /^\/admin\/brands$/, title: "Brands", description: "Manufacturer catalog partners" },

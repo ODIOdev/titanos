@@ -1,5 +1,4 @@
 import { HeroSection } from "@/components/home/hero-section";
-import { CategoryGrid } from "@/components/home/category-grid";
 import { TrustStrip } from "@/components/home/trust-strip";
 import { IndustrySolutions } from "@/components/home/industry-solutions";
 import { BulkOrderCta } from "@/components/home/bulk-order-cta";
@@ -17,14 +16,13 @@ export default async function HomePage() {
   ]);
 
   return (
-    <>
+    <div className="home-page">
       <HeroSection />
-      <CategoryGrid />
 
-      <section className="section-y bg-light-gray">
+      <section className="home-section bg-light-gray pb-6 pt-4 @3xl:py-14 @5xl:py-16">
         <div className="container-titan">
           <SectionHeader
-            eyebrow="Top picks"
+            variant="rail"
             title="Featured products"
             description="Top-rated gear ready for your next jobsite."
             href="/shop"
@@ -37,20 +35,20 @@ export default async function HomePage() {
       <TrustStrip />
       <IndustrySolutions />
 
-      <section className="section-y bg-white">
+      <section className="home-section bg-white pb-6 pt-4 @3xl:py-14 @5xl:py-16">
         <div className="container-titan">
           <SectionHeader
-            eyebrow="Proven on the job"
+            variant="rail"
             title="Bestsellers"
             description="Products crews reorder again and again."
             href="/shop?sort=best_selling"
-            linkLabel="View bestsellers"
+            linkLabel="View all"
           />
           <ProductCarousel label="Bestselling products">
             {bestsellers.map((product) => (
               <li
                 key={product.id}
-                className="w-[78%] shrink-0 snap-start sm:w-[calc((100%-1rem)/2)] lg:w-[calc((100%-3rem)/4)]"
+                className="w-[78%] shrink-0 snap-start @3xl:w-[calc((100%-1rem)/2)] @5xl:w-[calc((100%-3rem)/4)]"
               >
                 <ProductCard product={product} />
               </li>
@@ -61,6 +59,6 @@ export default async function HomePage() {
 
       <BulkOrderCta />
       <NewsletterForm />
-    </>
+    </div>
   );
 }

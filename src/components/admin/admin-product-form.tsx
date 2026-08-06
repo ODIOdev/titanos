@@ -17,12 +17,12 @@ import {
 } from "@/lib/actions/admin";
 import { productFormSchema, type ProductFormInput } from "@/lib/validations";
 import {
-  ANSI_CLASS_OPTIONS,
   DEPARTMENT_OPTIONS,
   GENDER_OPTIONS,
   PRODUCT_TAG_OPTIONS,
   SHIPPING_CLASS_OPTIONS,
   SIZE_OPTIONS,
+  toGroupedSelectOptions,
   toSelectOptions,
 } from "@/lib/data/catalog-options";
 import { cn, slugify } from "@/lib/utils";
@@ -30,10 +30,14 @@ import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
 import { ColorPaletteField } from "@/components/admin/color-palette-field";
 import { CategorySpecsField } from "@/components/admin/category-specs-field";
 import { CertificationsField } from "@/components/admin/certifications-field";
+import { MaterialsField } from "@/components/admin/materials-field";
+import { TagsField } from "@/components/admin/tags-field";
 import {
   VariantMatrixField,
+  normalizeVariantRows,
   type VariantRow,
 } from "@/components/admin/variant-matrix-field";
+import { sumVariantQuantities } from "@/lib/catalog/product-stock";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -177,13 +181,15 @@ export function AdminProductForm({
       productType: "",
       department: "",
       gender: "",
-      tag: "",
-      ansiClass: "",
+      touchScreen: false,
+      tags: [],
+      primaryCertifications: [],
       color: "",
       size: "",
       hasMultipleSizes: false,
       variants: [],
       specifications: [],
+      materials: [],
       certifications: [],
       ...defaultValues,
     },
@@ -203,7 +209,10 @@ export function AdminProductForm({
   const variants = (watch("variants") ?? []) as VariantRow[];
   const categoryId = watch("categoryId");
   const specifications = watch("specifications") ?? [];
+  const materials = watch("materials") ?? [];
   const certifications = watch("certifications") ?? [];
+  const primaryCertifications = watch("primaryCertifications") ?? [];
+  const tags = watch("tags") ?? [];
   const selectedCategorySlug =
     categories.find((c) => c.id === categoryId)?.slug ?? null;
 
@@ -391,11 +400,27 @@ export function AdminProductForm({
     }
   }
 
+  function syncInventoryFromVariants(next: VariantRow[]) {
+    const total = sumVariantQuantities(next);
+    setValue("inventoryQuantity", total, {
+      shouldDirty: true,
+      shouldValidate: true,
+    });
+  }
+
   const onSubmit = (values: ProductFormInput) => {
     startTransition(async () => {
+      const normalizedVariants = values.hasMultipleSizes
+        ? normalizeVariantRows(values.variants ?? [])
+        : [];
       const payload = {
         ...values,
         slug: values.slug || slugify(values.name),
+        variants: normalizedVariants,
+        inventoryQuantity: values.hasMultipleSizes
+          ? sumVariantQuantities(normalizedVariants) ||
+            Math.max(0, Number(values.inventoryQuantity) || 0)
+          : values.inventoryQuantity,
       };
       const imagePayload = images
         .filter(
@@ -426,12 +451,8 @@ export function AdminProductForm({
       }
 
       toast.success(result.message);
-      if (mode === "create") {
-        router.push(returnHref);
-        router.refresh();
-      } else {
-        router.refresh();
-      }
+      router.push(returnHref);
+      router.refresh();
     });
   };
 
@@ -441,7 +462,7 @@ export function AdminProductForm({
   return (
     <form
       onSubmit={handleSubmit(onSubmit)}
-      className="admin-product-form relative space-y-5 rounded-sm border border-[#cfd3d8] bg-[#e4e7eb] p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] sm:p-4"
+      className="admin-product-form relative min-w-0 space-y-4 overflow-x-clip rounded-sm border border-[#cfd3d8] bg-[#e4e7eb] p-2.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.45)] @5xl:space-y-5 @5xl:p-4"
     >
       <div
         aria-hidden="true"
@@ -452,28 +473,41 @@ export function AdminProductForm({
         }}
       />
 
+      <FormActionsBar
+        position="top"
+        mode={mode}
+        pending={pending}
+        uploading={uploading}
+        onCancel={() => router.push(returnHref)}
+        onDelete={
+          mode === "edit" && productId
+            ? () => setDeleteOpen(true)
+            : undefined
+        }
+      />
+
       {/* Product overview: identity + media */}
       <section className="relative overflow-hidden rounded-sm border border-[#cfd3d8] bg-[#f3f4f6] shadow-[0_1px_0_rgba(255,255,255,0.65)]">
-        <div className="flex items-start gap-3 border-b border-[#d8dce1] bg-[#eceef1] px-5 py-4">
+        <div className="flex items-start gap-2.5 border-b border-[#d8dce1] bg-[#eceef1] px-3 py-3 @5xl:gap-3 @5xl:px-5 @5xl:py-4">
           <span className="mt-0.5 h-8 w-1 shrink-0 rounded-sm bg-titan-yellow" aria-hidden="true" />
-          <div>
-            <h2 className="font-heading text-lg font-semibold uppercase tracking-wide text-dark-charcoal">
+          <div className="min-w-0">
+            <h2 className="font-heading text-base font-semibold uppercase tracking-wide text-dark-charcoal @5xl:text-lg">
               {mode === "create" ? "New product" : "Product overview"}
             </h2>
-            <p className="mt-0.5 text-sm text-medium-gray">
+            <p className="mt-0.5 text-xs text-medium-gray @5xl:text-sm">
               Core listing details customers see first on the storefront.
             </p>
           </div>
         </div>
 
-        <div className="grid lg:grid-cols-[minmax(0,1fr)_20rem] xl:grid-cols-[minmax(0,1fr)_22rem]">
-          <div className="space-y-6 p-5 lg:border-r lg:border-[#d8dce1]">
+        <div className="grid @5xl:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="space-y-5 p-3 @5xl:space-y-6 @5xl:border-r @5xl:border-[#d8dce1] @5xl:p-5">
             <div>
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-medium-gray">
                 Identity
               </p>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="sm:col-span-2">
+              <div className="grid gap-3 @5xl:grid-cols-2 @5xl:gap-4">
+                <div className="@5xl:col-span-2">
                   <Input
                     label="Product name"
                     required
@@ -498,15 +532,33 @@ export function AdminProductForm({
                   error={errors.sku?.message}
                   {...register("sku")}
                 />
-                <Select
-                  label="Tag"
-                  options={toSelectOptions(
-                    tagOptions?.length ? tagOptions : PRODUCT_TAG_OPTIONS,
-                    "Select tag",
-                  )}
-                  error={errors.tag?.message}
-                  {...register("tag")}
+                <TagsField
+                  options={tagOptions?.length ? tagOptions : PRODUCT_TAG_OPTIONS}
+                  value={tags}
+                  onChange={(next) => {
+                    setValue("tags", next, { shouldDirty: true });
+                    const hasTouch = next.some(
+                      (t) => t.trim().toLowerCase() === "touch screen",
+                    );
+                    if (hasTouch !== Boolean(watch("touchScreen"))) {
+                      setValue("touchScreen", hasTouch, { shouldDirty: true });
+                    }
+                  }}
+                  error={errors.tags?.message}
                 />
+                <div className="@5xl:col-span-2">
+                  <CertificationsField
+                    label="ANSI Safety certification"
+                    placeholder="Select ANSI certifications"
+                    hint="Shown under the product name on cards and listing subtitles."
+                    value={primaryCertifications}
+                    onChange={(next) =>
+                      setValue("primaryCertifications", next, {
+                        shouldDirty: true,
+                      })
+                    }
+                  />
+                </div>
               </div>
             </div>
 
@@ -533,7 +585,7 @@ export function AdminProductForm({
             </div>
           </div>
 
-          <aside className="bg-[#e9ebef] p-5">
+          <aside className="border-t border-[#d8dce1] bg-[#e9ebef] p-3 @5xl:border-t-0 @5xl:p-5">
             <div className="mb-3 flex items-center justify-between gap-2">
               <div>
                 <p className="font-heading text-sm font-semibold uppercase tracking-wide text-dark-charcoal">
@@ -702,9 +754,9 @@ export function AdminProductForm({
 
       <FormSection
         title="Organization"
-        description="Category, brand, and attributes used by shop filters."
+        description="Department, category, brand, and shopper attributes."
       >
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-3 @5xl:grid-cols-3 @5xl:gap-4">
           <Select
             label="Department"
             options={toSelectOptions(departments, "Select department")}
@@ -766,129 +818,161 @@ export function AdminProductForm({
             error={errors.gender?.message}
             {...register("gender")}
           />
-
-          <div className="grid gap-4 sm:col-span-2 lg:col-span-3 lg:grid-cols-2">
-            <CategorySpecsField
-              categorySlug={selectedCategorySlug}
-              value={specifications}
-              onChange={(next) =>
-                setValue("specifications", next, { shouldDirty: true })
+          <YesNoToggle
+            label="Touch screen"
+            hint="Used by the shop Touch screen filter · sets the Touch Screen tag"
+            value={Boolean(watch("touchScreen"))}
+            onChange={(next) => {
+              setValue("touchScreen", next, { shouldDirty: true });
+              const currentTags = watch("tags") ?? [];
+              if (next) {
+                if (
+                  !currentTags.some(
+                    (t) => t.trim().toLowerCase() === "touch screen",
+                  )
+                ) {
+                  setValue("tags", [...currentTags, "Touch Screen"], {
+                    shouldDirty: true,
+                  });
+                }
+              } else {
+                setValue(
+                  "tags",
+                  currentTags.filter(
+                    (t) => t.trim().toLowerCase() !== "touch screen",
+                  ),
+                  { shouldDirty: true },
+                );
               }
-            />
+            }}
+          />
+        </div>
+      </FormSection>
+
+      <FormSection
+        title="Specs, sizes & variants"
+        description="Category specs, materials, certifications, sizing, shipping, and color options."
+      >
+        <div className="grid gap-3 @5xl:grid-cols-2 @5xl:gap-4">
+          <CategorySpecsField
+            categorySlug={selectedCategorySlug}
+            value={specifications}
+            onChange={(next) =>
+              setValue("specifications", next, { shouldDirty: true })
+            }
+          />
+          <MaterialsField
+            value={materials}
+            onChange={(next) =>
+              setValue("materials", next, { shouldDirty: true })
+            }
+          />
+          <div className="@5xl:col-span-2">
             <CertificationsField
+              label="Additional ANSI Safety certification"
+              placeholder="Select additional ANSI certifications"
+              hint="Extra certifications for the product page and shop filters."
               value={certifications}
               onChange={(next) =>
                 setValue("certifications", next, { shouldDirty: true })
               }
             />
           </div>
+        </div>
 
-          <div className="grid gap-4 sm:col-span-2 sm:grid-cols-2 lg:col-span-3 lg:grid-cols-4">
-            <Select
-              label="ANSI class"
-              hint="Matches shop ANSI filter options"
-              options={toSelectOptions(ANSI_CLASS_OPTIONS, "None / not applicable")}
-              error={errors.ansiClass?.message}
-              {...register("ansiClass")}
-            />
-            <Select
-              label="Default size"
-              options={toSelectOptions(sizes, "Select size")}
-              error={errors.size?.message}
-              {...register("size")}
-            />
-            <div className="w-full">
-              <Label htmlFor="custom-size">Custom size</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="custom-size"
-                  value={customSize}
-                  placeholder="e.g. 5XL, 10.5W"
-                  autoComplete="off"
-                  disabled={addingSize}
-                  onChange={(e) => setCustomSize(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter") return;
-                    // Enter would otherwise submit the whole product form.
-                    e.preventDefault();
-                    void handleAddCustomSize();
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-10 shrink-0"
-                  disabled={addingSize || !customSize.trim()}
-                  onClick={() => void handleAddCustomSize()}
-                >
-                  {addingSize ? "Adding…" : "Add"}
-                </Button>
-              </div>
-              <p className="mt-1.5 text-sm text-medium-gray">
-                Added to the size list for every product.
-              </p>
+        <div className="mt-4 grid gap-3 @5xl:grid-cols-3 @5xl:gap-4">
+          <Select
+            label="Default size"
+            {...toGroupedSelectOptions(sizes, "Select size")}
+            error={errors.size?.message}
+            {...register("size")}
+          />
+          <div className="w-full">
+            <Label htmlFor="custom-size">Custom size</Label>
+            <div className="flex gap-2">
+              <Input
+                id="custom-size"
+                value={customSize}
+                placeholder="e.g. 5XL, 10.5W"
+                autoComplete="off"
+                disabled={addingSize}
+                onChange={(e) => setCustomSize(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  // Enter would otherwise submit the whole product form.
+                  e.preventDefault();
+                  void handleAddCustomSize();
+                }}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="h-10 shrink-0"
+                disabled={addingSize || !customSize.trim()}
+                onClick={() => void handleAddCustomSize()}
+              >
+                {addingSize ? "Adding…" : "Add"}
+              </Button>
             </div>
-            <Select
-              label="Shipping class"
-              options={toSelectOptions(SHIPPING_CLASS_OPTIONS, "Select shipping class")}
-              error={errors.shippingClass?.message}
-              {...register("shippingClass")}
-            />
+            <p className="mt-1.5 text-sm text-medium-gray">
+              Added to the size list for every product.
+            </p>
           </div>
+          <Select
+            label="Shipping class"
+            options={toSelectOptions(SHIPPING_CLASS_OPTIONS, "Select shipping class")}
+            error={errors.shippingClass?.message}
+            {...register("shippingClass")}
+          />
+        </div>
 
-          <div className="sm:col-span-2 lg:col-span-3">
-            <Checkbox
-              label="Multiple sizes"
-              description="When checked, shoppers pick color, size, and available qty from the matrix below."
-              checked={Boolean(hasMultipleSizes)}
-              onChange={(e) => {
-                const checked = e.target.checked;
-                setValue("hasMultipleSizes", checked, { shouldDirty: true });
-                if (checked && variants.length === 0) {
-                  setValue(
-                    "variants",
-                    [
-                      {
-                        color: watch("color") || "",
-                        size: watch("size") || "",
-                        qty: Number(watch("inventoryQuantity")) || 0,
-                      },
-                    ],
-                    { shouldDirty: true },
-                  );
-                }
-              }}
-            />
-          </div>
+        <div className="mt-4 space-y-4">
+          <Checkbox
+            label="Multiple sizes"
+            description="When checked, shoppers pick color, size, and available qty from the matrix below."
+            checked={Boolean(hasMultipleSizes)}
+            onChange={(e) => {
+              const checked = e.target.checked;
+              setValue("hasMultipleSizes", checked, { shouldDirty: true });
+              if (checked && variants.length === 0) {
+                const seed: VariantRow[] = [
+                  {
+                    color: watch("color") || "",
+                    size: watch("size") || "",
+                    qty: Number(watch("inventoryQuantity")) || 0,
+                  },
+                ];
+                setValue("variants", seed, { shouldDirty: true });
+                syncInventoryFromVariants(seed);
+              }
+            }}
+          />
 
           {hasMultipleSizes ? (
-            <div className="sm:col-span-2 lg:col-span-3">
-              <VariantMatrixField
-                value={variants}
-                sizeOptions={sizes}
-                onChange={(next) =>
-                  setValue("variants", next, { shouldDirty: true })
-                }
-              />
-            </div>
+            <VariantMatrixField
+              value={variants}
+              sizeOptions={sizes}
+              onChange={(next) => {
+                setValue("variants", next, { shouldDirty: true });
+                syncInventoryFromVariants(next);
+              }}
+            />
           ) : (
-            <div className="sm:col-span-2 lg:col-span-3">
-              <Controller
-                control={control}
-                name="color"
-                render={({ field }) => (
-                  <ColorPaletteField
-                    label="Default color"
-                    hint="Same palette used in shop filters"
-                    value={field.value ?? ""}
-                    onChange={field.onChange}
-                    onBlur={field.onBlur}
-                    name={field.name}
-                    error={errors.color?.message}
-                  />
-                )}
-              />
-            </div>
+            <Controller
+              control={control}
+              name="color"
+              render={({ field }) => (
+                <ColorPaletteField
+                  label="Default color"
+                  hint="Same palette used in shop filters"
+                  value={field.value ?? ""}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  name={field.name}
+                  error={errors.color?.message}
+                />
+              )}
+            />
           )}
         </div>
       </FormSection>
@@ -897,7 +981,7 @@ export function AdminProductForm({
         title="Pricing & inventory"
         description="Costs and stock levels used for checkout and low-stock alerts."
       >
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 @5xl:grid-cols-4 @5xl:gap-4">
           <Controller
             name="price"
             control={control}
@@ -970,7 +1054,7 @@ export function AdminProductForm({
             disabled={Boolean(hasMultipleSizes)}
             hint={
               hasMultipleSizes
-                ? "Calculated automatically from the size & color matrix on save."
+                ? "Live total from the size matrix (size required per row)."
                 : undefined
             }
             error={errors.inventoryQuantity?.message}
@@ -1050,7 +1134,7 @@ export function AdminProductForm({
         title="Visibility"
         description="Active products appear in the shop. Drafts and archived stay admin-only."
       >
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid gap-3 @5xl:grid-cols-2 @5xl:gap-4">
           <Select
             label="Catalog status"
             options={[
@@ -1082,40 +1166,18 @@ export function AdminProductForm({
         </div>
       </FormSection>
 
-      <div className="relative sticky bottom-0 z-10 -mx-1 flex flex-wrap items-center justify-between gap-3 border border-[#cfd3d8] bg-[#eef0f3]/95 px-4 py-3 shadow-[0_-6px_20px_rgba(16,24,32,0.08)] backdrop-blur-sm sm:px-5">
-        <p className="text-sm text-medium-gray">
-          {mode === "create"
-            ? "Ready when the listing details look right."
-            : "Save to publish changes to the storefront."}
-        </p>
-        <div className="flex gap-2">
-          {mode === "edit" && productId ? (
-            <Button
-              type="button"
-              variant="danger"
-              disabled={pending || uploading}
-              onClick={() => setDeleteOpen(true)}
-            >
-              Delete
-            </Button>
-          ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            disabled={pending || uploading}
-            onClick={() => router.push(returnHref)}
-          >
-            Cancel
-          </Button>
-          <Button type="submit" disabled={pending || uploading}>
-            {pending
-              ? "Saving…"
-              : mode === "create"
-                ? "Create product"
-                : "Save changes"}
-          </Button>
-        </div>
-      </div>
+      <FormActionsBar
+        position="bottom"
+        mode={mode}
+        pending={pending}
+        uploading={uploading}
+        onCancel={() => router.push(returnHref)}
+        onDelete={
+          mode === "edit" && productId
+            ? () => setDeleteOpen(true)
+            : undefined
+        }
+      />
 
       {mode === "edit" && productId ? (
         <ConfirmDeleteDialog
@@ -1144,6 +1206,147 @@ export function AdminProductForm({
   );
 }
 
+function FormActionsBar({
+  position,
+  mode,
+  pending,
+  uploading,
+  onCancel,
+  onDelete,
+}: {
+  position: "top" | "bottom";
+  mode: "create" | "edit";
+  pending: boolean;
+  uploading: boolean;
+  onCancel: () => void;
+  onDelete?: () => void;
+}) {
+  const isTop = position === "top";
+  const saveLabel = pending
+    ? "Saving…"
+    : mode === "create"
+      ? "Create product"
+      : "Save changes";
+  const saveLabelShort = pending
+    ? "Saving…"
+    : mode === "create"
+      ? "Create"
+      : "Save";
+
+  return (
+    <div
+      className={cn(
+        "relative z-10 -mx-0.5 flex flex-col gap-2 border border-[#cfd3d8] bg-[#eef0f3]/95 px-3 py-2.5 backdrop-blur-sm @5xl:-mx-1 @5xl:flex-row @5xl:flex-wrap @5xl:items-center @5xl:justify-between @5xl:gap-3 @5xl:px-5 @5xl:py-3",
+        isTop
+          ? "shadow-[0_1px_0_rgba(16,24,32,0.06)]"
+          : "sticky bottom-0 shadow-[0_-6px_20px_rgba(16,24,32,0.08)]",
+      )}
+      style={
+        isTop
+          ? undefined
+          : {
+              paddingBottom:
+                "calc(0.625rem + var(--phone-safe-bottom, 0px) + env(safe-area-inset-bottom, 0px))",
+            }
+      }
+    >
+      <p className="hidden text-sm text-medium-gray @5xl:block">
+        {mode === "create"
+          ? "Ready when the listing details look right."
+          : "Save to publish changes to the storefront."}
+      </p>
+      <div
+        className={cn(
+          "grid w-full gap-2 @5xl:flex @5xl:w-auto",
+          onDelete
+            ? "grid-cols-[auto_minmax(0,1fr)_minmax(0,1.35fr)]"
+            : "grid-cols-2",
+        )}
+      >
+        {onDelete ? (
+          <Button
+            type="button"
+            variant="danger"
+            disabled={pending || uploading}
+            onClick={onDelete}
+            className="shrink-0 px-3"
+          >
+            Delete
+          </Button>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          disabled={pending || uploading}
+          onClick={onCancel}
+          className="min-w-0"
+        >
+          Cancel
+        </Button>
+        <Button
+          type="submit"
+          disabled={pending || uploading}
+          className="min-w-0"
+        >
+          <span className="@5xl:hidden">{saveLabelShort}</span>
+          <span className="hidden @5xl:inline">{saveLabel}</span>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function YesNoToggle({
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  value: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <div className="w-full">
+      <p className="mb-1.5 text-sm font-medium text-dark-charcoal">{label}</p>
+      <div
+        className="grid h-10 grid-cols-2 overflow-hidden rounded-sm border border-border-gray bg-white"
+        role="group"
+        aria-label={label}
+      >
+        <button
+          type="button"
+          aria-pressed={value}
+          onClick={() => onChange(true)}
+          className={cn(
+            "font-heading text-xs font-semibold uppercase tracking-wide transition-colors",
+            value
+              ? "bg-titan-yellow text-dark-charcoal"
+              : "bg-white text-medium-gray hover:bg-light-gray hover:text-dark-charcoal",
+          )}
+        >
+          Yes
+        </button>
+        <button
+          type="button"
+          aria-pressed={!value}
+          onClick={() => onChange(false)}
+          className={cn(
+            "border-l border-border-gray font-heading text-xs font-semibold uppercase tracking-wide transition-colors",
+            !value
+              ? "bg-dark-charcoal text-white"
+              : "bg-white text-medium-gray hover:bg-light-gray hover:text-dark-charcoal",
+          )}
+        >
+          No
+        </button>
+      </div>
+      {hint ? <p className="mt-1.5 text-sm text-medium-gray">{hint}</p> : null}
+    </div>
+  );
+}
+
 function FormSection({
   title,
   description,
@@ -1154,17 +1357,17 @@ function FormSection({
   children: ReactNode;
 }) {
   return (
-    <section className="relative overflow-visible rounded-sm border border-[#cfd3d8] bg-[#f3f4f6] shadow-[0_1px_0_rgba(255,255,255,0.65)]">
-      <div className="flex items-start gap-3 border-b border-[#d8dce1] bg-[#eceef1] px-5 py-4">
+    <section className="relative min-w-0 overflow-visible rounded-sm border border-[#cfd3d8] bg-[#f3f4f6] shadow-[0_1px_0_rgba(255,255,255,0.65)]">
+      <div className="flex items-start gap-2.5 border-b border-[#d8dce1] bg-[#eceef1] px-3 py-3 @5xl:gap-3 @5xl:px-5 @5xl:py-4">
         <span className="mt-0.5 h-8 w-1 shrink-0 rounded-sm bg-titan-yellow" aria-hidden="true" />
-        <div>
-          <h2 className="font-heading text-lg font-semibold uppercase tracking-wide text-dark-charcoal">
+        <div className="min-w-0">
+          <h2 className="font-heading text-base font-semibold uppercase tracking-wide text-dark-charcoal @5xl:text-lg">
             {title}
           </h2>
-          <p className="mt-0.5 text-sm text-medium-gray">{description}</p>
+          <p className="mt-0.5 text-xs text-medium-gray @5xl:text-sm">{description}</p>
         </div>
       </div>
-      <div className="p-5">{children}</div>
+      <div className="p-3 @5xl:p-5">{children}</div>
     </section>
   );
 }
@@ -1183,7 +1386,7 @@ function VisibilityChip({
   return (
     <label
       className={cn(
-        "flex min-w-[10rem] cursor-pointer items-start gap-3 rounded-sm border px-3 py-3 transition-colors",
+        "flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-sm border px-3 py-3 transition-colors @5xl:min-w-[10rem]",
         checked
           ? "border-titan-yellow bg-titan-yellow/15"
           : "border-[#cfd3d8] bg-[#eef0f3] hover:border-dark-charcoal/40",

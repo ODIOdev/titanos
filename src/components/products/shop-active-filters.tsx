@@ -11,8 +11,8 @@ export type ShopFilterOptions = {
   categories: FilterOption[];
   brands: FilterOption[];
   genders: FilterOption[];
-  productTypes: FilterOption[];
   ansiClasses: FilterOption[];
+  materials: FilterOption[];
   colors: FilterOption[];
   sizes: FilterOption[];
 };
@@ -97,6 +97,14 @@ export function buildShopFilterChips(
     });
   }
 
+  if (query.touchScreen === "yes" || query.touchScreen === "no") {
+    chips.push({
+      id: "touchScreen",
+      label: `Touch screen: ${query.touchScreen === "yes" ? "Yes" : "No"}`,
+      remove: ["touchScreen"],
+    });
+  }
+
   if (query.minPrice || query.maxPrice) {
     const label =
       query.minPrice && query.maxPrice
@@ -107,19 +115,19 @@ export function buildShopFilterChips(
     chips.push({ id: "price", label, remove: ["minPrice", "maxPrice"] });
   }
 
-  if (query.productType) {
-    chips.push({
-      id: "productType",
-      label: labelOf(options.productTypes, query.productType),
-      remove: ["productType"],
-    });
-  }
-
   if (query.ansiClass) {
     chips.push({
       id: "ansiClass",
       label: labelOf(options.ansiClasses, query.ansiClass),
       remove: ["ansiClass"],
+    });
+  }
+
+  if (query.material) {
+    chips.push({
+      id: "material",
+      label: labelOf(options.materials, query.material),
+      remove: ["material"],
     });
   }
 

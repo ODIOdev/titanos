@@ -8,6 +8,7 @@ export type CategoryCardProps = {
   imageUrl: string;
   href?: string;
   className?: string;
+  tabIndex?: number;
 };
 
 export function CategoryCard({
@@ -16,6 +17,7 @@ export function CategoryCard({
   imageUrl,
   href,
   className,
+  tabIndex,
 }: CategoryCardProps) {
   const destination = href ?? `/shop/${slug}`;
 
@@ -23,6 +25,7 @@ export function CategoryCard({
     <Link
       href={destination}
       aria-label={`Shop ${name}`}
+      tabIndex={tabIndex}
       className={cn(
         "group relative block overflow-hidden rounded-sm border border-border-gray bg-white transition-[border-color,box-shadow] duration-200 hover:border-titan-yellow hover:shadow-[0_14px_32px_rgba(15,15,15,0.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow focus-visible:ring-offset-2",
         className,

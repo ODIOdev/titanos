@@ -142,6 +142,25 @@
     }
   }
 
+  /* Home page: tighter vertical rhythm on narrow containers */
+  @container (max-width: 47.999rem) {
+    .home-page .section-y {
+      padding-block: 2rem;
+    }
+  }
+
+  @container (min-width: 48rem) {
+    .home-page .section-y {
+      padding-block: 3.5rem;
+    }
+  }
+
+  @container (min-width: 64rem) {
+    .home-page .section-y {
+      padding-block: 4rem;
+    }
+  }
+
   .eyebrow {
     font-family: var(--font-oswald), ui-sans-serif, system-ui, sans-serif;
     font-size: 0.75rem;
@@ -349,5 +368,155 @@
 .admin-product-form textarea:focus-visible,
 .admin-product-form select:focus-visible {
   border-color: var(--dark-charcoal);
+}
+
+/* Local iPhone simulator — shell chrome only.
+   Storefront responsive UI is driven by @container queries on the shop layout
+   (same composition with or without the shell). Keep phone-sim rules limited to
+   frame clipping, scroll lock, and forcing mobile chrome when the desktop
+   viewport hosts the preview. */
+html.phone-sim {
+  --phone-safe-top: 2.1rem;
+  --phone-safe-bottom: 1.15rem;
+  overflow: hidden !important;
+}
+
+html.phone-sim body {
+  overflow: hidden !important;
+  overscroll-behavior: none;
+}
+
+html.phone-sim .phone-sim-screen,
+html.phone-sim .phone-sim-scroll {
+  max-width: 100%;
+  overscroll-behavior-x: none;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html.phone-sim .phone-sim-scroll {
+  overflow-x: hidden !important;
+}
+
+html.phone-sim .phone-sim-screen {
+  overflow: hidden !important;
+  transform: translateZ(0);
+  isolation: isolate;
+  clip-path: inset(0 round 12% / 5.5%);
+  -webkit-clip-path: inset(0 round 12% / 5.5%);
+}
+
+html.phone-sim .phone-sim-screen::-webkit-scrollbar,
+html.phone-sim .phone-sim-scroll::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none;
+}
+
+html.phone-sim .phone-sim-scroll .admin-shell,
+html.phone-sim .phone-sim-scroll .admin-shell > div,
+html.phone-sim .phone-sim-scroll [class*="overflow-x"] {
+  overflow-x: hidden !important;
+  max-width: 100%;
+  min-width: 0;
+}
+
+html.phone-sim .phone-sim-scroll .admin-shell {
+  width: 100%;
+  height: 100%;
+  min-height: 100%;
+  max-height: 100%;
+}
+
+html.phone-sim .phone-sim-scroll .admin-shell > div {
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+}
+
+/* Fill the phone frame — not the desktop dvh — when previewing admin. */
+html.phone-sim .admin-mobile-scrollport {
+  height: 100% !important;
+  max-height: 100% !important;
+}
+
+/* Admin mobile: pin chrome; scroll only the content pane (avoid double scroll). */
+html.phone-sim .phone-sim-scroll:has(.admin-shell) {
+  overflow-y: hidden !important;
+}
+
+html.phone-sim .admin-content-scroll {
+  display: flex !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Preview is often opened on a wide desktop viewport — force mobile chrome */
+html.phone-sim .admin-shell > aside {
+  display: none !important;
+}
+
+html.phone-sim .admin-mobile-topbar {
+  display: block !important;
+  flex-shrink: 0;
+}
+
+html.phone-sim .admin-mobile-drawer {
+  display: block !important;
+}
+
+html.phone-sim .admin-mobile-overview,
+html.phone-sim .products-mobile-chrome {
+  display: block !important;
+}
+
+html.phone-sim .admin-desktop-overview,
+html.phone-sim .admin-products-desktop-chrome {
+  display: none !important;
+}
+
+html.phone-sim .storefront-utility-bar,
+html.phone-sim .storefront-desktop-header {
+  display: none !important;
+}
+
+html.phone-sim .storefront-mobile-header {
+  display: flex !important;
+}
+
+html.phone-sim .shop-filters-desktop,
+html.phone-sim .storefront-footer-desktop {
+  display: none !important;
+}
+
+html.phone-sim .shop-filters-mobile,
+html.phone-sim .shop-filters-mobile-root,
+html.phone-sim .storefront-footer-mobile {
+  display: block !important;
+}
+
+html.phone-sim .shop-department-rail-carousel {
+  display: block !important;
+}
+
+html.phone-sim .storefront-mobile-nav {
+  display: flex !important;
+  inset: 0 !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  height: 100% !important;
+  max-height: 100% !important;
+  overflow: hidden !important;
+  border-radius: 0;
+}
+
+html.phone-sim.mobile-nav-open .phone-sim-scroll {
+  overflow: hidden !important;
+}
+
+/* Support chat: stay inside the phone glass (no viewport-vw bleed) */
+html.phone-sim .support-chat-launcher,
+html.phone-sim .support-chat-panel {
+  max-width: 100%;
 }
 

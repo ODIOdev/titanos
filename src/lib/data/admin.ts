@@ -12,11 +12,14 @@ import {
   SIZE_OPTIONS,
   departmentForProductType,
   mergeCatalogOptions,
+  parseProductTags,
   sortCatalogSizes,
+  sortDepartmentNames,
   toDepartmentOption,
   type CatalogOption,
   type DepartmentOption,
 } from "@/lib/data/catalog-options";
+import { getProductStockQuantity, formatProductStockBySize } from "@/lib/catalog/product-stock";
 import { productMatchesQuery, productSearchScore, matchesQuery } from "@/lib/search";
 import { AFFILIATE_ELIGIBILITY_ORDERS } from "@/lib/affiliates/program";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
@@ -218,7 +221,7 @@ export function getDemoCatalogDepartments(): string[] {
 }
 
 export function setDemoCatalogDepartments(departments: string[]) {
-  demoCatalogDepartments = [...departments];
+  demoCatalogDepartments = sortDepartmentNames(departments);
 }
 
 export function getDemoPrimaryCatalogDepartments(): string[] {
@@ -226,7 +229,7 @@ export function getDemoPrimaryCatalogDepartments(): string[] {
 }
 
 export function setDemoPrimaryCatalogDepartments(departments: string[]) {
-  demoPrimaryCatalogDepartments = [...departments];
+  demoPrimaryCatalogDepartments = sortDepartmentNames(departments);
 }
 
 export function getDemoOfflineCatalogDepartments(): string[] {
@@ -234,7 +237,7 @@ export function getDemoOfflineCatalogDepartments(): string[] {
 }
 
 export function setDemoOfflineCatalogDepartments(departments: string[]) {
-  demoOfflineCatalogDepartments = [...departments];
+  demoOfflineCatalogDepartments = sortDepartmentNames(departments);
 }
 
 export function getDemoRemovedCatalogDepartments(): string[] {
@@ -242,7 +245,18 @@ export function getDemoRemovedCatalogDepartments(): string[] {
 }
 
 export function setDemoRemovedCatalogDepartments(departments: string[]) {
-  demoRemovedCatalogDepartments = [...departments];
+  demoRemovedCatalogDepartments = sortDepartmentNames(departments);
+}
+
+/** In-memory category SKU prefix overrides for demo mode (no Supabase). */
+const demoCategorySkuPrefixes = new Map<string, string | null>();
+
+export function getDemoCategorySkuPrefix(id: string): string | null | undefined {
+  return demoCategorySkuPrefixes.get(id);
+}
+
+export function setDemoCategorySkuPrefix(id: string, prefix: string | null) {
+  demoCategorySkuPrefixes.set(id, prefix);
 }
 
 function daysAgo(n: number): string {
@@ -568,7 +582,15 @@ function buildDemoMetrics(): AdminMetrics {
   const ordersCount = DEMO_ORDERS.length;
   const aov = paidOrders.length ? revenue / paidOrders.length : 0;
   const lowStockCount = SEED_PRODUCTS.filter(
-    (p) => p.inventory_quantity <= p.low_stock_threshold,
+    (p) =>
+      getProductStockQuantity({
+        inventory_quantity: p.inventory_quantity,
+        low_stock_threshold: p.low_stock_threshold,
+        metadata: {
+          certifications: p.certifications,
+          features: p.features,
+        },
+      }) <= p.low_stock_threshold,
   ).length;
   const pendingQuotes = DEMO_QUOTES.filter((q) =>
     ["submitted", "reviewing", "information_requested", "quoted"].includes(q.status),
@@ -664,7 +686,9 @@ export async function getAdminMetrics(): Promise<AdminMetrics> {
         supabase.from("quotes").select("id, status"),
         supabase
           .from("products")
-          .select("id, name, inventory_quantity, low_stock_threshold, category_id"),
+          .select(
+            "id, name, inventory_quantity, low_stock_threshold, category_id, metadata",
+          ),
       ]);
 
       if (ordersError) throw ordersError;
@@ -681,9 +705,17 @@ export async function getAdminMetrics(): Promise<AdminMetrics> {
       );
       const revenue = paid.reduce((s, o) => s + Number(o.total), 0);
       const aov = paid.length ? revenue / paid.length : 0;
-      const lowStockCount = productRows.filter(
-        (p) => p.inventory_quantity <= p.low_stock_threshold,
-      ).length;
+      const lowStockCount = productRows.filter((p) => {
+        const qty = getProductStockQuantity({
+          inventory_quantity: p.inventory_quantity,
+          low_stock_threshold: p.low_stock_threshold,
+          metadata:
+            p.metadata && typeof p.metadata === "object"
+              ? (p.metadata as Record<string, unknown>)
+              : null,
+        });
+        return qty <= p.low_stock_threshold;
+      }).length;
       const pendingQuotes = quoteRows.filter((q) =>
         ["submitted", "reviewing", "information_requested", "quoted"].includes(
           q.status,
@@ -928,7 +960,15 @@ export async function getAdminCategories(): Promise<Category[]> {
       // Fall through
     }
   }
-  return SEED_CATEGORIES.map((c) => ({ ...c, parent_id: null }));
+  return SEED_CATEGORIES.map((c) => {
+    const demoPrefix = getDemoCategorySkuPrefix(c.id);
+    return {
+      ...c,
+      parent_id: null,
+      sku_prefix:
+        demoPrefix !== undefined ? demoPrefix : (c.sku_prefix ?? null),
+    };
+  });
 }
 
 export type AdminCategoryProductRow = {
@@ -939,6 +979,7 @@ export type AdminCategoryProductRow = {
   brandName: string;
   price: number;
   inventory: number;
+  stockBySize: string | null;
   lowStockThreshold: number;
   unitsSold: number;
   sales: number;
@@ -1015,17 +1056,14 @@ export async function getAdminCategoryDetail(
         }
       }
     } catch {
-      // Fall through to seed estimates
+      // Leave sales at zero when order history is unavailable.
     }
   }
 
   const rows: AdminCategoryProductRow[] = inCategory.map((p) => {
     const fromOrders = salesByProduct.get(p.id);
-    const unitsSold =
-      fromOrders?.units ??
-      Math.max(0, Math.round(Number(p.rating_count) * 1.4));
-    const sales =
-      fromOrders?.sales ?? Number((unitsSold * Number(p.price)).toFixed(2));
+    const unitsSold = fromOrders?.units ?? 0;
+    const sales = fromOrders?.sales ?? 0;
 
     return {
       id: p.id,
@@ -1034,7 +1072,8 @@ export async function getAdminCategoryDetail(
       sku: p.sku,
       brandName: p.brand?.name ?? "—",
       price: Number(p.price),
-      inventory: p.inventory_quantity,
+      inventory: getProductStockQuantity(p),
+      stockBySize: formatProductStockBySize(p),
       lowStockThreshold: p.low_stock_threshold,
       unitsSold,
       sales,
@@ -1099,6 +1138,145 @@ export async function getAdminBrands(): Promise<Brand[]> {
     }
   }
   return SEED_BRANDS;
+}
+
+export type AdminBrandRow = Brand & {
+  productCount: number;
+  /** Units on hand across the brand’s catalog products. */
+  totalInventory: number;
+};
+
+/** Brands list with catalog product counts for the admin table. */
+export async function getAdminBrandRows(): Promise<AdminBrandRow[]> {
+  const [brands, products] = await Promise.all([
+    getAdminBrands(),
+    getAdminProducts({ active: "all" }),
+  ]);
+
+  const counts = new Map<string, number>();
+  const inventory = new Map<string, number>();
+  for (const product of products) {
+    if (!product.brand_id) continue;
+    counts.set(product.brand_id, (counts.get(product.brand_id) ?? 0) + 1);
+    inventory.set(
+      product.brand_id,
+      (inventory.get(product.brand_id) ?? 0) + getProductStockQuantity(product),
+    );
+  }
+
+  // Keep brand.active aligned with product assignment (homepage + archives).
+  if (isSupabaseConfigured()) {
+    const mismatched = brands.filter((brand) => {
+      const shouldBeActive = (counts.get(brand.id) ?? 0) > 0;
+      return brand.active !== shouldBeActive;
+    });
+    if (mismatched.length > 0) {
+      try {
+        const { createServiceClient } = await import("@/lib/supabase/admin");
+        const supabase = createServiceClient();
+        await Promise.all(
+          mismatched.map((brand) => {
+            const shouldBeActive = (counts.get(brand.id) ?? 0) > 0;
+            return supabase
+              .from("brands")
+              .update({ active: shouldBeActive })
+              .eq("id", brand.id);
+          }),
+        );
+      } catch {
+        // Display still uses derived active below.
+      }
+    }
+  }
+
+  return brands.map((brand) => {
+    const productCount = counts.get(brand.id) ?? 0;
+    return {
+      ...brand,
+      active: productCount > 0,
+      productCount,
+      totalInventory: inventory.get(brand.id) ?? 0,
+    };
+  });
+}
+
+export type AdminBrandProductRow = {
+  id: string;
+  name: string;
+  slug: string;
+  sku: string;
+  categoryName: string;
+  price: number;
+  inventory: number;
+  lowStockThreshold: number;
+  active: boolean;
+};
+
+export type AdminBrandDetail = {
+  brand: Brand;
+  products: AdminBrandProductRow[];
+  productCount: number;
+  activeProductCount: number;
+  totalInventory: number;
+  categoryCount: number;
+  categories: { id: string; name: string; productCount: number }[];
+};
+
+export async function getAdminBrandDetail(
+  id: string,
+): Promise<AdminBrandDetail | null> {
+  const brands = await getAdminBrands();
+  const brand = brands.find((b) => b.id === id || b.slug === id) ?? null;
+  if (!brand) return null;
+
+  const products = await getAdminProducts({ active: "all" });
+  const inBrand = products.filter((p) => p.brand_id === brand.id);
+
+  const rows: AdminBrandProductRow[] = inBrand.map((p) => ({
+    id: p.id,
+    name: p.name,
+    slug: p.slug,
+    sku: p.sku,
+    categoryName: p.category?.name ?? "—",
+    price: Number(p.price),
+    inventory: getProductStockQuantity(p),
+    lowStockThreshold: p.low_stock_threshold,
+    active: p.active,
+  }));
+
+  const categoryMap = new Map<
+    string,
+    { id: string; name: string; productCount: number }
+  >();
+  for (const p of inBrand) {
+    if (!p.category) continue;
+    const existing = categoryMap.get(p.category.id);
+    if (existing) existing.productCount += 1;
+    else {
+      categoryMap.set(p.category.id, {
+        id: p.category.id,
+        name: p.category.name,
+        productCount: 1,
+      });
+    }
+  }
+
+  return {
+    brand,
+    products: rows.sort((a, b) => {
+      const aInStock = a.inventory > 0 ? 0 : 1;
+      const bInStock = b.inventory > 0 ? 0 : 1;
+      if (aInStock !== bInStock) return aInStock - bInStock;
+      return a.name.localeCompare(b.name);
+    }),
+    productCount: rows.length,
+    activeProductCount: rows.filter((r) => r.active).length,
+    totalInventory: rows.reduce((sum, r) => sum + r.inventory, 0),
+    categoryCount: categoryMap.size,
+    categories: Array.from(categoryMap.values()).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    ),
+  };
 }
 
 export async function getAdminOrders(opts?: {
@@ -1986,7 +2164,9 @@ export async function getAdminQuote(id: string): Promise<AdminQuote | null> {
 
 export async function getAdminInventory(): Promise<Product[]> {
   const products = await getAdminProducts({ active: "active" });
-  return [...products].sort((a, b) => a.inventory_quantity - b.inventory_quantity);
+  return [...products].sort(
+    (a, b) => getProductStockQuantity(a) - getProductStockQuantity(b),
+  );
 }
 
 export async function getAdminResources(): Promise<Resource[]> {
@@ -2156,9 +2336,8 @@ async function getRemovedCatalogTags(): Promise<string[]> {
   return getDemoRemovedCatalogTags();
 }
 
-function productTagValue(product: Product): string | null {
-  const tag = product.metadata?.tag;
-  return typeof tag === "string" && tag.trim() ? tag.trim() : null;
+function productTagValues(product: Product): string[] {
+  return parseProductTags(product.metadata);
 }
 
 async function getStoredCatalogSizes(): Promise<string[]> {
@@ -2196,9 +2375,11 @@ async function getStoredCatalogDepartments(): Promise<string[]> {
         .maybeSingle();
       const value = data?.value as { departments?: unknown } | null;
       if (Array.isArray(value?.departments)) {
-        return value.departments
-          .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
-          .map((d) => d.trim());
+        return sortDepartmentNames(
+          value.departments
+            .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+            .map((d) => d.trim()),
+        );
       }
     } catch {
       // Fall through
@@ -2219,9 +2400,11 @@ async function getStoredPrimaryCatalogDepartments(): Promise<string[]> {
         .maybeSingle();
       const value = data?.value as { departments?: unknown } | null;
       if (Array.isArray(value?.departments)) {
-        return value.departments
-          .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
-          .map((d) => d.trim());
+        return sortDepartmentNames(
+          value.departments
+            .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+            .map((d) => d.trim()),
+        );
       }
     } catch {
       // Fall through
@@ -2242,9 +2425,11 @@ async function getStoredOfflineCatalogDepartments(): Promise<string[]> {
         .maybeSingle();
       const value = data?.value as { departments?: unknown } | null;
       if (Array.isArray(value?.departments)) {
-        return value.departments
-          .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
-          .map((d) => d.trim());
+        return sortDepartmentNames(
+          value.departments
+            .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+            .map((d) => d.trim()),
+        );
       }
     } catch {
       // Fall through
@@ -2265,9 +2450,11 @@ async function getRemovedCatalogDepartments(): Promise<string[]> {
         .maybeSingle();
       const value = data?.value as { departments?: unknown } | null;
       if (Array.isArray(value?.departments)) {
-        return value.departments
-          .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
-          .map((d) => d.trim());
+        return sortDepartmentNames(
+          value.departments
+            .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+            .map((d) => d.trim()),
+        );
       }
     } catch {
       // Fall through
@@ -2445,8 +2632,8 @@ export async function getCatalogTagOptions(): Promise<CatalogOption[]> {
   ]);
   const removedKeys = new Set(removed.map((t) => t.toLowerCase()));
   const fromProducts = products
-    .map(productTagValue)
-    .filter((t): t is string => t != null && !removedKeys.has(t.toLowerCase()));
+    .flatMap(productTagValues)
+    .filter((t) => !removedKeys.has(t.toLowerCase()));
   const activeCanonical = [
     ...PRODUCT_TAG_OPTIONS.filter(
       (o) => !removedKeys.has(o.value.toLowerCase()),
@@ -2473,11 +2660,11 @@ export async function getAdminTags(): Promise<AdminTag[]> {
 
   const counts = new Map<string, number>();
   for (const product of products) {
-    const tag = productTagValue(product);
-    if (!tag) continue;
-    const key = tag.toLowerCase();
-    if (removedKeys.has(key)) continue;
-    counts.set(key, (counts.get(key) ?? 0) + 1);
+    for (const tag of productTagValues(product)) {
+      const key = tag.toLowerCase();
+      if (removedKeys.has(key)) continue;
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
   }
 
   const canonical = new Map(
@@ -2498,11 +2685,11 @@ export async function getAdminTags(): Promise<AdminTag[]> {
   for (const [key, value] of canonical) names.set(key, value);
   for (const [key, value] of custom) names.set(key, value);
   for (const product of products) {
-    const tag = productTagValue(product);
-    if (!tag) continue;
-    const key = tag.toLowerCase();
-    if (removedKeys.has(key)) continue;
-    if (!names.has(key)) names.set(key, tag);
+    for (const tag of productTagValues(product)) {
+      const key = tag.toLowerCase();
+      if (removedKeys.has(key)) continue;
+      if (!names.has(key)) names.set(key, tag);
+    }
   }
 
   return Array.from(names.entries())

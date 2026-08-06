@@ -37,6 +37,11 @@ export function parseShopFilters(
   const rating = first(searchParams.rating);
   const page = first(searchParams.page);
   const availability = first(searchParams.availability);
+  const touchScreenRaw = first(searchParams.touchScreen)?.toLowerCase();
+  const touchScreen =
+    touchScreenRaw === "yes" || touchScreenRaw === "no"
+      ? touchScreenRaw
+      : undefined;
   // Support legacy ?group= links from the mega-menu.
   const department =
     resolveDepartmentParam(first(searchParams.department)) ??
@@ -47,10 +52,12 @@ export function parseShopFilters(
     brand: first(searchParams.brand),
     department,
     gender: first(searchParams.gender),
+    touchScreen,
     minPrice: minPrice ? Number(minPrice) : undefined,
     maxPrice: maxPrice ? Number(maxPrice) : undefined,
     productType: first(searchParams.productType),
     ansiClass: first(searchParams.ansiClass),
+    material: first(searchParams.material),
     color: first(searchParams.color),
     size: first(searchParams.size),
     availability: availability === "in_stock" ? "in_stock" : undefined,
@@ -71,10 +78,12 @@ export function toFilterQuery(
     "category",
     "brand",
     "gender",
+    "touchScreen",
     "minPrice",
     "maxPrice",
     "productType",
     "ansiClass",
+    "material",
     "color",
     "size",
     "availability",

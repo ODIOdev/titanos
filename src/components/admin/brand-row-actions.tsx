@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { Pencil, Trash2 } from "lucide-react";
+import { Archive, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { deleteBrand } from "@/lib/actions/admin";
+import { archiveBrand, deleteBrand } from "@/lib/actions/admin";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
 
 export function BrandRowActions({
@@ -18,6 +18,18 @@ export function BrandRowActions({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  function handleArchive() {
+    startTransition(async () => {
+      const result = await archiveBrand(brandId);
+      if (!result.success) {
+        toast.error(result.message);
+        return;
+      }
+      toast.success(result.message);
+      router.refresh();
+    });
+  }
 
   function handleConfirmDelete() {
     startTransition(async () => {
@@ -43,6 +55,16 @@ export function BrandRowActions({
         >
           <Pencil className="size-3.5" aria-hidden="true" />
         </Link>
+        <button
+          type="button"
+          disabled={pending}
+          onClick={handleArchive}
+          className="inline-flex size-8 items-center justify-center rounded-sm border border-border-gray text-dark-charcoal hover:bg-light-gray disabled:opacity-50"
+          aria-label={`Archive ${brandName}`}
+          title="Archive"
+        >
+          <Archive className="size-3.5" aria-hidden="true" />
+        </button>
         <button
           type="button"
           disabled={pending}

@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import {
   Boxes,
@@ -8,15 +7,13 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { AdminInventoryFilterBar } from "@/components/admin/admin-inventory-filter-bar";
-import { DataTable } from "@/components/admin/data-table";
+import { AdminInventoryProductsTable } from "@/components/admin/admin-inventory-products-table";
 import {
   InventoryCategoryCards,
   type InventoryCategoryStat,
   type InventoryStockState,
 } from "@/components/admin/inventory-category-cards";
-import { ReplenishProductButton } from "@/components/admin/replenish-product-button";
 import { Pagination } from "@/components/products/pagination";
-import { Badge } from "@/components/ui/badge";
 import {
   getAdminBrands,
   getAdminCategories,
@@ -28,8 +25,14 @@ import {
   type InventorySortOption,
 } from "@/lib/admin/inventory-sort";
 import { withAdminReturn } from "@/lib/admin/return-to";
+import {
+  formatProductStockBySize,
+  getProductStockBySize,
+  getProductStockQuantity,
+  getProductStockState,
+} from "@/lib/catalog/product-stock";
 import { productSearchScore } from "@/lib/search";
-import { cn, formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency, getCatalogStatus } from "@/lib/utils";
 import type { Product } from "@/types";
 
 const FALLBACK_IMAGE = "/images/products/titan-premium-vented-hard-hat.svg";
@@ -55,14 +58,11 @@ function parseStock(value: string | undefined): StockFilter {
 }
 
 function stockState(p: Product): StockState {
-  const qty = p.inventory_quantity ?? 0;
-  if (qty <= 0) return "out";
-  if (qty <= (p.low_stock_threshold ?? 0)) return "low";
-  return "ok";
+  return getProductStockState(p);
 }
 
 function stockValue(p: Product) {
-  return Number(p.price ?? 0) * (p.inventory_quantity ?? 0);
+  return Number(p.price ?? 0) * getProductStockQuantity(p);
 }
 
 function productImageUrl(p: Product) {
@@ -210,7 +210,7 @@ export default async function AdminInventoryPage({
     (acc, p) => {
       const state = stockState(p);
       acc[state] += 1;
-      acc.units += p.inventory_quantity ?? 0;
+      acc.units += getProductStockQuantity(p);
       acc.value += stockValue(p);
       return acc;
     },
@@ -242,7 +242,7 @@ export default async function AdminInventoryPage({
       statsById.set(id, stat);
     }
     const state = stockState(p);
-    const units = p.inventory_quantity ?? 0;
+    const units = getProductStockQuantity(p);
     stat.skuCount += 1;
     stat.units += units;
     stat.value += stockValue(p);
@@ -282,7 +282,7 @@ export default async function AdminInventoryPage({
     .sort((a, b) => {
       if (sort === "stock-desc") {
         return (
-          (b.inventory_quantity ?? 0) - (a.inventory_quantity ?? 0) ||
+          getProductStockQuantity(b) - getProductStockQuantity(a) ||
           a.name.localeCompare(b.name)
         );
       }
@@ -294,7 +294,7 @@ export default async function AdminInventoryPage({
       }
       if (sort === "stock-asc") {
         return (
-          (a.inventory_quantity ?? 0) - (b.inventory_quantity ?? 0) ||
+          getProductStockQuantity(a) - getProductStockQuantity(b) ||
           a.name.localeCompare(b.name)
         );
       }
@@ -447,106 +447,46 @@ export default async function AdminInventoryPage({
           />
         </div>
 
-        <DataTable
-          className="rounded-none border-0"
-          columns={[
-            { key: "product", header: "Product" },
-            { key: "sku", header: "SKU" },
-            { key: "category", header: "Category" },
-            { key: "qty", header: "On hand" },
-            { key: "threshold", header: "Threshold" },
-            { key: "value", header: "Value" },
-            { key: "status", header: "Status" },
-            { key: "actions", header: "Actions", className: "text-right" },
-          ]}
+        <AdminInventoryProductsTable
           emptyMessage={
             hasFilters
               ? "No inventory rows match these filters."
               : "No inventory records."
           }
-          rows={pageItems.map((p) => {
+          products={pageItems.map((p) => {
             const state = stockState(p);
-            const imageUrl = productImageUrl(p);
-            return [
-              <div key={`${p.id}-product`} className="flex items-center gap-3">
-                <div className="relative size-11 shrink-0 overflow-hidden rounded-sm border border-border-gray bg-light-gray">
-                  <Image
-                    src={imageUrl}
-                    alt=""
-                    fill
-                    className="object-cover"
-                    sizes="44px"
-                    unoptimized={
-                      imageUrl.startsWith("data:") ||
-                      imageUrl.startsWith("blob:")
-                    }
-                  />
-                </div>
-                <div className="min-w-0">
-                  <Link
-                    href={withAdminReturn(
-                      `/admin/products/${p.id}`,
-                      "inventory",
-                    )}
-                    className="font-medium text-dark-charcoal hover:text-titan-yellow"
-                  >
-                    {p.name}
-                  </Link>
-                  <p className="text-xs text-medium-gray">
-                    {p.brand?.name ?? "—"}
-                  </p>
-                </div>
-              </div>,
-              <span key={`${p.id}-sku`} className="text-medium-gray">
-                {p.sku}
-              </span>,
-              <span key={`${p.id}-cat`}>{p.category?.name ?? "—"}</span>,
-              <span
-                key={`${p.id}-qty`}
-                className={cn(
-                  "tabular-nums",
-                  state === "out" && "font-semibold text-red-700",
-                  state === "low" && "font-semibold text-warning-orange",
-                )}
-              >
-                {p.inventory_quantity}
-              </span>,
-              <span key={`${p.id}-th`} className="tabular-nums text-medium-gray">
-                {p.low_stock_threshold}
-              </span>,
-              <span key={`${p.id}-value`} className="tabular-nums">
-                {formatCurrency(stockValue(p))}
-              </span>,
-              state === "out" ? (
-                <Badge key={`${p.id}-st`} variant="warning">
-                  Out of stock
-                </Badge>
-              ) : state === "low" ? (
-                <Badge key={`${p.id}-st`} variant="warning">
-                  Low stock
-                </Badge>
-              ) : (
-                <Badge key={`${p.id}-st`} variant="success">
-                  OK
-                </Badge>
-              ),
-              <div key={`${p.id}-actions`} className="flex justify-end gap-2">
-                <Link
-                  href={withAdminReturn(
-                    `/admin/products/${p.id}`,
-                    "inventory",
-                  )}
-                  className="inline-flex h-8 items-center rounded-sm border border-border-gray px-3 text-xs font-semibold uppercase tracking-wide hover:bg-light-gray"
-                >
-                  Edit
-                </Link>
-                <ReplenishProductButton
-                  productId={p.id}
-                  productName={p.name}
-                  currentQty={p.inventory_quantity ?? 0}
-                />
-              </div>,
-            ];
+            const qty = getProductStockQuantity(p);
+            const catalogStatus = getCatalogStatus(p);
+            return {
+              id: p.id,
+              name: p.name,
+              sku: p.sku,
+              imageUrl: productImageUrl(p),
+              brandName: p.brand?.name ?? null,
+              categoryName: p.category?.name ?? null,
+              price: Number(p.price ?? 0),
+              inventoryQuantity: qty,
+              lowStockThreshold: p.low_stock_threshold ?? 0,
+              stockBySize: formatProductStockBySize(p),
+              stockSizes: getProductStockBySize(p),
+              stockValue: stockValue(p),
+              stockState: state,
+              statusLabel:
+                catalogStatus === "active"
+                  ? "Active"
+                  : catalogStatus === "draft"
+                    ? "Draft"
+                    : "Archived",
+              statusVariant:
+                catalogStatus === "active"
+                  ? ("success" as const)
+                  : catalogStatus === "draft"
+                    ? ("warning" as const)
+                    : ("default" as const),
+              shortDescription: p.short_description,
+              editHref: withAdminReturn(`/admin/products/${p.id}`, "inventory"),
+              showReplenish: true,
+            };
           })}
         />
 

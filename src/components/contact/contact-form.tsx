@@ -49,6 +49,7 @@ export function ContactForm() {
         <Input
           label="Name"
           required
+          autoComplete="name"
           error={errors.name?.message}
           {...register("name")}
         />
@@ -56,17 +57,20 @@ export function ContactForm() {
           label="Email"
           type="email"
           required
+          autoComplete="email"
           error={errors.email?.message}
           {...register("email")}
         />
         <Input
           label="Phone"
           type="tel"
+          autoComplete="tel"
           error={errors.phone?.message}
           {...register("phone")}
         />
         <Input
           label="Company"
+          autoComplete="organization"
           error={errors.company?.message}
           {...register("company")}
         />
@@ -80,6 +84,7 @@ export function ContactForm() {
           { label: "Order support", value: "orders" },
           { label: "Returns", value: "returns" },
           { label: "Product questions", value: "products" },
+          { label: "Freight / shipping", value: "freight" },
           { label: "Other", value: "other" },
         ]}
         error={errors.subject?.message}
@@ -89,10 +94,17 @@ export function ContactForm() {
         label="Message"
         required
         rows={6}
+        placeholder="Order #, SKUs, ship-to ZIP, and what you need…"
         error={errors.message?.message}
         {...register("message")}
       />
-      <Button type="submit" variant="primary" size="lg" disabled={isSubmitting}>
+      <Button
+        type="submit"
+        variant="primary"
+        size="lg"
+        className="w-full sm:w-auto"
+        disabled={isSubmitting}
+      >
         {isSubmitting ? "Sending…" : "Send message"}
       </Button>
     </form>

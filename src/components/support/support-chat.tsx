@@ -109,10 +109,13 @@ export function SupportChat() {
   useEffect(() => {
     if (!open) return;
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setOpen(false);
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setOpen(false);
     }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [open]);
 
   /** Ids come from the thread length so they stay stable across re-renders. */
@@ -145,6 +148,11 @@ export function SupportChat() {
     });
   }
 
+  const safeBottom =
+    "calc(0.75rem + var(--phone-safe-bottom, 0px) + env(safe-area-inset-bottom, 0px))";
+  const panelBottom =
+    "calc(4.25rem + var(--phone-safe-bottom, 0px) + env(safe-area-inset-bottom, 0px))";
+
   return (
     <>
       <button
@@ -152,12 +160,13 @@ export function SupportChat() {
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
         aria-label={open ? "Close support chat" : "Open support chat"}
-        className="fixed bottom-4 right-4 z-40 inline-flex size-14 items-center justify-center rounded-full bg-titan-yellow text-dark-charcoal shadow-[0_10px_30px_rgba(16,24,32,0.28)] transition-colors hover:bg-titan-yellow/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-charcoal focus-visible:ring-offset-2 sm:bottom-6 sm:right-6"
+        className="support-chat-launcher fixed right-3 z-40 inline-flex size-12 items-center justify-center rounded-full bg-titan-yellow text-dark-charcoal shadow-[0_10px_30px_rgba(16,24,32,0.28)] transition-colors hover:bg-titan-yellow/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-charcoal focus-visible:ring-offset-2 @3xl:right-6 @3xl:size-14"
+        style={{ bottom: safeBottom }}
       >
         {open ? (
-          <X className="size-6" aria-hidden="true" />
+          <X className="size-5 @3xl:size-6" aria-hidden="true" />
         ) : (
-          <MessageCircle className="size-6" aria-hidden="true" />
+          <MessageCircle className="size-5 @3xl:size-6" aria-hidden="true" />
         )}
         {!open && online ? (
           <span
@@ -171,7 +180,8 @@ export function SupportChat() {
         <section
           role="dialog"
           aria-label="Customer service chat"
-          className="fixed bottom-20 right-4 z-40 flex max-h-[min(32rem,calc(100vh-7rem))] w-[calc(100vw-2rem)] flex-col overflow-hidden rounded-sm border border-border-gray bg-white shadow-[0_24px_60px_rgba(16,24,32,0.28)] sm:bottom-24 sm:right-6 sm:w-[22rem]"
+          className="support-chat-panel fixed left-3 right-3 z-40 flex max-h-[min(28rem,calc(100%-6.75rem))] w-auto flex-col overflow-hidden rounded-sm border border-border-gray bg-white shadow-[0_24px_60px_rgba(16,24,32,0.28)] @3xl:left-auto @3xl:right-6 @3xl:w-[22rem] @3xl:max-h-[min(32rem,calc(100%-8rem))]"
+          style={{ bottom: panelBottom }}
         >
           <header className="flex items-start gap-3 border-b border-white/10 bg-dark-charcoal px-4 py-3.5">
             <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-titan-yellow text-dark-charcoal">

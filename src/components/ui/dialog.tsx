@@ -97,7 +97,7 @@ function Dialog({
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
       <button
         type="button"
         aria-label="Close dialog"
@@ -112,20 +112,20 @@ function Dialog({
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
         className={cn(
-          "relative z-10 w-full max-w-lg rounded-sm border border-border-gray bg-white shadow-lg outline-none",
+          "relative z-10 flex max-h-[min(90dvh,40rem)] w-full max-w-lg flex-col overflow-hidden rounded-sm border border-border-gray bg-white shadow-lg outline-none",
           className,
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-border-gray px-5 py-4">
-          <div>
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-border-gray px-4 py-3 sm:gap-4 sm:px-5 sm:py-4">
+          <div className="min-w-0">
             <h2
               id={titleId}
-              className="font-heading text-lg font-semibold uppercase tracking-wide text-dark-charcoal"
+              className="font-heading text-base font-semibold uppercase tracking-wide text-dark-charcoal sm:text-lg"
             >
               {title}
             </h2>
             {description ? (
-              <p id={descriptionId} className="mt-1 text-sm text-medium-gray">
+              <p id={descriptionId} className="mt-1 text-xs text-medium-gray sm:text-sm">
                 {description}
               </p>
             ) : null}
@@ -143,7 +143,7 @@ function Dialog({
             </Button>
           ) : null}
         </div>
-        <div className="px-5 py-4">{children}</div>
+        <div className="min-h-0 overflow-y-auto px-4 py-4 sm:px-5">{children}</div>
       </div>
     </div>
   );

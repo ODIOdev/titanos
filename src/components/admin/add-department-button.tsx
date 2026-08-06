@@ -61,7 +61,8 @@ export function AddDepartmentButton({ className }: { className?: string }) {
         className={cn(buttonVariants({ variant: "outline", size: "sm" }), className)}
       >
         <Plus className="size-3.5" aria-hidden="true" />
-        Add department
+        <span className="@5xl:hidden">Add</span>
+        <span className="hidden @5xl:inline">Add department</span>
       </button>
 
       <Dialog

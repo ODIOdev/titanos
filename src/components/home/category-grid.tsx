@@ -39,10 +39,26 @@ const HOME_INDUSTRY_TILES = [
 export function CategoryGrid({ className }: CategoryGridProps) {
   return (
     <section
-      className={cn("bg-white py-8 sm:py-10", className)}
-      aria-labelledby="shop-by-industry-heading"
+      className={cn("bg-white py-0 @3xl:py-8 @5xl:py-10", className)}
+      aria-label="Shop by industry"
     >
-      <div className="container-titan">
+      {/* Mobile / phone-preview: tight static grid */}
+      <ul className="grid grid-cols-2 @3xl:hidden">
+        {HOME_INDUSTRY_TILES.map((department) => (
+          <li key={department.slug}>
+            <CategoryCard
+              name={department.name}
+              slug={department.slug}
+              imageUrl={department.imageUrl}
+              href={department.href}
+              className="rounded-none border-0 shadow-none hover:border-0 hover:shadow-none focus-visible:ring-inset focus-visible:ring-offset-0"
+            />
+          </li>
+        ))}
+      </ul>
+
+      {/* Tablet / desktop: headed grid */}
+      <div className="container-titan hidden @3xl:block">
         <SectionHeader
           title="Shop by industry"
           titleId="shop-by-industry-heading"
@@ -51,7 +67,7 @@ export function CategoryGrid({ className }: CategoryGridProps) {
           className="mb-5"
         />
 
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
+        <ul className="grid grid-cols-4 gap-4">
           {HOME_INDUSTRY_TILES.map((department) => (
             <li key={department.slug}>
               <CategoryCard

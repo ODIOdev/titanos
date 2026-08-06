@@ -6,6 +6,11 @@ import { PriceDisplay } from "@/components/products/price-display";
 import { AddToCartButton } from "@/components/products/add-to-cart-button";
 import { WishlistButton } from "@/components/products/wishlist-button";
 import type { Product } from "@/types";
+import {
+  getTagPastelClasses,
+  parseProductTags,
+} from "@/lib/data/catalog-options";
+import { getProductStockQuantity } from "@/lib/catalog/product-stock";
 import { cn, formatCurrency } from "@/lib/utils";
 
 export type ProductCardProps = {
@@ -38,13 +43,21 @@ export function ProductCard({
     ? Math.round((savings / product.compare_at_price!) * 100)
     : 0;
   const stock = stockLabel(
-    product.inventory_quantity,
+    getProductStockQuantity(product),
     product.low_stock_threshold,
   );
   const showStock = stock.tone !== "in";
-  const specs = [product.ansi_class, product.color, product.size].filter(
-    Boolean,
-  ) as string[];
+  const specs = [
+    product.ansi_class?.replace(/\s*\|\s*/g, " · ") ?? null,
+    product.color,
+    product.size,
+  ].filter(Boolean) as string[];
+  const merchTags = (() => {
+    const fromMeta = parseProductTags(product.metadata);
+    if (fromMeta.length > 0) return fromMeta;
+    if (product.metadata?.touchScreen === true) return ["Touch Screen"];
+    return [];
+  })();
 
   return (
     <article
@@ -70,7 +83,7 @@ export function ProductCard({
           </span>
         </Link>
 
-        <div className="absolute left-2 top-2 flex flex-col items-start gap-1.5">
+        <div className="absolute bottom-2 left-2 right-2 flex flex-wrap items-end gap-1.5">
           {onSale ? (
             <Badge variant="sale">
               {percentOff > 0 ? `Save ${percentOff}%` : "Sale"}
@@ -79,6 +92,17 @@ export function ProductCard({
           {product.bestseller ? (
             <Badge variant="bestseller">Bestseller</Badge>
           ) : null}
+          {merchTags.map((merchTag) => (
+            <span
+              key={merchTag}
+              className={cn(
+                "inline-flex items-center rounded-sm px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                getTagPastelClasses(merchTag),
+              )}
+            >
+              {merchTag}
+            </span>
+          ))}
         </div>
 
         <div className="absolute right-2 top-2 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
@@ -90,7 +114,7 @@ export function ProductCard({
         </div>
       </div>
 
-      <div className="flex flex-1 flex-col gap-2.5 p-4">
+      <div className="flex flex-1 flex-col gap-2 p-3 @3xl:gap-2.5 @3xl:p-4">
         <div className="min-h-0 flex-1">
           {product.brand?.name ? (
             <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-medium-gray">
@@ -99,13 +123,15 @@ export function ProductCard({
           ) : null}
           <Link
             href={`/product/${product.slug}`}
-            className="mt-0.5 block font-heading text-sm uppercase leading-snug tracking-wide text-dark-charcoal line-clamp-2 transition-colors hover:text-near-black sm:text-base"
+            className="mt-0.5 block font-heading text-xs uppercase leading-snug tracking-wide text-dark-charcoal line-clamp-2 transition-colors hover:text-near-black @3xl:text-sm @5xl:text-base"
           >
             {product.name}
           </Link>
-          <p className="mt-1 text-xs text-medium-gray">SKU: {product.sku}</p>
+          <p className="mt-1 hidden text-xs text-medium-gray @3xl:block">
+            SKU: {product.sku}
+          </p>
           {specs.length > 0 ? (
-            <ul className="mt-2 flex flex-wrap gap-1">
+            <ul className="mt-2 hidden flex-wrap gap-1 @3xl:flex">
               {specs.slice(0, 3).map((spec) => (
                 <li
                   key={spec}

@@ -95,6 +95,8 @@ export type Database = {
           parent_id: string | null;
           sort_order: number;
           active: boolean;
+          sku_prefix: string | null;
+          department: string | null;
           created_at: string;
           updated_at: string;
         };

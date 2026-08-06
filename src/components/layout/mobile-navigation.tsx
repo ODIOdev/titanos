@@ -1,12 +1,13 @@
 "use client";
 
 import * as React from "react";
+import Image from "next/image";
 import Link from "next/link";
 import { ChevronDown, X } from "lucide-react";
 import { NAV_CATEGORIES, SITE_CONFIG } from "@/lib/data/seed-data";
 import { cn } from "@/lib/utils";
 import { logout } from "@/lib/actions/auth";
-import { Button } from "@/components/ui/button";
+import { WISHLIST_CHANGE_EVENT, readWishlist } from "@/lib/wishlist";
 import { HomeButton } from "@/components/layout/home-button";
 
 export interface MobileNavigationProps {
@@ -20,6 +21,7 @@ export interface MobileNavigationProps {
 
 const EXTRA_LINKS = [
   { label: "Shop All", href: "/shop" },
+  { label: "Wishlist", href: "/wishlist" },
   { label: "Brands", href: "/brands" },
   { label: "Resources", href: "/resources" },
   { label: "Bulk Orders", href: "/bulk-orders" },
@@ -27,7 +29,26 @@ const EXTRA_LINKS = [
 ] as const;
 
 const panelLinkClass =
-  "block w-full px-4 py-3 text-left text-sm font-medium text-dark-charcoal hover:bg-light-gray";
+  "block w-full px-4 py-3 text-left text-sm font-medium text-dark-charcoal";
+
+function useWishlistCount() {
+  const [count, setCount] = React.useState(0);
+
+  React.useEffect(() => {
+    function sync() {
+      setCount(readWishlist().length);
+    }
+    sync();
+    window.addEventListener("storage", sync);
+    window.addEventListener(WISHLIST_CHANGE_EVENT, sync);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener(WISHLIST_CHANGE_EVENT, sync);
+    };
+  }, []);
+
+  return count;
+}
 
 export function MobileNavigation({
   open,
@@ -38,6 +59,7 @@ export function MobileNavigation({
   const panelRef = React.useRef<HTMLDivElement>(null);
   const previouslyFocused = React.useRef<HTMLElement | null>(null);
   const [expanded, setExpanded] = React.useState<string | null>(null);
+  const wishlistCount = useWishlistCount();
 
   React.useEffect(() => {
     if (!open) return;
@@ -45,11 +67,12 @@ export function MobileNavigation({
     previouslyFocused.current = document.activeElement as HTMLElement | null;
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    document.documentElement.classList.add("mobile-nav-open");
 
     const panel = panelRef.current;
     if (panel) {
       const focusable = panel.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
       );
       (focusable[0] ?? panel).focus();
     }
@@ -57,6 +80,7 @@ export function MobileNavigation({
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.preventDefault();
+        event.stopImmediatePropagation();
         onOpenChange(false);
         return;
       }
@@ -65,8 +89,8 @@ export function MobileNavigation({
 
       const focusable = Array.from(
         panelRef.current.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),
       ).filter((el) => !el.hasAttribute("disabled"));
 
       if (focusable.length === 0) return;
@@ -84,51 +108,66 @@ export function MobileNavigation({
       }
     }
 
-    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("keydown", onKeyDown, true);
     return () => {
-      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("keydown", onKeyDown, true);
       document.body.style.overflow = previousOverflow;
+      document.documentElement.classList.remove("mobile-nav-open");
       previouslyFocused.current?.focus();
     };
   }, [open, onOpenChange]);
+
+  React.useEffect(() => {
+    if (!open) setExpanded(null);
+  }, [open]);
 
   const expandedKey = open ? expanded : null;
 
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-[60] lg:hidden">
-      <button
-        type="button"
-        aria-label="Close menu"
-        className="absolute inset-0 bg-near-black/50"
-        onClick={() => onOpenChange(false)}
-      />
+    <div
+      ref={panelRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Mobile navigation"
+      tabIndex={-1}
+      className="storefront-mobile-nav fixed inset-0 z-[60] flex flex-col bg-white outline-none @5xl:hidden"
+    >
       <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Mobile navigation"
-        tabIndex={-1}
-        className="absolute inset-y-0 left-0 flex w-[min(22rem,88vw)] flex-col bg-white shadow-xl outline-none"
+        className="flex shrink-0 items-center justify-between border-b border-white/12 bg-dark-charcoal px-3"
+        style={{
+          paddingTop:
+            "calc(0.65rem + var(--phone-safe-top, 0px) + env(safe-area-inset-top, 0px))",
+          paddingBottom: "0.65rem",
+        }}
       >
-        <div className="flex items-center justify-between border-b border-border-gray px-4 py-3">
-          <p className="font-heading text-sm font-semibold uppercase tracking-wide text-dark-charcoal">
-            {SITE_CONFIG.shortName}
-          </p>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="px-2"
-            aria-label="Close menu"
-            onClick={() => onOpenChange(false)}
-          >
-            <X className="size-5" />
-          </Button>
-        </div>
+        <Image
+          src="/images/logo/logo-landscape.png"
+          alt={SITE_CONFIG.name}
+          width={763}
+          height={247}
+          className="h-8 w-auto max-w-[min(100%,12rem)] object-contain object-left"
+          unoptimized
+        />
+        <button
+          type="button"
+          className="inline-flex size-10 shrink-0 items-center justify-center rounded-sm text-white"
+          aria-label="Close menu"
+          onClick={() => onOpenChange(false)}
+        >
+          <X className="size-5" aria-hidden="true" />
+        </button>
+      </div>
 
-          <div className="flex-1 overflow-y-auto py-2">
+      <div
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        style={{
+          paddingBottom:
+            "calc(1rem + var(--phone-safe-bottom, 0px) + env(safe-area-inset-bottom, 0px))",
+        }}
+      >
+        <div className="py-2">
           <HomeButton
             className="mx-4 my-2 w-[calc(100%-2rem)] justify-start"
             onClick={() => onOpenChange(false)}
@@ -143,15 +182,15 @@ export function MobileNavigation({
                   aria-expanded={isOpen}
                   onClick={() =>
                     setExpanded((prev) =>
-                      prev === category.label ? null : category.label
+                      prev === category.label ? null : category.label,
                     )
                   }
                 >
                   {category.label}
                   <ChevronDown
                     className={cn(
-                      "size-4 text-medium-gray transition-transform",
-                      isOpen && "rotate-180"
+                      "size-4 shrink-0 text-medium-gray transition-transform",
+                      isOpen && "rotate-180",
                     )}
                     aria-hidden="true"
                   />
@@ -192,7 +231,9 @@ export function MobileNavigation({
                   className={panelLinkClass}
                   onClick={() => onOpenChange(false)}
                 >
-                  {link.label}
+                  {link.href === "/wishlist" && wishlistCount > 0
+                    ? `${link.label} (${wishlistCount})`
+                    : link.label}
                 </Link>
               </li>
             ))}

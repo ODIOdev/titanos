@@ -1,10 +1,11 @@
 "use client";
 
 import { useId, useState } from "react";
+import Link from "next/link";
 import { ChevronDown } from "lucide-react";
 import { FREE_SHIPPING_THRESHOLD } from "@/lib/data/seed-data";
 import { formatCurrency, cn } from "@/lib/utils";
-import type { Product, ProductSpecification } from "@/types";
+import type { Product } from "@/types";
 
 export type ProductTabsProps = {
   product: Product;
@@ -12,16 +13,10 @@ export type ProductTabsProps = {
   className?: string;
 };
 
-type TabId =
-  | "description"
-  | "specifications"
-  | "certifications"
-  | "shipping"
-  | "returns";
+type TabId = "description" | "certifications" | "shipping" | "returns";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "description", label: "Description" },
-  { id: "specifications", label: "Specifications" },
   { id: "certifications", label: "Safety Certifications" },
   { id: "shipping", label: "Shipping" },
   { id: "returns", label: "Returns" },
@@ -59,38 +54,6 @@ function DescriptionPanel({ product }: { product: Product }) {
         </ul>
       ) : null}
     </div>
-  );
-}
-
-function SpecificationsPanel({
-  specifications,
-}: {
-  specifications: ProductSpecification[];
-}) {
-  if (specifications.length === 0) {
-    return (
-      <p className="text-sm text-medium-gray">
-        Specifications will be listed here when available.
-      </p>
-    );
-  }
-
-  return (
-    <dl className="divide-y divide-border-gray border border-border-gray rounded-sm">
-      {specifications.map((spec) => (
-        <div
-          key={spec.id}
-          className="grid grid-cols-1 gap-1 px-4 py-3 sm:grid-cols-3 sm:gap-4"
-        >
-          <dt className="text-sm font-semibold text-dark-charcoal">
-            {spec.name}
-          </dt>
-          <dd className="text-sm text-medium-gray sm:col-span-2">
-            {spec.value}
-          </dd>
-        </div>
-      ))}
-    </dl>
   );
 }
 
@@ -138,7 +101,9 @@ function ShippingPanel() {
   );
 }
 
-function ReturnsPanel() {
+function ReturnsPanel({ productSlug }: { productSlug: string }) {
+  const returnsHref = `/returns?from=${encodeURIComponent(`/product/${productSlug}`)}`;
+
   return (
     <div className="space-y-3 text-sm leading-relaxed text-medium-gray">
       <p>
@@ -151,12 +116,12 @@ function ReturnsPanel() {
       </p>
       <p>
         See our{" "}
-        <a
-          href="/returns"
+        <Link
+          href={returnsHref}
           className="font-medium text-dark-charcoal underline underline-offset-2"
         >
           Returns Policy
-        </a>{" "}
+        </Link>{" "}
         for full details.
       </p>
     </div>
@@ -175,16 +140,12 @@ function TabContent({
   switch (id) {
     case "description":
       return <DescriptionPanel product={product} />;
-    case "specifications":
-      return (
-        <SpecificationsPanel specifications={product.specifications ?? []} />
-      );
     case "certifications":
       return <CertificationsPanel items={certifications} />;
     case "shipping":
       return <ShippingPanel />;
     case "returns":
-      return <ReturnsPanel />;
+      return <ReturnsPanel productSlug={product.slug} />;
     default:
       return null;
   }

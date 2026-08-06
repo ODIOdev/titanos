@@ -135,8 +135,19 @@ export const productFormSchema = z.object({
   productType: z.string().optional(),
   department: z.string().optional(),
   gender: z.string().optional(),
-  tag: z.string().optional(),
-  ansiClass: z.string().optional(),
+  /** Whether the product has a touch screen (stored in metadata). */
+  touchScreen: z.boolean().default(false),
+  tags: z.array(z.string()).optional().default([]),
+  /** Primary ANSI certs shown on product card / listing subtitles (`ansi_class`). */
+  primaryCertifications: z
+    .array(
+      z.object({
+        name: z.string().min(1),
+        value: z.string(),
+      }),
+    )
+    .optional()
+    .default([]),
   color: z.string().optional(),
   size: z.string().optional(),
   /** When true, shoppers pick from the color/size/qty matrix instead of a single color. */
@@ -160,6 +171,7 @@ export const productFormSchema = z.object({
     )
     .optional()
     .default([]),
+  materials: z.array(z.string()).optional().default([]),
   certifications: z
     .array(
       z.object({
@@ -178,6 +190,13 @@ export const categoryFormSchema = z.object({
   imageUrl: z.string().optional(),
   sortOrder: z.coerce.number().int().min(0),
   active: z.boolean(),
+  department: z.string().optional(),
+  skuPrefix: z
+    .string()
+    .trim()
+    .max(12, "SKU prefix must be 12 characters or fewer")
+    .regex(/^[A-Za-z0-9]*$/, "Use letters and numbers only")
+    .optional(),
 });
 
 export const memberFormSchema = z.object({
@@ -248,6 +267,14 @@ export const checkoutSchema = z.object({
   email: z.string().email().optional(),
 });
 
+export const productReviewSchema = z.object({
+  productId: z.string().uuid(),
+  productSlug: z.string().min(1),
+  rating: z.number().int().min(1).max(5),
+  title: z.string().trim().max(120).optional(),
+  body: z.string().trim().max(2000).optional(),
+});
+
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type QuoteInput = z.infer<typeof quoteSchema>;
@@ -258,3 +285,4 @@ export type MemberFormInput = z.infer<typeof memberFormSchema>;
 export type AffiliateApplicationInput = z.infer<
   typeof affiliateApplicationSchema
 >;
+export type ProductReviewInput = z.infer<typeof productReviewSchema>;

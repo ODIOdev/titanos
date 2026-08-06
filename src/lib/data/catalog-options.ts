@@ -45,6 +45,13 @@ export function productGender(
   return trimmed || null;
 }
 
+/** Read touch-screen flag from product metadata (unset = false). */
+export function productTouchScreen(
+  product: { metadata?: Record<string, unknown> | null } | null | undefined,
+): boolean {
+  return product?.metadata?.touchScreen === true;
+}
+
 /** Top-level merchandise departments for catalog organization. */
 export type DepartmentOption = CatalogOption & { slug: string };
 
@@ -76,6 +83,7 @@ export const SHOP_HIDDEN_DEPARTMENTS = new Set([
  * Always merged into storefront options unless explicitly removed.
  */
 export const DEFAULT_PRIMARY_DEPARTMENTS: string[] = [
+  "Combo Deals",
   "Fall Protection",
   "Head Protection",
   "Hearing Protection",
@@ -87,8 +95,14 @@ export const DEFAULT_PRIMARY_DEPARTMENTS: string[] = [
   "Safety Tapes",
   "Signage",
   "Traffic Safety Equipment",
-  "Combo Deals",
 ];
+
+/** Stable A–Z order for department name lists (catalog, custom, off-line). */
+export function sortDepartmentNames(names: string[]): string[] {
+  return [...names].sort((a, b) =>
+    a.localeCompare(b, undefined, { sensitivity: "base" }),
+  );
+}
 
 /** Resolve a URL/query param (slug or display value) to the canonical department value. */
 export function resolveDepartmentParam(
@@ -226,30 +240,197 @@ export function getCategorySpecificationFields(
   return CATEGORY_SPECIFICATION_FIELDS[categorySlug] ?? [];
 }
 
-/** Safety certifications selectable on product admin forms. */
+/** Safety certifications selectable on product admin forms (A–Z). */
 export const SAFETY_CERTIFICATION_OPTIONS: string[] = [
-  "ANSI Z89.1",
-  "ANSI Z89.1 Class E",
-  "ANSI/ISEA 107 Class 2",
-  "ANSI/ISEA 107 Class 3",
-  "ANSI/ISEA 105 A1",
-  "ANSI/ISEA 105 A4",
+  "ANSI S3.19",
+  "ANSI Z87.1",
+  "ANSI Z87.1+",
   "ANSI Z87+",
+  "ANSI Z89.1",
+  "ANSI Z89.1 Class C",
+  "ANSI Z89.1 Class E",
+  "ANSI Z89.1 Class G",
+  "ANSI Z89.1 Type I",
+  "ANSI Z89.1 Type II",
   "ANSI Z359.11",
   "ANSI Z359.13",
+  "ANSI Z359.14",
+  "ANSI Z359.15",
+  "ANSI/ISEA 105 - 2016 ABRASION Level 6",
+  "ANSI/ISEA 105 - 2016 CUT Level A1",
+  "ANSI/ISEA 105 - 2016 CUT Level A2",
+  "ANSI/ISEA 105 A1",
+  "ANSI/ISEA 105 A2",
+  "ANSI/ISEA 105 A3",
+  "ANSI/ISEA 105 A4",
+  "ANSI/ISEA 105 A5",
+  "ANSI/ISEA 105 A6",
+  "ANSI/ISEA 105 A7",
+  "ANSI/ISEA 105 A8",
+  "ANSI/ISEA 105 A9",
+  "ANSI/ISEA 107 Class 1",
+  "ANSI/ISEA 107 Class 2",
+  "ANSI/ISEA 107 Class 3",
+  "ANSI/ISEA 107 Type O",
+  "ANSI/ISEA 107 Type P",
+  "ANSI/ISEA 107 Type R",
+  "ANSI/ISEA 138-2019 Impact Level 2",
+  "ASTM D4956",
+  "ASTM D4956 Type I",
+  "ASTM D4956 Type III",
+  "ASTM D4956 Type IV",
+  "ASTM D4956 Type VIII",
+  "ASTM D4956 Type XI",
   "ASTM F2413",
+  "ASTM F2413 EH",
+  "ASTM F2413 I/C",
+  "ASTM F2413 PR",
+  "ASTM F2413 SR",
   "ASTM F2892 EH",
   "ASTM F3445 slip resistant",
-  "ASTM D4956",
-  "ASTM D4956 Type IV",
+  "CE Food Safe",
+  "Class 1",
+  "Class 2",
+  "Class 3",
   "CSA Z94.1",
+  "CSA Z94.2",
   "CSA Z94.3",
+  "CSA Z96 Class 1",
+  "CSA Z96 Class 2",
+  "CSA Z96 Class 3",
+  "CSA Z195",
+  "CSA Z259",
   "EN 388",
+  "EN 388:2016 +A1:2018 3131X",
+  "EN 388:2016 +A1:2018 4241XP",
+  "EN 388:2016 +A1:2018 4243X",
+  "EN 407",
+  "EN 407:2020 412X4X",
+  "EN 420",
+  "EN 12477 Type A",
+  "EN 12477 Type B",
+  "EN ISO 21420 Dexterity 2",
+  "EN ISO 21420:2020 Dexterity 5",
+  "Level A1",
+  "Level A2",
+  "Level A2 - A540",
+  "Level A3",
+  "Level A4",
+  "Level A5",
+  "Level A6",
+  "Level A7",
+  "Level A8",
+  "Level A9",
   "MUTCD",
   "MUTCD compliant",
+  "NIOSH",
+  "NIOSH N95",
+  "NIOSH P100",
   "OSHA",
   "OSHA 1926.502",
+  "Type I Class C",
+  "Type I Class E",
+  "Type I Class G",
+  "Type II Class C",
+  "Type II Class E",
+  "Type II Class G",
 ];
+
+/** Product materials selectable on admin forms and shop filters. */
+export const MATERIAL_OPTIONS: string[] = [
+  "ABS",
+  "Acrylic",
+  "Aluminum",
+  "Blow-molded polyethylene",
+  "Buffalo Leather",
+  "Composite",
+  "Composite toe",
+  "Cordura",
+  "Cotton",
+  "Cotton canvas",
+  "Cow Split Leather",
+  "Cowhide Leather",
+  "Deerskin Leather",
+  "Dyneema",
+  "EVA midsole",
+  "Fiberglass",
+  "Fleece",
+  "Foam nitrile",
+  "Goatskin Leather",
+  "Grain Leather",
+  "HDPE",
+  "HDPE shell",
+  "HPPE",
+  "Kevlar",
+  "Latex",
+  "Leather palm",
+  "Mesh",
+  "Mesh upper",
+  "Meta-Aramid",
+  "Neoprene",
+  "Nitrile",
+  "Nylon",
+  "Para-Aramid",
+  "Para-Aramid +",
+  "Pigskin Leather",
+  "Polycarbonate",
+  "Polyester",
+  "Polyester mesh",
+  "Polyester solid/mesh combo",
+  "Polyurethane (PU)",
+  "Powder-coated steel",
+  "PVC",
+  "Reflective trim",
+  "Retroreflective tape",
+  "Rubber",
+  "Rubber sole",
+  "Softshell",
+  "Spandex",
+  "Split Leather",
+  "Steel",
+  "Steel toe",
+  "TPU",
+  "Vinyl",
+];
+
+/** Canonical options for the shop materials filter. */
+export const SHOP_MATERIAL_OPTIONS: CatalogOption[] = MATERIAL_OPTIONS.map(
+  (value) => ({ label: value, value }),
+);
+
+/** Materials stored on product metadata (and legacy Material specs). */
+export function productMaterialValues(product: {
+  metadata?: Record<string, unknown> | null;
+  specifications?: { name: string; value: string }[] | null;
+}): string[] {
+  const values: string[] = [];
+  const raw = product.metadata?.materials;
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (typeof item === "string" && item.trim()) values.push(item.trim());
+    }
+  }
+  for (const spec of product.specifications ?? []) {
+    if (spec.name.trim().toLowerCase() !== "material") continue;
+    if (spec.value.trim()) values.push(spec.value.trim());
+  }
+  return [...new Set(values)];
+}
+
+/** Whether a product matches a shop Materials filter value. */
+export function productMatchesMaterial(
+  product: {
+    metadata?: Record<string, unknown> | null;
+    specifications?: { name: string; value: string }[] | null;
+  },
+  filterValue: string,
+): boolean {
+  const filter = filterValue.trim().toLowerCase();
+  if (!filter) return true;
+  return productMaterialValues(product).some(
+    (material) => material.trim().toLowerCase() === filter,
+  );
+}
 
 /** Shop / home image for a department card. */
 export function departmentImagePath(slug: string): string {
@@ -288,10 +469,57 @@ export const PRODUCT_TAG_OPTIONS: CatalogOption[] = [
   { label: "ANSI Rated", value: "ANSI Rated" },
   { label: "Hi-Vis", value: "Hi-Vis" },
   { label: "Waterproof", value: "Waterproof" },
+  { label: "Touch Screen", value: "Touch Screen" },
   { label: "Made in USA", value: "Made in USA" },
   { label: "Bulk Eligible", value: "Bulk Eligible" },
   { label: "Limited Stock", value: "Limited Stock" },
 ];
+
+/** Read merchandising tags from product metadata (supports legacy single `tag`). */
+export function parseProductTags(
+  metadata: Record<string, unknown> | null | undefined,
+): string[] {
+  const values: string[] = [];
+  const seen = new Set<string>();
+
+  function push(raw: string) {
+    const trimmed = raw.trim();
+    if (!trimmed) return;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    values.push(trimmed);
+  }
+
+  const list = metadata?.tags;
+  if (Array.isArray(list)) {
+    for (const item of list) {
+      if (typeof item === "string") push(item);
+    }
+  }
+
+  if (typeof metadata?.tag === "string") push(metadata.tag);
+
+  return values;
+}
+
+/** Persist tags as both `tags[]` and legacy primary `tag` string. */
+export function serializeProductTags(tags: string[] | null | undefined): {
+  tags: string[];
+  tag: string | null;
+} {
+  const unique: string[] = [];
+  const seen = new Set<string>();
+  for (const tag of tags ?? []) {
+    const trimmed = tag.trim();
+    if (!trimmed) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(trimmed);
+  }
+  return { tags: unique, tag: unique[0] ?? null };
+}
 
 /** Soft pastel badge classes for tag chips. */
 export const TAG_PASTEL_PALETTE = [
@@ -315,6 +543,7 @@ const CANONICAL_TAG_PASTELS: Record<string, (typeof TAG_PASTEL_PALETTE)[number]>
   "ansi rated": "bg-indigo-100 text-indigo-800",
   "hi-vis": "bg-lime-100 text-lime-800",
   waterproof: "bg-teal-100 text-teal-800",
+  "touch screen": "bg-cyan-100 text-cyan-800",
   "made in usa": "bg-violet-100 text-violet-800",
   "bulk eligible": "bg-emerald-100 text-emerald-800",
   "limited stock": "bg-fuchsia-100 text-fuchsia-800",
@@ -344,6 +573,107 @@ export const ANSI_CLASS_OPTIONS: CatalogOption[] = [
   { label: "Class 2", value: "Class 2" },
   { label: "Class 3", value: "Class 3" },
 ];
+
+/** Joins multiple ANSI classes in the products.ansi_class text column. */
+export const ANSI_CLASS_SEPARATOR = " | ";
+
+/** Parse stored ansi_class (single or multi) into discrete option values. */
+export function parseAnsiClasses(
+  raw: string | null | undefined,
+): string[] {
+  if (!raw?.trim()) return [];
+  return raw
+    .split(ANSI_CLASS_SEPARATOR)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+/** Serialize selected ANSI classes for storage (null when empty). */
+export function serializeAnsiClasses(
+  values: string[] | null | undefined,
+): string | null {
+  const unique = [
+    ...new Set(
+      (values ?? []).map((value) => value.trim()).filter(Boolean),
+    ),
+  ];
+  return unique.length > 0 ? unique.join(ANSI_CLASS_SEPARATOR) : null;
+}
+
+/** Whether a product's stored ansi_class includes a shop filter value. */
+export function productHasAnsiClass(
+  stored: string | null | undefined,
+  filterValue: string,
+): boolean {
+  if (!filterValue) return true;
+  return parseAnsiClasses(stored).includes(filterValue);
+}
+
+const ANSI_CLASS_VALUE_SET = new Set(
+  ANSI_CLASS_OPTIONS.map((option) => option.value),
+);
+
+/** Pull shop-filter ANSI class values out of certification selections. */
+export function ansiClassesFromCertifications(
+  rows: { name: string }[] | null | undefined,
+): string[] {
+  return [
+    ...new Set(
+      (rows ?? [])
+        .map((row) => row.name.trim())
+        .filter((name) => ANSI_CLASS_VALUE_SET.has(name)),
+    ),
+  ];
+}
+
+/** Canonical options for the shop ANSI / certification filter. */
+export const SHOP_ANSI_CERTIFICATION_OPTIONS: CatalogOption[] =
+  SAFETY_CERTIFICATION_OPTIONS.map((value) => ({ label: value, value }));
+
+/** Whether a stored certification string matches a shop filter value. */
+export function certificationMatchesFilter(
+  stored: string,
+  filterValue: string,
+): boolean {
+  const trimmed = stored.trim();
+  const filter = filterValue.trim();
+  if (!filter) return true;
+  return (
+    trimmed === filter ||
+    trimmed.startsWith(`${filter}:`) ||
+    trimmed.startsWith(`${filter} —`) ||
+    trimmed.startsWith(`${filter} -`)
+  );
+}
+
+/** Certification labels from product metadata (detail suffixes stripped for matching). */
+export function productCertificationValues(product: {
+  metadata?: Record<string, unknown> | null;
+}): string[] {
+  const raw = product.metadata?.certifications;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (item): item is string => typeof item === "string" && Boolean(item.trim()),
+  );
+}
+
+/**
+ * Match shop ANSI filter against `ansi_class` and additional certifications
+ * stored in product metadata.
+ */
+export function productMatchesAnsiFilter(
+  product: {
+    ansi_class?: string | null;
+    metadata?: Record<string, unknown> | null;
+  },
+  filterValue: string,
+): boolean {
+  if (!filterValue.trim()) return true;
+  if (productHasAnsiClass(product.ansi_class, filterValue)) return true;
+  return productCertificationValues(product).some((stored) =>
+    certificationMatchesFilter(stored, filterValue),
+  );
+}
 
 /** Named color → hex used to build swatches for single & dual-tone colors. */
 const COLOR_HEX: Record<string, string> = {
@@ -655,4 +985,21 @@ export function toSelectOptions(
   emptyLabel = "Select…",
 ): { label: string; value: string }[] {
   return [{ label: emptyLabel, value: "" }, ...options];
+}
+
+/** Empty option + partitioned optgroups for size (and similar) selects. */
+export function toGroupedSelectOptions(
+  options: CatalogOption[],
+  emptyLabel = "Select…",
+): {
+  options: { label: string; value: string }[];
+  optionGroups: { label: string; options: CatalogOption[] }[];
+} {
+  return {
+    options: [{ label: emptyLabel, value: "" }],
+    optionGroups: groupCatalogSizes(options).map((group) => ({
+      label: group.title,
+      options: group.options,
+    })),
+  };
 }

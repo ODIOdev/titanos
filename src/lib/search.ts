@@ -1,4 +1,5 @@
 import type { Product } from "@/types";
+import { parseProductTags } from "@/lib/data/catalog-options";
 
 /** Escape user input for PostgREST `or` / `ilike` filter values. */
 export function escapeIlike(value: string): string {
@@ -59,10 +60,9 @@ export function productSearchScore(
 
   const name = product.name?.toLowerCase() ?? "";
   const sku = product.sku?.toLowerCase() ?? "";
-  const tag =
-    typeof product.metadata?.tag === "string"
-      ? product.metadata.tag.toLowerCase()
-      : "";
+  const tags = parseProductTags(product.metadata).map((tag) =>
+    tag.toLowerCase(),
+  );
   const brand = product.brand?.name?.toLowerCase() ?? "";
   const category = product.category?.name?.toLowerCase() ?? "";
 
@@ -75,8 +75,8 @@ export function productSearchScore(
   else if (name.startsWith(q)) score = Math.max(score, 85);
   else if (name.includes(q)) score = Math.max(score, 70);
 
-  if (tag === q) score = Math.max(score, 65);
-  else if (tag.includes(q)) score = Math.max(score, 55);
+  if (tags.some((tag) => tag === q)) score = Math.max(score, 65);
+  else if (tags.some((tag) => tag.includes(q))) score = Math.max(score, 55);
 
   if (brand.includes(q)) score = Math.max(score, 50);
   if (category.includes(q)) score = Math.max(score, 45);

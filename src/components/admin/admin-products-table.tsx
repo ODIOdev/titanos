@@ -5,6 +5,10 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import {
+  AdminProductPreviewDialog,
+  type AdminProductPreview,
+} from "@/components/admin/admin-product-preview-dialog";
 import { ArchiveProductButton } from "@/components/admin/archive-product-button";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
 import { DataTable } from "@/components/admin/data-table";
@@ -23,11 +27,16 @@ export type AdminProductTableRow = {
   name: string;
   sku: string;
   categoryName: string | null;
+  brandName: string | null;
   price: number;
   inventoryQuantity: number;
   lowStockThreshold: number;
+  stockBySize: string | null;
+  stockSizes?: { size: string; qty: number }[];
   status: CatalogStatus;
   imageUrl: string;
+  shortDescription: string | null;
+  editHref: string;
 };
 
 type TabId = "active" | "draft" | "archived";
@@ -115,12 +124,45 @@ export function AdminProductsTable({
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [previewId, setPreviewId] = useState<string | null>(null);
 
   const pageIds = useMemo(() => products.map((p) => p.id), [products]);
   const selectedNames = useMemo(
     () => products.filter((p) => selected.has(p.id)).map((p) => p.name),
     [products, selected],
   );
+  const previewProduct = useMemo((): AdminProductPreview | null => {
+    const p = products.find((row) => row.id === previewId);
+    if (!p) return null;
+    return {
+      id: p.id,
+      name: p.name,
+      sku: p.sku,
+      imageUrl: p.imageUrl,
+      brandName: p.brandName,
+      categoryName: p.categoryName,
+      price: p.price,
+      inventoryQuantity: p.inventoryQuantity,
+      lowStockThreshold: p.lowStockThreshold,
+      stockBySize: p.stockBySize,
+      stockSizes: p.stockSizes,
+      statusLabel:
+        p.status === "active"
+          ? "Active"
+          : p.status === "draft"
+            ? "Draft"
+            : "Archived",
+      statusVariant:
+        p.status === "active"
+          ? "success"
+          : p.status === "draft"
+            ? "warning"
+            : "default",
+      shortDescription: p.shortDescription,
+      editHref: p.editHref,
+      showReplenish: true,
+    };
+  }, [products, previewId]);
 
   useEffect(() => {
     setSelected(new Set());
@@ -230,7 +272,12 @@ export function AdminProductsTable({
 
       <DataTable
         className="rounded-none border-0"
+        noHorizontalScroll
         emptyMessage={emptyMessage}
+        onRowActivate={(index) => {
+          const id = products[index]?.id;
+          if (id) setPreviewId(id);
+        }}
         columns={[
           {
             key: "select",
@@ -244,13 +291,16 @@ export function AdminProductsTable({
             ),
             className: "w-10 pr-0",
           },
-          { key: "name", header: "Product" },
-          { key: "sku", header: "SKU" },
-          { key: "category", header: "Category" },
-          { key: "price", header: "Price" },
-          { key: "stock", header: "Stock" },
-          { key: "status", header: "Status" },
-          { key: "actions", header: "Actions", className: "text-right" },
+          { key: "name", header: "Product", className: "w-[32%]" },
+          { key: "category", header: "Category", className: "w-[14%]" },
+          { key: "price", header: "Price", className: "w-[12%]" },
+          { key: "stock", header: "Stock", className: "w-[10%]" },
+          { key: "status", header: "Status", className: "w-[12%]" },
+          {
+            key: "actions",
+            header: "Actions",
+            className: "w-[16%] text-right",
+          },
         ]}
         rows={products.map((p) => {
           const low = p.inventoryQuantity <= p.lowStockThreshold;
@@ -262,7 +312,10 @@ export function AdminProductsTable({
               label={`Select ${p.name}`}
               onChange={(checked) => toggleOne(p.id, checked)}
             />,
-            <div key={`${p.id}-name`} className="flex items-center gap-3">
+            <div
+              key={`${p.id}-name`}
+              className="flex min-w-0 items-center gap-3"
+            >
               <div className="relative size-11 shrink-0 overflow-hidden rounded-sm border border-border-gray bg-light-gray">
                 <Image
                   src={p.imageUrl}
@@ -277,23 +330,19 @@ export function AdminProductsTable({
                 />
               </div>
               <div className="min-w-0">
-                <Link
-                  href={`/admin/products/${p.id}`}
-                  className="font-medium text-dark-charcoal hover:text-titan-yellow"
-                >
+                <p className="truncate font-medium text-dark-charcoal">
                   {p.name}
-                </Link>
-                {low && p.status === "active" ? (
-                  <p className="text-xs font-medium text-warning-orange">
-                    Low stock
-                  </p>
-                ) : null}
+                </p>
+                <p className="truncate text-xs text-medium-gray">
+                  {low && p.status === "active"
+                    ? "Low stock"
+                    : [p.brandName, p.sku].filter(Boolean).join(" · ") || "—"}
+                </p>
               </div>
             </div>,
-            <span key={`${p.id}-sku`} className="text-medium-gray">
-              {p.sku}
+            <span key={`${p.id}-cat`} className="block truncate">
+              {p.categoryName ?? "—"}
             </span>,
-            <span key={`${p.id}-cat`}>{p.categoryName ?? "—"}</span>,
             <span key={`${p.id}-price`} className="tabular-nums">
               {formatCurrency(p.price)}
             </span>,
@@ -307,10 +356,15 @@ export function AdminProductsTable({
               {p.inventoryQuantity}
             </span>,
             <ProductStatusBadge key={`${p.id}-status`} status={p.status} />,
-            <div key={`${p.id}-actions`} className="flex justify-end gap-2">
+            <div
+              key={`${p.id}-actions`}
+              className="flex flex-wrap justify-end gap-1.5"
+              data-no-row-nav
+            >
               <Link
-                href={`/admin/products/${p.id}`}
-                className="inline-flex h-8 items-center rounded-sm border border-border-gray px-3 text-xs font-semibold uppercase tracking-wide hover:bg-light-gray"
+                href={p.editHref}
+                className="inline-flex h-8 items-center rounded-sm border border-border-gray px-2.5 text-xs font-semibold uppercase tracking-wide hover:bg-light-gray"
+                onClick={(e) => e.stopPropagation()}
               >
                 Edit
               </Link>
@@ -328,6 +382,14 @@ export function AdminProductsTable({
             </div>,
           ];
         })}
+      />
+
+      <AdminProductPreviewDialog
+        product={previewProduct}
+        open={previewId != null}
+        onOpenChange={(open) => {
+          if (!open) setPreviewId(null);
+        }}
       />
     </div>
   );

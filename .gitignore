@@ -44,6 +44,9 @@ yarn-error.log*
 # local product image uploads (dev fallback)
 /public/uploads
 
+# local-only design simulator assets (never deploy)
+/public/dev
+
 # supabase cli scratch state
 /supabase/.temp
 

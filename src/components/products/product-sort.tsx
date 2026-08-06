@@ -50,22 +50,26 @@ export function ProductSort({
   if (layout === "inline") {
     return (
       <div
-        className={cn("flex shrink-0 items-center gap-2", className)}
+        className={cn(
+          "shop-product-sort flex min-w-0 items-center gap-2 @3xl:shrink-0",
+          className,
+        )}
         aria-busy={isPending}
       >
         <label
           htmlFor={selectId}
-          className="hidden shrink-0 text-sm text-medium-gray sm:block"
+          className="hidden shrink-0 text-sm text-medium-gray @3xl:block"
         >
           Sort
         </label>
-        <div className="w-[11rem] sm:w-[12.5rem]">
+        <div className="shop-product-sort-control min-w-0 flex-1 @3xl:w-[12.5rem] @3xl:flex-none">
           <Select
             id={selectId}
             aria-label="Sort products"
             options={[...SORT_OPTIONS]}
             value={current}
             onChange={(event) => onChange(event.target.value)}
+            className="truncate"
           />
         </div>
       </div>
