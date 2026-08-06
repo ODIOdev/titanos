@@ -5,7 +5,7 @@ let stripeClient: Stripe | null = null;
 /** True when a value looks like a real Stripe secret key (not a README placeholder). */
 export function isValidStripeSecretKey(
   key: string | undefined | null,
-): key is string {
+): boolean {
   if (!key) return false;
   const trimmed = key.trim();
   if (!trimmed) return false;
@@ -36,7 +36,7 @@ export function isValidStripeWebhookSecret(
 export function getStripe(): Stripe {
   if (!stripeClient) {
     const key = process.env.STRIPE_SECRET_KEY?.trim();
-    if (!isValidStripeSecretKey(key)) {
+    if (!key || !isValidStripeSecretKey(key)) {
       throw new Error("Missing STRIPE_SECRET_KEY");
     }
     stripeClient = new Stripe(key, {
