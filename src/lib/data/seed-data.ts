@@ -336,6 +336,7 @@ export const SEED_BRANDS: SeedBrand[] = [
     description:
       'Affordable eye, head, and hearing protection for everyday jobsites.',
     logo_url: '/images/brands/pyramex.png',
+    active: true,
   },
   {
     id: BRAND_IDS.radians,

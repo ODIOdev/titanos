@@ -529,6 +529,7 @@ export const TAG_PASTEL_PALETTE = [
   "bg-lime-100 text-lime-800",
   "bg-emerald-100 text-emerald-800",
   "bg-teal-100 text-teal-800",
+  "bg-cyan-100 text-cyan-800",
   "bg-sky-100 text-sky-800",
   "bg-indigo-100 text-indigo-800",
   "bg-violet-100 text-violet-800",
