@@ -14,6 +14,10 @@ import {
   X,
   type LucideIcon,
 } from "lucide-react";
+import {
+  AdminProductPreviewDialog,
+  type AdminProductPreview,
+} from "@/components/admin/admin-product-preview-dialog";
 import { cn } from "@/lib/utils";
 import type { AdminSearchHit } from "@/app/api/admin/search/route";
 
@@ -48,6 +52,9 @@ export function AdminGlobalSearch({ className }: { className?: string }) {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<AdminSearchHit[]>([]);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const [previewProduct, setPreviewProduct] =
+    useState<AdminProductPreview | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [, startTransition] = useTransition();
 
   const trimmed = query.trim();
@@ -111,17 +118,31 @@ export function AdminGlobalSearch({ className }: { className?: string }) {
     };
   }, [trimmed]);
 
-  function goTo(href: string) {
+  function resetSearch() {
     setOpen(false);
     setActiveIndex(-1);
     setQuery("");
+  }
+
+  function goTo(href: string) {
+    resetSearch();
     router.push(href);
+  }
+
+  function openProductPreview(hit: AdminSearchHit) {
+    if (hit.type === "product" && hit.preview) {
+      resetSearch();
+      setPreviewProduct(hit.preview);
+      setPreviewOpen(true);
+      return;
+    }
+    goTo(hit.href);
   }
 
   function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     const items = showQuick
-      ? QUICK_LINKS.map((link) => link.href)
-      : results.map((hit) => hit.href);
+      ? QUICK_LINKS.map((link) => ({ kind: "link" as const, href: link.href }))
+      : results.map((hit) => ({ kind: "hit" as const, hit }));
 
     if (event.key === "Escape") {
       event.preventDefault();
@@ -156,7 +177,12 @@ export function AdminGlobalSearch({ className }: { className?: string }) {
     if (event.key === "Enter") {
       event.preventDefault();
       if (activeIndex >= 0 && items[activeIndex]) {
-        goTo(items[activeIndex]);
+        const item = items[activeIndex];
+        if (item.kind === "hit") {
+          openProductPreview(item.hit);
+        } else {
+          goTo(item.href);
+        }
         return;
       }
       if (trimmed) {
@@ -272,6 +298,50 @@ export function AdminGlobalSearch({ className }: { className?: string }) {
                     const meta = TYPE_META[hit.type];
                     const Icon = meta.icon;
                     const active = index === activeIndex;
+                    const isProductPreview =
+                      hit.type === "product" && Boolean(hit.preview);
+
+                    if (isProductPreview) {
+                      return (
+                        <li key={`${hit.type}-${hit.id}`}>
+                          <button
+                            type="button"
+                            role="option"
+                            aria-selected={active}
+                            className={cn(
+                              "flex w-full items-start gap-2.5 rounded-sm px-2 py-2 text-left",
+                              active
+                                ? "bg-light-gray"
+                                : "hover:bg-light-gray/80",
+                            )}
+                            onClick={() => openProductPreview(hit)}
+                          >
+                            <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-sm bg-light-gray text-medium-gray">
+                              <Icon className="size-3.5" aria-hidden />
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm font-medium text-dark-charcoal">
+                                {hit.title}
+                              </span>
+                              <span className="mt-0.5 flex items-center gap-1.5 text-xs text-medium-gray">
+                                <span className="font-semibold tracking-wide uppercase">
+                                  {meta.label}
+                                </span>
+                                {hit.subtitle ? (
+                                  <>
+                                    <span aria-hidden>·</span>
+                                    <span className="truncate">
+                                      {hit.subtitle}
+                                    </span>
+                                  </>
+                                ) : null}
+                              </span>
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    }
+
                     return (
                       <li key={`${hit.type}-${hit.id}`}>
                         <Link
@@ -316,6 +386,15 @@ export function AdminGlobalSearch({ className }: { className?: string }) {
           ) : null}
         </div>
       ) : null}
+
+      <AdminProductPreviewDialog
+        product={previewProduct}
+        open={previewOpen}
+        onOpenChange={(next) => {
+          setPreviewOpen(next);
+          if (!next) setPreviewProduct(null);
+        }}
+      />
     </div>
   );
 }

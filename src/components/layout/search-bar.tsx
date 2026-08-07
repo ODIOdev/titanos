@@ -1,10 +1,15 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Clock, Search, X } from "lucide-react";
+import { Clock, Package, Search, X } from "lucide-react";
+import {
+  ProductPreviewDialog,
+  type StorefrontProductPreview,
+} from "@/components/products/product-preview-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
 
 const RECENT_SEARCHES_KEY = "titan-recent-searches";
@@ -17,6 +22,7 @@ type SearchProduct = {
   sku?: string;
   price: number;
   image_url?: string | null;
+  preview?: StorefrontProductPreview;
 };
 
 type SearchResponse = {
@@ -44,7 +50,7 @@ function writeRecentSearch(query: string) {
   const next = [
     trimmed,
     ...readRecentSearches().filter(
-      (item) => item.toLowerCase() !== trimmed.toLowerCase()
+      (item) => item.toLowerCase() !== trimmed.toLowerCase(),
     ),
   ].slice(0, MAX_RECENT);
   window.localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(next));
@@ -73,6 +79,7 @@ export function SearchBar({
 }: SearchBarProps) {
   const router = useRouter();
   const containerRef = React.useRef<HTMLDivElement>(null);
+  const panelRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [query, setQuery] = React.useState("");
   const [open, setOpen] = React.useState(false);
@@ -80,24 +87,89 @@ export function SearchBar({
   const [results, setResults] = React.useState<SearchProduct[]>([]);
   const [recent, setRecent] = React.useState<string[]>([]);
   const [activeIndex, setActiveIndex] = React.useState(-1);
+  const [previewProduct, setPreviewProduct] =
+    React.useState<StorefrontProductPreview | null>(null);
+  const [previewOpen, setPreviewOpen] = React.useState(false);
+  const [mounted, setMounted] = React.useState(false);
+  const [panelStyle, setPanelStyle] = React.useState<React.CSSProperties>({
+    position: "fixed",
+    top: 0,
+    left: 0,
+    width: 0,
+    zIndex: 70,
+    visibility: "hidden",
+  });
+
+  const trimmed = query.trim();
+  const showRecent = open && trimmed.length < 1 && recent.length > 0;
+  const showIdle = open && trimmed.length < 1 && recent.length === 0;
+  const showResults = open && trimmed.length >= 1;
+  const panelVisible = showRecent || showIdle || showResults;
 
   React.useEffect(() => {
+    setMounted(true);
     React.startTransition(() => {
       setRecent(readRecentSearches());
     });
   }, []);
 
   React.useEffect(() => {
+    if (!panelVisible) return;
+
+    function updatePanelPosition() {
+      const el = containerRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const width = Math.max(rect.width, 288);
+      const left = Math.min(
+        Math.max(8, rect.left),
+        window.innerWidth - width - 8,
+      );
+      const top = rect.bottom + 6;
+
+      setPanelStyle((prev) => {
+        if (
+          prev.top === top &&
+          prev.left === left &&
+          prev.width === width &&
+          prev.visibility === "visible"
+        ) {
+          return prev;
+        }
+        return {
+          position: "fixed",
+          top,
+          left,
+          width,
+          zIndex: 70,
+          visibility: "visible",
+        };
+      });
+    }
+
+    updatePanelPosition();
+
+    window.addEventListener("resize", updatePanelPosition);
+    window.addEventListener("scroll", updatePanelPosition, true);
+    return () => {
+      window.removeEventListener("resize", updatePanelPosition);
+      window.removeEventListener("scroll", updatePanelPosition, true);
+    };
+  }, [panelVisible]);
+
+  React.useEffect(() => {
     if (!open) return;
 
     function onPointerDown(event: MouseEvent) {
+      const target = event.target as Node;
       if (
-        containerRef.current &&
-        !containerRef.current.contains(event.target as Node)
+        containerRef.current?.contains(target) ||
+        panelRef.current?.contains(target)
       ) {
-        setOpen(false);
-        setActiveIndex(-1);
+        return;
       }
+      setOpen(false);
+      setActiveIndex(-1);
     }
 
     document.addEventListener("mousedown", onPointerDown);
@@ -105,11 +177,11 @@ export function SearchBar({
   }, [open]);
 
   React.useEffect(() => {
-    const trimmed = query.trim();
-    if (trimmed.length < 2) {
+    if (trimmed.length < 1) {
       React.startTransition(() => {
         setResults([]);
         setLoading(false);
+        setActiveIndex(-1);
       });
       return;
     }
@@ -120,7 +192,7 @@ export function SearchBar({
       try {
         const response = await fetch(
           `/api/search?q=${encodeURIComponent(trimmed)}`,
-          { signal: controller.signal }
+          { signal: controller.signal },
         );
         if (!response.ok) {
           setResults([]);
@@ -136,40 +208,45 @@ export function SearchBar({
       } finally {
         setLoading(false);
       }
-    }, 250);
+    }, 180);
 
     return () => {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [query]);
+  }, [trimmed]);
 
-  const showRecent = open && query.trim().length < 2 && recent.length > 0;
-  const showResults = open && query.trim().length >= 2;
   const optionCount = showRecent
     ? recent.length
     : showResults
-      ? results.length + 1
+      ? results.length + (results.length > 0 ? 1 : 0)
       : 0;
 
   function goToSearch(value: string) {
-    const trimmed = value.trim();
-    if (!trimmed) return;
-    writeRecentSearch(trimmed);
+    const next = value.trim();
+    if (!next) return;
+    writeRecentSearch(next);
     setRecent(readRecentSearches());
     setOpen(false);
     setActiveIndex(-1);
     onNavigate?.();
-    router.push(`/shop?q=${encodeURIComponent(trimmed)}`);
+    router.push(`/shop?q=${encodeURIComponent(next)}`);
   }
 
-  function goToProduct(slug: string) {
+  function openProductPreview(product: SearchProduct) {
     writeRecentSearch(query);
     setRecent(readRecentSearches());
     setOpen(false);
     setActiveIndex(-1);
     onNavigate?.();
-    router.push(`/product/${slug}`);
+
+    if (product.preview) {
+      setPreviewProduct(product.preview);
+      setPreviewOpen(true);
+      return;
+    }
+
+    router.push(`/product/${product.slug}`);
   }
 
   function onKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
@@ -181,19 +258,24 @@ export function SearchBar({
     if (event.key === "Escape") {
       setOpen(false);
       setActiveIndex(-1);
+      inputRef.current?.blur();
       return;
     }
 
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveIndex((prev) => (prev + 1) % Math.max(optionCount, 1));
+      setOpen(true);
+      if (optionCount === 0) return;
+      setActiveIndex((prev) => (prev + 1) % optionCount);
       return;
     }
 
     if (event.key === "ArrowUp") {
       event.preventDefault();
+      setOpen(true);
+      if (optionCount === 0) return;
       setActiveIndex((prev) =>
-        prev <= 0 ? Math.max(optionCount - 1, 0) : prev - 1
+        prev <= 0 ? optionCount - 1 : prev - 1,
       );
       return;
     }
@@ -206,7 +288,7 @@ export function SearchBar({
       }
       if (showResults && activeIndex >= 0) {
         if (activeIndex < results.length) {
-          goToProduct(results[activeIndex].slug);
+          openProductPreview(results[activeIndex]);
           return;
         }
       }
@@ -217,6 +299,140 @@ export function SearchBar({
   const isOnDark = variant === "onDark";
   const isLarge = size === "lg";
   const suggestionsId = `${inputId}-suggestions`;
+
+  const panel = panelVisible ? (
+    <div
+      ref={panelRef}
+      id={suggestionsId}
+      role="listbox"
+      style={panelStyle}
+      className="overflow-hidden rounded-sm border border-border-gray bg-white shadow-lg"
+    >
+      {showIdle ? (
+        <p className="px-3 py-3 text-sm text-medium-gray">
+          Start typing to search products…
+        </p>
+      ) : null}
+
+      {showRecent ? (
+        <div className="p-2">
+          <p className="px-2 py-1.5 text-[10px] font-semibold tracking-wide text-medium-gray uppercase">
+            Recent searches
+          </p>
+          <ul className="space-y-0.5">
+            {recent.map((item, index) => (
+              <li key={item}>
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected={activeIndex === index}
+                  className={cn(
+                    "flex w-full items-center gap-2.5 rounded-sm px-2 py-2 text-left text-sm text-dark-charcoal",
+                    activeIndex === index
+                      ? "bg-light-gray"
+                      : "hover:bg-light-gray/80",
+                  )}
+                  onMouseEnter={() => setActiveIndex(index)}
+                  onClick={() => goToSearch(item)}
+                >
+                  <Clock
+                    className="size-4 shrink-0 text-medium-gray"
+                    aria-hidden="true"
+                  />
+                  {item}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {showResults ? (
+        <div className="max-h-[22rem] overflow-y-auto p-2">
+          {loading && results.length === 0 ? (
+            <p className="px-2 py-3 text-sm text-medium-gray">Searching…</p>
+          ) : results.length === 0 ? (
+            <p className="px-2 py-3 text-sm text-medium-gray">
+              No matches for “{trimmed}”.
+            </p>
+          ) : (
+            <ul className="space-y-0.5">
+              {results.slice(0, 8).map((product, index) => (
+                <li key={product.id}>
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={activeIndex === index}
+                    className={cn(
+                      "flex w-full items-start gap-2.5 rounded-sm px-2 py-2 text-left",
+                      activeIndex === index
+                        ? "bg-light-gray"
+                        : "hover:bg-light-gray/80",
+                    )}
+                    onMouseEnter={() => setActiveIndex(index)}
+                    onClick={() => openProductPreview(product)}
+                  >
+                    <span className="relative mt-0.5 size-9 shrink-0 overflow-hidden rounded-sm border border-border-gray bg-light-gray">
+                      {product.image_url ? (
+                        <Image
+                          src={product.image_url}
+                          alt=""
+                          fill
+                          className="object-cover"
+                          sizes="36px"
+                        />
+                      ) : (
+                        <span className="flex size-full items-center justify-center text-medium-gray">
+                          <Package className="size-3.5" aria-hidden />
+                        </span>
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-dark-charcoal">
+                        {product.name}
+                      </span>
+                      <span className="mt-0.5 flex items-center gap-1.5 text-xs text-medium-gray">
+                        <span className="font-semibold tracking-wide uppercase">
+                          Product
+                        </span>
+                        <span aria-hidden>·</span>
+                        <span className="truncate">
+                          {product.sku
+                            ? `SKU ${product.sku} · ${formatCurrency(product.price)}`
+                            : formatCurrency(product.price)}
+                        </span>
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+              <li>
+                <Link
+                  href={`/shop?q=${encodeURIComponent(trimmed)}`}
+                  role="option"
+                  aria-selected={activeIndex === results.length}
+                  className={cn(
+                    "mt-0.5 flex items-center rounded-sm border-t border-border-gray px-2 py-2.5 text-sm font-semibold text-dark-charcoal",
+                    activeIndex === results.length
+                      ? "bg-light-gray"
+                      : "hover:bg-light-gray/80",
+                  )}
+                  onMouseEnter={() => setActiveIndex(results.length)}
+                  onClick={() => {
+                    writeRecentSearch(query);
+                    setOpen(false);
+                    onNavigate?.();
+                  }}
+                >
+                  View all results for “{trimmed}”
+                </Link>
+              </li>
+            </ul>
+          )}
+        </div>
+      ) : null}
+    </div>
+  ) : null;
 
   return (
     <div ref={containerRef} className={cn("relative w-full", className)}>
@@ -293,6 +509,7 @@ export function SearchBar({
               onClick={() => {
                 setQuery("");
                 setResults([]);
+                setActiveIndex(-1);
                 inputRef.current?.focus();
               }}
             >
@@ -302,105 +519,16 @@ export function SearchBar({
         </div>
       </form>
 
-      {(showRecent || showResults) && (
-        <div
-          id={suggestionsId}
-          role="listbox"
-          className="absolute left-0 right-0 top-[calc(100%+0.35rem)] z-50 overflow-hidden rounded-sm border border-border-gray bg-white shadow-md"
-        >
-          {showRecent ? (
-            <div className="py-2">
-              <p className="px-3 pb-1 text-xs font-semibold uppercase tracking-wide text-medium-gray">
-                Recent searches
-              </p>
-              {recent.map((item, index) => (
-                <button
-                  key={item}
-                  type="button"
-                  role="option"
-                  aria-selected={activeIndex === index}
-                  className={cn(
-                    "flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-dark-charcoal hover:bg-light-gray",
-                    activeIndex === index && "bg-light-gray"
-                  )}
-                  onMouseEnter={() => setActiveIndex(index)}
-                  onClick={() => goToSearch(item)}
-                >
-                  <Clock className="size-3.5 text-medium-gray" aria-hidden="true" />
-                  {item}
-                </button>
-              ))}
-            </div>
-          ) : null}
+      {mounted && panel ? createPortal(panel, document.body) : null}
 
-          {showResults ? (
-            <div className="py-2">
-              {loading ? (
-                <p className="px-3 py-3 text-sm text-medium-gray">Searching…</p>
-              ) : results.length === 0 ? (
-                <p className="px-3 py-3 text-sm text-medium-gray">
-                  No products found for “{query.trim()}”
-                </p>
-              ) : (
-                <>
-                  {results.slice(0, 6).map((product, index) => (
-                    <button
-                      key={product.id}
-                      type="button"
-                      role="option"
-                      aria-selected={activeIndex === index}
-                      className={cn(
-                        "flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-light-gray",
-                        activeIndex === index && "bg-light-gray"
-                      )}
-                      onMouseEnter={() => setActiveIndex(index)}
-                      onClick={() => goToProduct(product.slug)}
-                    >
-                      <span className="relative size-11 shrink-0 overflow-hidden rounded-sm border border-border-gray bg-light-gray">
-                        {product.image_url ? (
-                          <Image
-                            src={product.image_url}
-                            alt=""
-                            fill
-                            className="object-cover"
-                            sizes="44px"
-                          />
-                        ) : null}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium text-dark-charcoal">
-                          {product.name}
-                        </span>
-                        <span className="block text-xs text-medium-gray">
-                          {product.sku ? `${product.sku} · ` : ""}
-                          {formatCurrency(product.price)}
-                        </span>
-                      </span>
-                    </button>
-                  ))}
-                  <Link
-                    href={`/shop?q=${encodeURIComponent(query.trim())}`}
-                    role="option"
-                    aria-selected={activeIndex === results.length}
-                    className={cn(
-                      "block border-t border-border-gray px-3 py-2.5 text-sm font-semibold text-dark-charcoal hover:bg-light-gray",
-                      activeIndex === results.length && "bg-light-gray"
-                    )}
-                    onMouseEnter={() => setActiveIndex(results.length)}
-                    onClick={() => {
-                      writeRecentSearch(query);
-                      setOpen(false);
-                      onNavigate?.();
-                    }}
-                  >
-                    View all results for “{query.trim()}”
-                  </Link>
-                </>
-              )}
-            </div>
-          ) : null}
-        </div>
-      )}
+      <ProductPreviewDialog
+        product={previewProduct}
+        open={previewOpen}
+        onOpenChange={(next) => {
+          setPreviewOpen(next);
+          if (!next) setPreviewProduct(null);
+        }}
+      />
     </div>
   );
 }

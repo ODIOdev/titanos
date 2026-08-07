@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type { AdminProductPreview } from "@/components/admin/admin-product-preview-dialog";
 import {
   getAdminBrands,
   getAdminCategories,
@@ -7,9 +8,21 @@ import {
   getAdminProducts,
   getAdminQuotes,
 } from "@/lib/data/admin";
+import {
+  formatProductStockBySize,
+  getProductStockBySize,
+  getProductStockQuantity,
+} from "@/lib/catalog/product-stock";
 import { matchesQuery } from "@/lib/search";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
-import { isMasterAdmin, isMasterAdminEmail } from "@/lib/utils";
+import {
+  getCatalogStatus,
+  isMasterAdmin,
+  isMasterAdminEmail,
+} from "@/lib/utils";
+import type { Product } from "@/types";
+
+const FALLBACK_IMAGE = "/images/products/titan-premium-vented-hard-hat.svg";
 
 export type AdminSearchHit = {
   id: string;
@@ -17,7 +30,42 @@ export type AdminSearchHit = {
   title: string;
   subtitle?: string;
   href: string;
+  /** Present for products — open preview overlay instead of navigating. */
+  preview?: AdminProductPreview;
 };
+
+function productImageUrl(p: Product) {
+  return (
+    p.image_url ??
+    p.images?.find((i) => i.is_primary)?.url ??
+    p.images?.[0]?.url ??
+    FALLBACK_IMAGE
+  );
+}
+
+function toProductPreview(p: Product): AdminProductPreview {
+  const status = getCatalogStatus(p);
+  return {
+    id: p.id,
+    name: p.name,
+    sku: p.sku,
+    imageUrl: productImageUrl(p),
+    brandName: p.brand?.name ?? null,
+    categoryName: p.category?.name ?? null,
+    price: Number(p.price ?? 0),
+    inventoryQuantity: getProductStockQuantity(p),
+    lowStockThreshold: p.low_stock_threshold ?? 0,
+    stockBySize: formatProductStockBySize(p),
+    stockSizes: getProductStockBySize(p),
+    statusLabel:
+      status === "active" ? "Active" : status === "draft" ? "Draft" : "Archived",
+    statusVariant:
+      status === "active" ? "success" : status === "draft" ? "warning" : "default",
+    shortDescription: p.short_description,
+    editHref: `/admin/products/${p.id}`,
+    showReplenish: true,
+  };
+}
 
 const PER_TYPE = 4;
 
@@ -71,12 +119,14 @@ export async function GET(request: Request) {
   const results: AdminSearchHit[] = [];
 
   for (const product of products.slice(0, PER_TYPE)) {
+    const preview = toProductPreview(product);
     results.push({
       id: product.id,
       type: "product",
       title: product.name,
       subtitle: product.sku ? `SKU ${product.sku}` : undefined,
-      href: `/admin/products/${product.id}`,
+      href: preview.editHref,
+      preview,
     });
   }
 

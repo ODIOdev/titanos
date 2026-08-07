@@ -160,19 +160,44 @@ export function SupportChat() {
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
         aria-label={open ? "Close support chat" : "Open support chat"}
-        className="support-chat-launcher fixed right-3 z-40 inline-flex size-12 items-center justify-center rounded-full bg-titan-yellow text-dark-charcoal shadow-[0_10px_30px_rgba(16,24,32,0.28)] transition-colors hover:bg-titan-yellow/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-charcoal focus-visible:ring-offset-2 @3xl:right-6 @3xl:size-14"
+        className={cn(
+          "support-chat-launcher fixed z-50 inline-flex size-14 items-center justify-center rounded-full bg-titan-yellow text-dark-charcoal transition-[transform,box-shadow,background-color] duration-200",
+          "hover:bg-[#ffd21f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-charcoal focus-visible:ring-offset-2",
+          "@3xl:size-16",
+          !open && "support-chat-launcher--float",
+        )}
         style={{ bottom: safeBottom }}
       >
-        {open ? (
-          <X className="size-5 @3xl:size-6" aria-hidden="true" />
-        ) : (
-          <MessageCircle className="size-5 @3xl:size-6" aria-hidden="true" />
-        )}
+        {!open ? (
+          <>
+            <span className="support-chat-launcher-ring" aria-hidden="true" />
+            <span
+              className="support-chat-launcher-ring support-chat-launcher-ring--delay"
+              aria-hidden="true"
+            />
+          </>
+        ) : null}
+        <span className="relative z-10 inline-flex items-center justify-center">
+          {open ? (
+            <X className="size-6 @3xl:size-7" aria-hidden="true" />
+          ) : (
+            <MessageCircle className="size-6 @3xl:size-7" aria-hidden="true" />
+          )}
+        </span>
         {!open && online ? (
           <span
-            className="absolute right-1 top-1 size-3 rounded-full border-2 border-titan-yellow bg-success-green"
+            className="absolute top-1 right-1 z-10 size-3.5 rounded-full border-2 border-white bg-success-green shadow-[0_0_0_3px_rgba(245,196,0,0.55)]"
             aria-hidden="true"
           />
+        ) : null}
+        {!open ? (
+          <span className="pointer-events-none absolute -top-9 right-0 hidden whitespace-nowrap rounded-sm bg-dark-charcoal px-2.5 py-1 text-[10px] font-semibold tracking-wide text-white uppercase shadow-md @3xl:inline-block">
+            Need help?
+            <span
+              className="absolute top-full right-4 border-4 border-transparent border-t-dark-charcoal"
+              aria-hidden="true"
+            />
+          </span>
         ) : null}
       </button>
 
@@ -180,7 +205,7 @@ export function SupportChat() {
         <section
           role="dialog"
           aria-label="Customer service chat"
-          className="support-chat-panel fixed left-3 right-3 z-40 flex max-h-[min(28rem,calc(100%-6.75rem))] w-auto flex-col overflow-hidden rounded-sm border border-border-gray bg-white shadow-[0_24px_60px_rgba(16,24,32,0.28)] @3xl:left-auto @3xl:right-6 @3xl:w-[22rem] @3xl:max-h-[min(32rem,calc(100%-8rem))]"
+          className="support-chat-panel fixed z-40 flex max-h-[min(28rem,calc(100%-6.75rem))] w-auto flex-col overflow-hidden rounded-sm border border-border-gray bg-white shadow-[0_24px_60px_rgba(16,24,32,0.28)] @3xl:w-[22rem] @3xl:max-h-[min(32rem,calc(100%-8rem))]"
           style={{ bottom: panelBottom }}
         >
           <header className="flex items-start gap-3 border-b border-white/10 bg-dark-charcoal px-4 py-3.5">
