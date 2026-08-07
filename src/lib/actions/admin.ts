@@ -1126,6 +1126,15 @@ export async function replenishProduct(
 
     if (error) throw error;
 
+    await supabase.from("inventory_movements").insert({
+      product_id: id,
+      quantity_change: qty,
+      reason: "adjustment",
+      reference_type: "admin",
+      notes: "Admin replenish",
+      created_by: auth.userId,
+    });
+
     revalidatePath("/admin/products");
     revalidatePath(`/admin/products/${id}`);
     revalidatePath("/admin/inventory");
@@ -1351,11 +1360,32 @@ export async function updateOrderStatus(
     const { createServiceClient } = await import("@/lib/supabase/admin");
     const supabase = createServiceClient();
 
+    const { data: existing, error: fetchError } = await supabase
+      .from("orders")
+      .select("status")
+      .eq("id", orderId)
+      .maybeSingle();
+
+    if (fetchError) throw fetchError;
+    if (!existing) {
+      return { success: false, message: "Order not found." };
+    }
+
+    const previousStatus = existing.status as OrderStatus;
+
     const { error } = await supabase
       .from("orders")
       .update({
         status,
         ...(notes != null ? { internal_notes: notes } : {}),
+        ...(status === "paid" ||
+        status === "processing" ||
+        status === "shipped" ||
+        status === "delivered"
+          ? { payment_status: "paid" }
+          : {}),
+        ...(status === "refunded" ? { payment_status: "refunded" } : {}),
+        ...(status === "cancelled" ? { payment_status: "cancelled" } : {}),
       })
       .eq("id", orderId);
 
@@ -1368,8 +1398,37 @@ export async function updateOrderStatus(
       created_by: auth.userId,
     });
 
+    const {
+      deductStockForOrder,
+      restoreStockForOrder,
+      orderStatusHoldsInventory,
+      orderStatusReleasesInventory,
+    } = await import("@/lib/catalog/inventory");
+
+    const previouslyHeld = orderStatusHoldsInventory(previousStatus);
+    const nowHolds = orderStatusHoldsInventory(status);
+    const nowReleases = orderStatusReleasesInventory(status);
+
+    if (!previouslyHeld && nowHolds) {
+      await deductStockForOrder(
+        supabase,
+        orderId,
+        `Admin status → ${status}`,
+      );
+    } else if (previouslyHeld && nowReleases) {
+      await restoreStockForOrder(
+        supabase,
+        orderId,
+        status === "refunded" ? "refund" : "cancellation",
+        `Admin status → ${status}`,
+      );
+    }
+
     revalidatePath("/admin/orders");
     revalidatePath(`/admin/orders/${orderId}`);
+    revalidatePath("/admin/inventory");
+    revalidatePath("/admin/products");
+    revalidatePath("/shop");
     return { success: true, message: "Order status updated." };
   } catch (err) {
     return {
@@ -1402,6 +1461,88 @@ export async function updateOrderInternalNotes(
     return {
       success: false,
       message: err instanceof Error ? err.message : "Failed to save notes.",
+    };
+  }
+}
+
+export type OrderShippingAddressInput = {
+  first_name: string;
+  last_name: string;
+  company?: string;
+  line1: string;
+  line2?: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country?: string;
+  phone?: string;
+};
+
+export async function updateOrderShippingAddress(
+  orderId: string,
+  address: OrderShippingAddressInput,
+): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.result;
+
+  const line1 = address.line1?.trim() ?? "";
+  const city = address.city?.trim() ?? "";
+  const state = address.state?.trim() ?? "";
+  const postal = address.postal_code?.trim() ?? "";
+
+  if (!line1 || !city || !state || !postal) {
+    return {
+      success: false,
+      message: "Address needs street, city, state, and ZIP.",
+    };
+  }
+
+  const shippingAddress = {
+    first_name: address.first_name?.trim() || "",
+    last_name: address.last_name?.trim() || "",
+    company: address.company?.trim() || "",
+    line1,
+    line2: address.line2?.trim() || "",
+    city,
+    state,
+    postal_code: postal,
+    country: (address.country?.trim() || "US").toUpperCase(),
+    phone: address.phone?.trim() || "",
+  };
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+    const { data: existing } = await supabase
+      .from("orders")
+      .select("status")
+      .eq("id", orderId)
+      .maybeSingle();
+
+    const { error } = await supabase
+      .from("orders")
+      .update({ shipping_address: shippingAddress })
+      .eq("id", orderId);
+
+    if (error) throw error;
+
+    if (existing?.status) {
+      await supabase.from("order_status_history").insert({
+        order_id: orderId,
+        status: existing.status,
+        notes: `Shipping address updated · ${line1}, ${city}, ${state} ${postal}`,
+        created_by: auth.userId,
+      });
+    }
+
+    revalidatePath("/admin/orders");
+    revalidatePath(`/admin/orders/${orderId}`);
+    return { success: true, message: "Shipping address saved." };
+  } catch (err) {
+    return {
+      success: false,
+      message:
+        err instanceof Error ? err.message : "Failed to save shipping address.",
     };
   }
 }
@@ -1682,6 +1823,30 @@ export async function createAdminOrder(
     const { createServiceClient } = await import("@/lib/supabase/admin");
     const supabase = createServiceClient();
 
+    if (paidLike) {
+      const { availableStockForLine } = await import("@/lib/catalog/inventory");
+      for (const item of items) {
+        if (!item.productId) continue;
+        const { data: product } = await supabase
+          .from("products")
+          .select("id, name, inventory_quantity, metadata, low_stock_threshold")
+          .eq("id", item.productId)
+          .maybeSingle();
+        if (!product) {
+          return {
+            success: false,
+            message: `Product not found for line “${item.productName}”.`,
+          };
+        }
+        const available = availableStockForLine(product);
+        if (available < Number(item.quantity)) {
+          return {
+            success: false,
+            message: `Insufficient stock for ${product.name} (have ${available}, need ${item.quantity}).`,
+          };
+        }
+      }
+    }
     const address = input.shippingAddress;
     const shippingAddress =
       address?.line1?.trim() && address.city?.trim()
@@ -1749,9 +1914,21 @@ export async function createAdminOrder(
       created_by: auth.userId,
     });
 
+    if (paidLike) {
+      const { deductStockForOrder } = await import("@/lib/catalog/inventory");
+      await deductStockForOrder(
+        supabase,
+        order.id,
+        `Admin order ${orderNumber}`,
+      );
+    }
+
     orderId = order.id;
     revalidatePath("/admin/orders");
     revalidatePath(`/admin/orders/${orderId}`);
+    revalidatePath("/admin/inventory");
+    revalidatePath("/admin/products");
+    revalidatePath("/shop");
   } catch (err) {
     return {
       success: false,
@@ -1794,6 +1971,36 @@ export async function saveSiteSettings(formData: FormData): Promise<ActionResult
       };
     }
 
+    const shipFromName = String(formData.get("shipFromName") ?? "").trim();
+    const shipFromCompany = String(formData.get("shipFromCompany") ?? "").trim();
+    const shipFromPhone = String(formData.get("shipFromPhone") ?? "").trim();
+    const shipFromLine1 = String(formData.get("shipFromLine1") ?? "").trim();
+    const shipFromLine2 = String(formData.get("shipFromLine2") ?? "").trim();
+    const shipFromCity = String(formData.get("shipFromCity") ?? "").trim();
+    const shipFromState = String(formData.get("shipFromState") ?? "")
+      .trim()
+      .toUpperCase();
+    const shipFromPostal = String(formData.get("shipFromPostal") ?? "").trim();
+    const shipFromCountry = String(formData.get("shipFromCountry") ?? "US")
+      .trim()
+      .toUpperCase() || "US";
+
+    if (
+      !shipFromName ||
+      !shipFromLine1 ||
+      !shipFromCity ||
+      !shipFromState ||
+      !shipFromPostal
+    ) {
+      return {
+        success: false,
+        message:
+          "Complete the ShipEngine ship-from name, street, city, state, and ZIP.",
+      };
+    }
+
+    const { SHIPENGINE_SHIP_FROM_KEY } = await import("@/lib/shipengine/config");
+
     const rows = [
       {
         key: "site_config",
@@ -1803,12 +2010,27 @@ export async function saveSiteSettings(formData: FormData): Promise<ActionResult
         key: "free_shipping_threshold",
         value: { amount: freeShippingThreshold, currency: "usd" },
       },
+      {
+        key: SHIPENGINE_SHIP_FROM_KEY,
+        value: {
+          name: shipFromName,
+          company: shipFromCompany,
+          phone: shipFromPhone,
+          line1: shipFromLine1,
+          line2: shipFromLine2,
+          city: shipFromCity,
+          state: shipFromState,
+          postalCode: shipFromPostal,
+          country: shipFromCountry,
+        },
+      },
     ];
 
     const { error } = await supabase.from("site_settings").upsert(rows, { onConflict: "key" });
     if (error) throw error;
 
     revalidatePath("/admin/settings");
+    revalidatePath("/admin/orders");
     return { success: true, message: "Settings saved." };
   } catch (err) {
     return {
@@ -1968,6 +2190,7 @@ export async function resetPlatform(
     revalidatePath("/admin/customers");
     revalidatePath("/admin/members");
     revalidatePath("/admin/affiliates");
+    revalidatePath("/admin/users");
     revalidatePath("/admin/inventory");
     revalidatePath("/admin/resources");
     revalidatePath("/admin/settings");
@@ -3276,6 +3499,7 @@ export async function updateCustomer(
     }
 
     revalidatePath("/admin/customers");
+    revalidatePath("/admin/users");
     revalidatePath(`/admin/customers/${customerId}`);
     return { success: true, message: "Customer updated." };
   } catch (err) {
@@ -3317,6 +3541,7 @@ export async function deleteCustomer(customerId: string): Promise<ActionResult> 
     }
 
     revalidatePath("/admin/customers");
+    revalidatePath("/admin/users");
     return { success: true, message: "Customer deleted." };
   } catch (err) {
     return {
@@ -3452,6 +3677,7 @@ export async function updatePromoDiscounts(input: {
     revalidatePath("/admin/settings");
     revalidatePath("/admin/members");
     revalidatePath("/admin/customers");
+    revalidatePath("/admin/users");
     return {
       success: true,
       message: `Promo discounts saved. ${count} promo code${
@@ -3516,6 +3742,77 @@ export async function setMaintenanceMode(input: {
         err instanceof Error
           ? err.message
           : "Failed to change maintenance mode.",
+    };
+  }
+}
+
+export async function saveSupportChatSettings(input: {
+  widgetEnabled: boolean;
+  aiEnabled: boolean;
+  presence: "auto" | "online" | "offline";
+  schedule?: unknown;
+  hoursLabel?: string;
+  greeting?: string;
+}): Promise<ActionResult> {
+  const auth = await requireAdmin();
+  if (!auth.ok) return auth.result;
+
+  const {
+    DEFAULT_SUPPORT_CHAT_GREETING,
+    SUPPORT_CHAT_SETTINGS_KEY,
+  } = await import("@/lib/data/support-chat-settings-shared");
+  const {
+    formatSupportHoursLabel,
+    normalizeSupportSchedule,
+  } = await import("@/lib/support/hours");
+
+  const presence =
+    input.presence === "online" || input.presence === "offline"
+      ? input.presence
+      : "auto";
+  const schedule = normalizeSupportSchedule(
+    input.schedule as Parameters<typeof normalizeSupportSchedule>[0],
+  );
+  const hoursLabel =
+    input.hoursLabel?.trim() || formatSupportHoursLabel(schedule);
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+
+    const { error } = await supabase.from("site_settings").upsert(
+      [
+        {
+          key: SUPPORT_CHAT_SETTINGS_KEY,
+          value: {
+            widgetEnabled: input.widgetEnabled,
+            aiEnabled: input.aiEnabled,
+            presence,
+            schedule,
+            hoursLabel,
+            greeting: input.greeting?.trim() || DEFAULT_SUPPORT_CHAT_GREETING,
+          },
+        },
+      ],
+      { onConflict: "key" },
+    );
+    if (error) throw error;
+
+    revalidatePath("/", "layout");
+    revalidatePath("/admin/settings");
+    revalidatePath("/account");
+
+    return {
+      success: true,
+      message: "Support chat settings saved.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message:
+        err instanceof Error
+          ? err.message
+          : "Failed to save support chat settings.",
     };
   }
 }
@@ -3605,6 +3902,7 @@ export async function reviewAffiliateApplication(input: {
     revalidatePath("/admin/affiliates");
     revalidatePath("/admin/customers");
     revalidatePath("/affiliates");
+    revalidatePath("/admin/users");
 
     return {
       success: true,
@@ -3702,6 +4000,7 @@ export async function createMember(
     await syncMemberCoupon(supabase, memberId, promoCode);
 
     revalidatePath("/admin/members");
+    revalidatePath("/admin/users");
     return { success: true, message: "Member added.", id: memberId };
   } catch (err) {
     return {
@@ -3787,6 +4086,7 @@ export async function updateMember(
     }
 
     revalidatePath("/admin/members");
+    revalidatePath("/admin/users");
     revalidatePath(`/admin/members/${memberId}`);
     revalidatePath(`/admin/members/${memberId}/edit`);
     return { success: true, message: "Member updated.", id: memberId };
@@ -3839,6 +4139,7 @@ export async function deleteMember(memberId: string): Promise<ActionResult> {
     }
 
     revalidatePath("/admin/members");
+    revalidatePath("/admin/users");
     return { success: true, message: "Member removed." };
   } catch (err) {
     return {

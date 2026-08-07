@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
+  changeEmailSchema,
   forgotPasswordSchema,
   loginSchema,
   profileSchema,
@@ -318,6 +319,61 @@ export async function updateProfile(
     return {
       success: false,
       error: err instanceof Error ? err.message : "Unable to update profile.",
+    };
+  }
+}
+
+export async function changeAccountEmail(
+  input: unknown,
+): Promise<ActionResult> {
+  const parsed = changeEmailSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: parsed.error.errors[0]?.message ?? "Enter a valid email",
+    };
+  }
+
+  if (!isSupabaseConfigured()) {
+    return {
+      success: true,
+      message:
+        "Demo mode — confirmation would be sent to the new email. Connect Supabase to change login email.",
+    };
+  }
+
+  try {
+    const supabase = await getServerClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: "You must be signed in to change email." };
+    }
+
+    const nextEmail = parsed.data.email.trim().toLowerCase();
+    const current = (user.email ?? "").trim().toLowerCase();
+    if (nextEmail === current) {
+      return { success: false, error: "That is already your current email." };
+    }
+
+    const { error } = await supabase.auth.updateUser({
+      email: nextEmail,
+    });
+    if (error) return { success: false, error: error.message };
+
+    revalidatePath("/account");
+    revalidatePath("/account/profile");
+    return {
+      success: true,
+      message:
+        "Check your new inbox for a confirmation link. Your login email updates after you confirm.",
+    };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Unable to change email.",
     };
   }
 }

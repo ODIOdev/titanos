@@ -48,35 +48,83 @@ export function OrderStatusForm({
   const [status, setStatus] = useState(currentStatus);
   const [pending, startTransition] = useTransition();
 
+  const terminal =
+    currentStatus === "delivered" ||
+    currentStatus === "cancelled" ||
+    currentStatus === "refunded";
+
+  function finalizeAndClose() {
+    startTransition(async () => {
+      if (!terminal) {
+        const result = await updateOrderStatus(orderId, "delivered");
+        if (!result.success) {
+          toast.error(result.message);
+          return;
+        }
+        toast.success("Order finalized as delivered.");
+      } else {
+        toast.success("Returning to orders.");
+      }
+      router.push("/admin/orders");
+      router.refresh();
+    });
+  }
+
   return (
-    <form
-      className="flex flex-wrap items-end gap-3"
-      onSubmit={(e) => {
-        e.preventDefault();
-        startTransition(async () => {
-          const result = await updateOrderStatus(orderId, status as OrderStatus);
-          if (!result.success) {
-            toast.error(result.message);
-            return;
-          }
-          toast.success(result.message);
-          router.refresh();
-        });
-      }}
-    >
-      <Select
-        label="Status"
-        value={status}
-        onChange={(e) => setStatus(e.target.value)}
-        options={ORDER_STATUSES.map((s) => ({
-          label: s.replace(/_/g, " "),
-          value: s,
-        }))}
-      />
-      <Button type="submit" disabled={pending}>
-        {pending ? "Updating…" : "Update status"}
-      </Button>
-    </form>
+    <div className="space-y-3">
+      <form
+        className="flex flex-wrap items-end gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          startTransition(async () => {
+            const result = await updateOrderStatus(
+              orderId,
+              status as OrderStatus,
+            );
+            if (!result.success) {
+              toast.error(result.message);
+              return;
+            }
+            toast.success(result.message);
+            router.refresh();
+          });
+        }}
+      >
+        <Select
+          label="Status"
+          value={status}
+          onChange={(e) => setStatus(e.target.value)}
+          options={ORDER_STATUSES.map((s) => ({
+            label: s.replace(/_/g, " "),
+            value: s,
+          }))}
+        />
+        <Button type="submit" disabled={pending}>
+          {pending ? "Updating…" : "Update status"}
+        </Button>
+      </form>
+
+      <div className="border-t border-border-gray pt-3">
+        <Button
+          type="button"
+          variant="secondary"
+          className="w-full"
+          disabled={pending}
+          onClick={finalizeAndClose}
+        >
+          {pending
+            ? "Closing…"
+            : terminal
+              ? "Close · back to orders"
+              : "Finalize & close"}
+        </Button>
+        <p className="mt-1.5 text-[0.65rem] text-medium-gray">
+          {terminal
+            ? "Return to the orders queue."
+            : "Marks delivered (if still open), then returns to the orders queue."}
+        </p>
+      </div>
+    </div>
   );
 }
 

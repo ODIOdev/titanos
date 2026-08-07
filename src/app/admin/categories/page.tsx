@@ -4,12 +4,15 @@ import {
   FolderKanban,
   FolderOpen,
   Layers,
+  Package,
   PackageOpen,
+  Plus,
   type LucideIcon,
 } from "lucide-react";
 import { CategoriesManagementCard } from "@/components/admin/categories-management-card";
 import { DepartmentsManagementCard } from "@/components/admin/departments-management-card";
 import { TagsManagementCard } from "@/components/admin/tags-management-card";
+import { buttonVariants } from "@/components/ui/button";
 import {
   getAdminCategories,
   getAdminCategoryDetail,
@@ -137,10 +140,30 @@ export default async function AdminCategoriesPage({
   return (
     <div className="space-y-5 @5xl:space-y-8">
       <div className="space-y-3 @5xl:space-y-4">
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Link
+            href="/admin/products/new"
+            className={cn(
+              buttonVariants({ variant: "primary", size: "sm" }),
+              "gap-1.5",
+            )}
+          >
+            <Plus className="size-3.5" aria-hidden="true" />
+            Add new product
+          </Link>
+        </div>
+
         <nav
-          className="grid grid-cols-1 gap-1.5 @5xl:grid-cols-5 @5xl:gap-3"
+          className="grid grid-cols-1 gap-1.5 @5xl:grid-cols-6 @5xl:gap-3"
           aria-label="Category filters"
         >
+          <ProductsMetricCard
+            productCount={totalProducts}
+            activeCount={activeProducts}
+            sales={totalSales}
+            inventory={totalInventory}
+            share={statusBarShare(totalProducts)}
+          />
           <CategoryMetricCard
             href="#departments"
             label="Departments"
@@ -271,6 +294,114 @@ export default async function AdminCategoriesPage({
 
       <TagsManagementCard tags={tags} />
     </div>
+  );
+}
+
+function ProductsMetricCard({
+  productCount,
+  activeCount,
+  sales,
+  inventory,
+  share,
+}: {
+  productCount: number;
+  activeCount: number;
+  sales: number;
+  inventory: number;
+  share: number;
+}) {
+  return (
+    <Link
+      href="/admin/products"
+      className="group relative min-w-0 overflow-hidden rounded-sm border-2 border-titan-yellow bg-dark-charcoal px-3 py-2 text-white shadow-[0_8px_24px_rgba(16,24,32,0.18)] transition-[transform,box-shadow] hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(16,24,32,0.28)] @5xl:p-4"
+    >
+      <div
+        className="pointer-events-none absolute -right-6 -top-8 size-28 rounded-full bg-titan-yellow/20 blur-2xl"
+        aria-hidden="true"
+      />
+      <div
+        className="pointer-events-none absolute -bottom-10 -left-8 size-24 rounded-full bg-titan-yellow/10 blur-2xl"
+        aria-hidden="true"
+      />
+
+      {/* Mobile */}
+      <div className="relative @5xl:hidden">
+        <div className="flex items-center gap-2.5">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-sm bg-titan-yellow text-dark-charcoal">
+            <Package className="size-3.5" aria-hidden="true" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[0.65rem] font-bold uppercase tracking-[0.14em] text-titan-yellow">
+              Products
+            </p>
+            <p className="mt-0.5 line-clamp-1 text-[0.65rem] text-white/65">
+              Open catalog · {activeCount} live
+            </p>
+          </div>
+          <p className="shrink-0 font-heading text-xl font-bold tabular-nums leading-none text-titan-yellow">
+            {productCount}
+          </p>
+        </div>
+        <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/15">
+          <div
+            className="h-full rounded-full bg-titan-yellow transition-all"
+            style={{ width: `${Math.min(100, Math.max(0, share))}%` }}
+            aria-hidden="true"
+          />
+        </div>
+      </div>
+
+      {/* Desktop */}
+      <div className="relative hidden @5xl:block">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-titan-yellow">
+              Products
+            </p>
+            <p className="mt-2 font-heading text-4xl font-bold tabular-nums tracking-tight text-white">
+              {productCount}
+            </p>
+            <p className="mt-1 text-xs text-white/65">
+              Catalog listings · tap to manage
+            </p>
+          </div>
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-titan-yellow text-dark-charcoal">
+            <Package className="size-5" aria-hidden="true" />
+          </span>
+        </div>
+
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <div className="rounded-sm border border-white/10 bg-white/5 px-2 py-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-white/55">
+              Active
+            </p>
+            <p className="mt-0.5 truncate text-sm font-semibold tabular-nums text-white">
+              {activeCount}
+            </p>
+          </div>
+          <div className="rounded-sm border border-white/10 bg-white/5 px-2 py-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-white/55">
+              Sales
+            </p>
+            <p className="mt-0.5 truncate text-sm font-semibold tabular-nums text-titan-yellow">
+              {formatCurrency(sales)}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <p className="truncate text-[10px] font-semibold uppercase tracking-wide text-white/45">
+            Stock {inventory.toLocaleString()}
+          </p>
+          <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-white/15">
+            <div
+              className="h-full rounded-full bg-titan-yellow transition-all"
+              style={{ width: `${Math.min(100, Math.max(0, share))}%` }}
+            />
+          </div>
+        </div>
+      </div>
+    </Link>
   );
 }
 

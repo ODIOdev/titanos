@@ -42,7 +42,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MoneyInput } from "@/components/ui/money-input";
+import { MoneyInput, formatMoneyDisplay } from "@/components/ui/money-input";
 import { PercentInput } from "@/components/ui/percent-input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
@@ -213,6 +213,12 @@ export function AdminProductForm({
   const certifications = watch("certifications") ?? [];
   const primaryCertifications = watch("primaryCertifications") ?? [];
   const tags = watch("tags") ?? [];
+  const costValue = watch("cost");
+  const inventoryQuantityValue = watch("inventoryQuantity");
+  const inventoryCostTotal =
+    Math.round(
+      (Number(costValue) || 0) * (Number(inventoryQuantityValue) || 0) * 100,
+    ) / 100;
   const selectedCategorySlug =
     categories.find((c) => c.id === categoryId)?.slug ?? null;
 
@@ -1060,6 +1066,25 @@ export function AdminProductForm({
             error={errors.inventoryQuantity?.message}
             {...register("inventoryQuantity")}
           />
+          <div className="w-full">
+            <Label>Inventory cost total</Label>
+            <div className="relative">
+              <span
+                className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-sm text-medium-gray"
+                aria-hidden="true"
+              >
+                $
+              </span>
+              <div
+                className="flex h-10 w-full items-center rounded-sm border border-border-gray bg-light-gray/70 py-2 pl-7 pr-3 text-sm font-semibold tabular-nums text-dark-charcoal"
+                aria-live="polite"
+              >
+                {formatMoneyDisplay(inventoryCostTotal, { fixed: true }) ||
+                  "0.00"}
+              </div>
+            </div>
+            <p className="mt-1.5 text-sm text-medium-gray">Cost × quantity</p>
+          </div>
           <Input
             label="Low stock threshold"
             type="number"
@@ -1225,12 +1250,12 @@ function FormActionsBar({
   const saveLabel = pending
     ? "Saving…"
     : mode === "create"
-      ? "Create product"
+      ? "Buy product"
       : "Save changes";
   const saveLabelShort = pending
     ? "Saving…"
     : mode === "create"
-      ? "Create"
+      ? "Buy"
       : "Save";
 
   return (

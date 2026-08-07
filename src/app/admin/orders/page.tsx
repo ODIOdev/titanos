@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Ban, Plus, RotateCcw } from "lucide-react";
+import { Ban, Percent, Plus, RotateCcw } from "lucide-react";
 import { AdminSearchForm } from "@/components/admin/admin-search-form";
 import { OrdersPipeline } from "@/components/admin/orders-pipeline";
 import { OrdersQueue } from "@/components/admin/orders-queue";
@@ -103,7 +103,7 @@ export default async function AdminOrdersPage({
           )}
         >
           <div className="flex items-center gap-2">
-            <span className="inline-flex size-7 items-center justify-center rounded-sm bg-red-100 text-red-800">
+            <span className="inline-flex size-7 items-center justify-center rounded-sm bg-[#fde0cc] text-[#c2410c]">
               <RotateCcw className="size-3.5" aria-hidden="true" />
             </span>
             <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-medium-gray">
@@ -141,16 +141,52 @@ export default async function AdminOrdersPage({
             {formatCurrency(returns.cancelledTotal)} never shipped
           </p>
         </Link>
-        <div className="rounded-sm border border-border-gray bg-light-gray/40 p-3">
-          <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-medium-gray">
-            Return rate
-          </p>
-          <p className="mt-2 font-heading text-2xl font-semibold tabular-nums text-dark-charcoal">
-            {returns.returnRate.toFixed(1)}%
-          </p>
-          <p className="text-xs text-medium-gray">
-            Of {returns.fulfilledCount + returns.refundedCount} fulfilled
-          </p>
+        <div
+          className={cn(
+            "relative overflow-hidden rounded-sm border border-[#f0c4a8] p-3",
+            "bg-[linear-gradient(160deg,#fff6ef_0%,#ffffff_55%,#ffeee3_100%)]",
+            "shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]",
+          )}
+        >
+          <div
+            className="pointer-events-none absolute inset-0"
+            style={{
+              background:
+                "radial-gradient(90% 120% at 100% 0%, rgba(232,120,72,0.14), transparent 55%)",
+            }}
+            aria-hidden="true"
+          />
+          <div className="relative">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex size-7 items-center justify-center rounded-full bg-[#fde0cc] text-[#c2410c] ring-4 ring-[#fff1e6]">
+                  <Percent className="size-3.5" aria-hidden="true" />
+                </span>
+                <p className="text-[0.65rem] font-semibold uppercase tracking-wide text-medium-gray">
+                  Return rate
+                </p>
+              </div>
+              <span className="rounded-sm bg-white/85 px-1.5 py-0.5 text-[0.6rem] font-semibold uppercase tracking-wide text-[#c2410c]/90">
+                Fulfilled
+              </span>
+            </div>
+            <p className="mt-2 font-heading text-2xl font-semibold tabular-nums text-dark-charcoal">
+              {returns.returnRate.toFixed(1)}%
+            </p>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[#ffe8d6]">
+              <div
+                className="h-full rounded-full bg-[#e86f3a] transition-all"
+                style={{
+                  width: `${Math.min(100, Math.max(0, returns.returnRate))}%`,
+                }}
+                aria-hidden="true"
+              />
+            </div>
+            <p className="mt-1.5 text-xs text-medium-gray">
+              Of {returns.fulfilledCount + returns.refundedCount} fulfilled
+              orders
+            </p>
+          </div>
         </div>
       </section>
 

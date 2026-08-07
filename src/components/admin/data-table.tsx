@@ -27,6 +27,8 @@ type DataTableProps = {
   onRowNavigate?: (href: string) => void;
   /** Click/keyboard activate a row (outside interactive controls). */
   onRowActivate?: (rowIndex: number) => void;
+  /** Optional summary row under the body (same column count as `columns`). */
+  footer?: ReactNode[] | null;
 };
 
 function isInteractiveTarget(target: EventTarget | null) {
@@ -48,6 +50,7 @@ export function DataTable({
   rowHrefs,
   onRowNavigate,
   onRowActivate,
+  footer = null,
 }: DataTableProps) {
   const lockWidth = compact || noHorizontalScroll;
 
@@ -168,7 +171,12 @@ export function DataTable({
                         className={cn(
                           "align-middle",
                           compact ? "px-2.5 py-2.5 sm:px-3" : "px-4 py-3",
-                          lockWidth && "min-w-0 overflow-hidden",
+                          lockWidth && "min-w-0",
+                          lockWidth &&
+                            !columns[cellIndex]?.className?.includes(
+                              "overflow-visible",
+                            ) &&
+                            "overflow-hidden",
                           columns[cellIndex]?.className,
                         )}
                       >
@@ -180,6 +188,25 @@ export function DataTable({
               })
             )}
           </tbody>
+          {footer && footer.length > 0 && rows.length > 0 ? (
+            <tfoot>
+              <tr className="border-t-2 border-border-gray bg-light-gray/80">
+                {footer.map((cell, cellIndex) => (
+                  <td
+                    key={`footer-${cellIndex}`}
+                    className={cn(
+                      "align-middle font-semibold text-dark-charcoal",
+                      compact ? "px-2.5 py-2.5 sm:px-3" : "px-4 py-3",
+                      lockWidth && "min-w-0",
+                      columns[cellIndex]?.className,
+                    )}
+                  >
+                    {cell}
+                  </td>
+                ))}
+              </tr>
+            </tfoot>
+          ) : null}
         </table>
       </div>
     </div>

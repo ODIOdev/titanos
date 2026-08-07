@@ -36,6 +36,10 @@ export const forgotPasswordSchema = z.object({
   email: z.string().email("Enter a valid email"),
 });
 
+export const changeEmailSchema = z.object({
+  email: z.string().email("Enter a valid email"),
+});
+
 export const profileSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
@@ -255,17 +259,45 @@ export const affiliateApplicationSchema = z.object({
   }),
 });
 
-export const checkoutSchema = z.object({
-  items: z
-    .array(
-      z.object({
-        productId: z.string().uuid(),
-        quantity: z.number().int().min(1),
-      }),
-    )
-    .min(1),
-  email: z.string().email().optional(),
+const checkoutItemSchema = z.object({
+  productId: z.string().uuid(),
+  quantity: z.number().int().min(1),
+  /** Matrix key from cart, e.g. `Red::M`. */
+  variantId: z.string().trim().min(1).nullable().optional(),
 });
+
+export const checkoutSchema = z.object({
+  items: z.array(checkoutItemSchema).min(1),
+  email: z.string().email().optional(),
+  /** Embedded = on-site Stripe Checkout; hosted = redirect. */
+  uiMode: z.enum(["embedded", "hosted"]).optional(),
+});
+
+/** Local test checkout when Stripe keys are not configured. */
+export const demoCheckoutSchema = z.object({
+  items: z.array(checkoutItemSchema).min(1),
+  email: z.string().email(),
+  shipping: z.object({
+    first_name: z.string().trim().min(1, "First name is required"),
+    last_name: z.string().trim().min(1, "Last name is required"),
+    company: z.string().trim().optional(),
+    line1: z.string().trim().min(1, "Address is required"),
+    line2: z.string().trim().optional(),
+    city: z.string().trim().min(1, "City is required"),
+    state: z.string().trim().min(2, "State is required").max(2),
+    postal_code: z.string().trim().min(5, "ZIP is required"),
+    country: z.string().trim().default("US"),
+    phone: z.string().trim().min(7, "Phone is required"),
+  }),
+  card: z.object({
+    number: z.string().min(12, "Enter a card number"),
+    expiry: z.string().min(4, "Enter expiry MM/YY"),
+    cvc: z.string().min(3, "Enter CVC"),
+    name: z.string().trim().min(1, "Name on card is required"),
+  }),
+});
+
+export type DemoCheckoutInput = z.infer<typeof demoCheckoutSchema>;
 
 export const productReviewSchema = z.object({
   productId: z.string().uuid(),

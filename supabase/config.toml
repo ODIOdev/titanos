@@ -1,0 +1,8 @@
+# A string used to distinguish different Supabase projects on the same host
+project_id = "titan-safety-co"
+
+[api]
+enabled = true
+
+[functions.shipengine]
+verify_jwt = true

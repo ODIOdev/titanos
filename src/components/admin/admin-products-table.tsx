@@ -291,15 +291,24 @@ export function AdminProductsTable({
             ),
             className: "w-10 pr-0",
           },
-          { key: "name", header: "Product", className: "w-[32%]" },
-          { key: "category", header: "Category", className: "w-[14%]" },
-          { key: "price", header: "Price", className: "w-[12%]" },
-          { key: "stock", header: "Stock", className: "w-[10%]" },
-          { key: "status", header: "Status", className: "w-[12%]" },
+          { key: "name", header: "Product", className: "w-[22%]" },
+          {
+            key: "sku",
+            header: "SKU",
+            className: "w-[12%] overflow-visible",
+          },
+          {
+            key: "category",
+            header: "Category",
+            className: "w-[14%] overflow-visible",
+          },
+          { key: "price", header: "Price", className: "w-[8%]" },
+          { key: "stock", header: "Stock", className: "w-[6%]" },
+          { key: "status", header: "Status", className: "w-[9%]" },
           {
             key: "actions",
             header: "Actions",
-            className: "w-[16%] text-right",
+            className: "w-[25%] text-right",
           },
         ]}
         rows={products.map((p) => {
@@ -336,21 +345,32 @@ export function AdminProductsTable({
                 <p className="truncate text-xs text-medium-gray">
                   {low && p.status === "active"
                     ? "Low stock"
-                    : [p.brandName, p.sku].filter(Boolean).join(" · ") || "—"}
+                    : p.brandName || "—"}
                 </p>
               </div>
             </div>,
-            <span key={`${p.id}-cat`} className="block truncate">
+            <span
+              key={`${p.id}-sku`}
+              className="block whitespace-normal break-all font-mono text-xs leading-snug line-clamp-2"
+              title={p.sku || undefined}
+            >
+              {p.sku || "—"}
+            </span>,
+            <span
+              key={`${p.id}-cat`}
+              className="block whitespace-normal break-words leading-snug line-clamp-2"
+              title={p.categoryName ?? undefined}
+            >
               {p.categoryName ?? "—"}
             </span>,
-            <span key={`${p.id}-price`} className="tabular-nums">
+            <span key={`${p.id}-price`} className="font-semibold tabular-nums">
               {formatCurrency(p.price)}
             </span>,
             <span
               key={`${p.id}-stock`}
               className={cn(
-                "tabular-nums",
-                low && "font-semibold text-warning-orange",
+                "font-semibold tabular-nums",
+                low && "text-warning-orange",
               )}
             >
               {p.inventoryQuantity}
@@ -358,12 +378,12 @@ export function AdminProductsTable({
             <ProductStatusBadge key={`${p.id}-status`} status={p.status} />,
             <div
               key={`${p.id}-actions`}
-              className="flex flex-wrap justify-end gap-1.5"
+              className="inline-flex flex-nowrap items-center justify-end gap-1.5 whitespace-nowrap"
               data-no-row-nav
             >
               <Link
                 href={p.editHref}
-                className="inline-flex h-8 items-center rounded-sm border border-border-gray px-2.5 text-xs font-semibold uppercase tracking-wide hover:bg-light-gray"
+                className="inline-flex h-8 shrink-0 items-center rounded-sm border border-border-gray px-2.5 text-xs font-semibold uppercase tracking-wide hover:bg-light-gray"
                 onClick={(e) => e.stopPropagation()}
               >
                 Edit

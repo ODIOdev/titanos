@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { AdminSidebar } from "@/components/admin/admin-sidebar";
 import { AdminMobileNav } from "@/components/admin/admin-mobile-nav";
 import { AdminPathHeader } from "@/components/admin/admin-path-header";
+import { getAdminOpenOrderCounts } from "@/lib/data/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { isMasterAdmin, isMasterAdminEmail, MASTER_ADMIN_EMAIL } from "@/lib/utils";
 
@@ -53,16 +54,18 @@ export default async function AdminLayout({
     redirect("/login?redirect=/admin");
   }
 
+  const openOrderCounts = await getAdminOpenOrderCounts();
+
   return (
     <div className="admin-shell @container flex min-h-screen bg-light-gray">
-      <AdminSidebar />
+      <AdminSidebar openOrderCounts={openOrderCounts} />
       <div className="flex min-w-0 flex-1 flex-col">
         {/*
           Mobile / phone-preview: fixed viewport column with internal scroll.
           Desktop (@5xl): wrappers use `contents` so the page scrolls normally.
         */}
         <div className="admin-mobile-scrollport flex h-dvh max-h-dvh min-h-0 flex-col overflow-hidden @5xl:contents">
-          <AdminMobileNav />
+          <AdminMobileNav openOrderCounts={openOrderCounts} />
           <div className="admin-content-scroll flex min-h-0 min-w-0 flex-1 flex-col overflow-x-clip overflow-y-auto overscroll-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden @5xl:contents">
             <AdminPathHeader />
             <main className="min-w-0 flex-1 p-4 @5xl:p-6">{children}</main>

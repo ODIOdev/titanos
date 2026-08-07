@@ -7,6 +7,7 @@ import {
   AdminProductPreviewDialog,
   type AdminProductPreview,
 } from "@/components/admin/admin-product-preview-dialog";
+import { BuildProductButton } from "@/components/admin/build-product-button";
 import { DataTable } from "@/components/admin/data-table";
 import { ReplenishProductButton } from "@/components/admin/replenish-product-button";
 import { Badge } from "@/components/ui/badge";
@@ -41,15 +42,24 @@ export function AdminInventoryProductsTable({
           if (id) setPreviewId(id);
         }}
         columns={[
-          { key: "product", header: "Product", className: "w-[34%]" },
-          { key: "category", header: "Category", className: "w-[12%]" },
-          { key: "qty", header: "On hand", className: "w-[22%]" },
-          { key: "value", header: "Value", className: "w-[10%]" },
-          { key: "status", header: "Status", className: "w-[10%]" },
+          { key: "product", header: "Product", className: "w-[22%]" },
+          {
+            key: "sku",
+            header: "SKU",
+            className: "w-[14%] overflow-visible",
+          },
+          {
+            key: "category",
+            header: "Category",
+            className: "w-[14%] overflow-visible",
+          },
+          { key: "qty", header: "On hand", className: "w-[14%]" },
+          { key: "value", header: "Value", className: "w-[8%]" },
+          { key: "status", header: "Status", className: "w-[7%]" },
           {
             key: "actions",
             header: "Actions",
-            className: "w-[12%] text-right",
+            className: "w-[24%] min-w-[14rem] overflow-visible text-right",
           },
         ]}
         rows={products.map((p) => [
@@ -71,19 +81,29 @@ export function AdminInventoryProductsTable({
               <p className="truncate font-medium text-dark-charcoal">{p.name}</p>
               <p className="truncate text-xs text-medium-gray">
                 {p.brandName ?? "—"}
-                {p.sku ? ` · ${p.sku}` : ""}
               </p>
             </div>
           </div>,
-          <span key={`${p.id}-cat`} className="block truncate">
+          <span
+            key={`${p.id}-sku`}
+            className="block whitespace-normal break-all font-mono text-xs leading-snug line-clamp-2"
+            title={p.sku || undefined}
+          >
+            {p.sku || "—"}
+          </span>,
+          <span
+            key={`${p.id}-cat`}
+            className="block whitespace-normal break-words leading-snug line-clamp-2"
+            title={p.categoryName ?? undefined}
+          >
             {p.categoryName ?? "—"}
           </span>,
           <div key={`${p.id}-qty`} className="min-w-0">
             <span
               className={cn(
-                "tabular-nums",
-                p.stockState === "out" && "font-semibold text-red-700",
-                p.stockState === "low" && "font-semibold text-warning-orange",
+                "font-semibold tabular-nums",
+                p.stockState === "out" && "text-red-700",
+                p.stockState === "low" && "text-warning-orange",
               )}
             >
               {p.inventoryQuantity}
@@ -100,13 +120,9 @@ export function AdminInventoryProductsTable({
                   </li>
                 ))}
               </ul>
-            ) : (
-              <p className="mt-0.5 text-[11px] text-medium-gray">
-                ≤ {p.lowStockThreshold} alert
-              </p>
-            )}
+            ) : null}
           </div>,
-          <span key={`${p.id}-value`} className="tabular-nums">
+          <span key={`${p.id}-value`} className="font-semibold tabular-nums">
             {formatCurrency(p.stockValue)}
           </span>,
           p.stockState === "out" ? (
@@ -124,21 +140,26 @@ export function AdminInventoryProductsTable({
           ),
           <div
             key={`${p.id}-actions`}
-            className="flex flex-wrap justify-end gap-1.5"
+            className="flex w-full flex-row flex-nowrap items-center justify-end gap-1.5"
             data-no-row-nav
           >
+            <div className="shrink-0">
+              <BuildProductButton productId={p.id} productName={p.name} />
+            </div>
             <Link
               href={p.editHref}
-              className="inline-flex h-8 items-center rounded-sm border border-border-gray px-2.5 text-xs font-semibold uppercase tracking-wide hover:bg-light-gray"
+              className="inline-flex h-8 shrink-0 items-center rounded-sm border border-border-gray px-2.5 text-xs font-semibold uppercase tracking-wide hover:bg-light-gray"
               onClick={(e) => e.stopPropagation()}
             >
               Edit
             </Link>
-            <ReplenishProductButton
-              productId={p.id}
-              productName={p.name}
-              currentQty={p.inventoryQuantity}
-            />
+            <div className="shrink-0">
+              <ReplenishProductButton
+                productId={p.id}
+                productName={p.name}
+                currentQty={p.inventoryQuantity}
+              />
+            </div>
           </div>,
         ])}
       />

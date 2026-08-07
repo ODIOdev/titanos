@@ -46,7 +46,7 @@ export function MemberDetailActions({
       }
       toast.success(result.message);
       setConfirmOpen(false);
-      router.push("/admin/members");
+      router.push("/admin/users?tab=members");
       router.refresh();
     });
   }

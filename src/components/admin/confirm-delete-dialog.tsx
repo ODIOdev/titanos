@@ -9,8 +9,12 @@ type ConfirmDeleteDialogProps = {
   onOpenChange: (open: boolean) => void;
   title?: string;
   itemLabel: string;
+  /** Overrides the default “You are about to delete …” lead. */
+  lead?: string;
   description?: string;
   pending?: boolean;
+  confirmLabel?: string;
+  pendingLabel?: string;
   onConfirm: () => void;
 };
 
@@ -19,8 +23,11 @@ export function ConfirmDeleteDialog({
   onOpenChange,
   title = "Delete permanently?",
   itemLabel,
+  lead,
   description,
   pending = false,
+  confirmLabel = "Delete",
+  pendingLabel = "Deleting…",
   onConfirm,
 }: ConfirmDeleteDialogProps) {
   return (
@@ -38,7 +45,7 @@ export function ConfirmDeleteDialog({
           />
           <div className="min-w-0 text-sm text-dark-charcoal">
             <p className="font-semibold">
-              You are about to delete “{itemLabel}”.
+              {lead ?? `You are about to delete “${itemLabel}”.`}
             </p>
             <p className="mt-1 text-medium-gray">
               {description ??
@@ -61,7 +68,7 @@ export function ConfirmDeleteDialog({
             disabled={pending}
             onClick={onConfirm}
           >
-            {pending ? "Deleting…" : "Delete"}
+            {pending ? pendingLabel : confirmLabel}
           </Button>
         </div>
       </div>

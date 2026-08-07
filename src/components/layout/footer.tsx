@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { FooterBrandLink } from "@/components/layout/footer-brand-link";
 import { FooterMobileSection } from "@/components/layout/footer-mobile-section";
+import { PAYMENT_LOGOS } from "@/components/shared/payment-method-logos";
 import { logout } from "@/lib/actions/auth";
 import { getIsSignedIn } from "@/lib/auth/session";
 import { SITE_CONFIG } from "@/lib/data/seed-data";
@@ -69,39 +70,6 @@ const SOCIAL = [
     src: "/images/social/x.png",
     width: 125,
     height: 128,
-  },
-] as const;
-
-const PAYMENT_LOGOS = [
-  {
-    name: "Visa",
-    src: "/images/payments/visa.png",
-    width: 208,
-    height: 68,
-  },
-  {
-    name: "Mastercard",
-    src: "/images/payments/mastercard.svg",
-    width: 100,
-    height: 62,
-  },
-  {
-    name: "American Express",
-    src: "/images/payments/amex.svg",
-    width: 100,
-    height: 28,
-  },
-  {
-    name: "Discover",
-    src: "/images/payments/discover.png",
-    width: 136,
-    height: 23,
-  },
-  {
-    name: "PayPal",
-    src: "/images/payments/paypal.png",
-    width: 124,
-    height: 33,
   },
 ] as const;
 
@@ -276,15 +244,15 @@ export async function Footer() {
               {PAYMENT_LOGOS.map((logo) => (
                 <li
                   key={logo.name}
-                  className="inline-flex h-8 w-[4.25rem] shrink-0 items-center justify-center rounded-sm border border-white/15 bg-white px-2"
+                  className="inline-flex h-9 w-[4.5rem] shrink-0 items-center justify-center rounded-sm border border-white/15 bg-white px-1.5"
                 >
                   <Image
                     src={logo.src}
                     alt={logo.name}
                     width={logo.width}
                     height={logo.height}
-                    className="h-4 w-auto max-w-full object-contain"
-                    unoptimized={logo.src.endsWith(".svg")}
+                    className="h-auto max-h-[1.15rem] w-auto max-w-[3.65rem] object-contain object-center"
+                    unoptimized
                   />
                 </li>
               ))}

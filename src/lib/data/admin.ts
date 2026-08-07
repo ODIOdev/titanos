@@ -23,6 +23,7 @@ import { getProductStockQuantity, formatProductStockBySize } from "@/lib/catalog
 import { productMatchesQuery, productSearchScore, matchesQuery } from "@/lib/search";
 import { AFFILIATE_ELIGIBILITY_ORDERS } from "@/lib/affiliates/program";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
+import type { ShipFromForm } from "@/lib/shipengine/config";
 import type {
   Brand,
   Category,
@@ -36,6 +37,16 @@ import type {
   Resource,
 } from "@/types";
 
+export type RevenueRangeKey = "1d" | "7d" | "30d" | "all";
+
+export type RevenuePoint = {
+  date: string;
+  revenue: number;
+  expense: number;
+};
+
+export type CashStamp = { at: string; amount: number };
+
 export type AdminMetrics = {
   revenue: number;
   ordersCount: number;
@@ -43,7 +54,9 @@ export type AdminMetrics = {
   pendingQuotes: number;
   lowStockCount: number;
   aov: number;
-  revenueOverTime: { date: string; revenue: number }[];
+  /** @deprecated Prefer revenueByRange["7d"] — kept for analytics. */
+  revenueOverTime: RevenuePoint[];
+  revenueByRange: Record<RevenueRangeKey, RevenuePoint[]>;
   ordersByStatus: { status: string; count: number }[];
   salesByCategory: { category: string; sales: number }[];
   topProducts: { name: string; sales: number; quantity: number }[];
@@ -59,6 +72,9 @@ export type AdminOrder = Order & {
   }[];
   internal_notes?: string | null;
   notes?: string | null;
+  stripe_payment_intent_id?: string | null;
+  stripe_checkout_session_id?: string | null;
+  billing_address?: Record<string, unknown> | null;
 };
 
 export type AdminQuoteItem = {
@@ -145,6 +161,8 @@ export type SiteSettingsForm = {
   supportEmail: string;
   phone: string;
   freeShippingThreshold: number;
+  /** Warehouse / origin for ShipEngine rates & labels. */
+  shipFrom: ShipFromForm;
 };
 
 export type AdminTag = {
@@ -563,15 +581,238 @@ const DEMO_RESOURCES: Resource[] = [
   },
 ];
 
-function emptyRevenueOverTime(): { date: string; revenue: number }[] {
-  return Array.from({ length: 7 }, (_, i) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (6 - i));
+type RevenueOrderRow = {
+  created_at: string;
+  total: number | string;
+  status: string;
+};
+
+function startOfLocalDay(d: Date) {
+  const next = new Date(d);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+function isCountedRevenueOrder(status: string) {
+  return !["cancelled", "refunded"].includes(status);
+}
+
+function roundCash(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
+function sumCashStamps(
+  stamps: CashStamp[],
+  pred: (d: Date) => boolean,
+): number {
+  let sum = 0;
+  for (const stamp of stamps) {
+    const d = new Date(stamp.at);
+    if (!Number.isFinite(d.getTime())) continue;
+    if (pred(d)) sum += stamp.amount;
+  }
+  return roundCash(sum);
+}
+
+function emptyDailySeries(dayCount: number): RevenuePoint[] {
+  return Array.from({ length: dayCount }, (_, i) => {
+    const date = startOfLocalDay(new Date());
+    date.setDate(date.getDate() - (dayCount - 1 - i));
     return {
       date: date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
       revenue: 0,
+      expense: 0,
     };
   });
+}
+
+function emptyRevenueByRange(): Record<RevenueRangeKey, RevenuePoint[]> {
+  return {
+    "1d": buildTodayHourlyRevenue([], []),
+    "7d": emptyDailySeries(7),
+    "30d": emptyDailySeries(30),
+    all: emptyDailySeries(7),
+  };
+}
+
+function buildDailyRevenueSeries(
+  orders: RevenueOrderRow[],
+  expenses: CashStamp[],
+  dayCount: number,
+  fillEmpty?: { revenue: (index: number) => number; expense: (index: number) => number },
+): RevenuePoint[] {
+  return Array.from({ length: dayCount }, (_, i) => {
+    const date = startOfLocalDay(new Date());
+    date.setDate(date.getDate() - (dayCount - 1 - i));
+    const label = date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    });
+    const dayRevenue = orders
+      .filter((o) => {
+        if (!isCountedRevenueOrder(o.status)) return false;
+        return (
+          startOfLocalDay(new Date(o.created_at)).getTime() === date.getTime()
+        );
+      })
+      .reduce((sum, o) => sum + Number(o.total), 0);
+    const dayExpense = sumCashStamps(
+      expenses,
+      (d) => startOfLocalDay(d).getTime() === date.getTime(),
+    );
+    const revenue =
+      dayRevenue > 0 ? dayRevenue : fillEmpty ? fillEmpty.revenue(i) : 0;
+    const expense =
+      dayExpense > 0 ? dayExpense : fillEmpty ? fillEmpty.expense(i) : 0;
+    return {
+      date: label,
+      revenue: roundCash(revenue),
+      expense: roundCash(expense),
+    };
+  });
+}
+
+function buildTodayHourlyRevenue(
+  orders: RevenueOrderRow[],
+  expenses: CashStamp[],
+): RevenuePoint[] {
+  const now = new Date();
+  const hours = Math.max(now.getHours() + 1, 1);
+  return Array.from({ length: hours }, (_, hour) => {
+    const label = new Date(2000, 0, 1, hour).toLocaleTimeString("en-US", {
+      hour: "numeric",
+    });
+    const hourRevenue = orders
+      .filter((o) => {
+        if (!isCountedRevenueOrder(o.status)) return false;
+        const od = new Date(o.created_at);
+        return (
+          od.toDateString() === now.toDateString() && od.getHours() === hour
+        );
+      })
+      .reduce((sum, o) => sum + Number(o.total), 0);
+    const hourExpense = sumCashStamps(expenses, (d) => {
+      return d.toDateString() === now.toDateString() && d.getHours() === hour;
+    });
+    return {
+      date: label,
+      revenue: roundCash(hourRevenue),
+      expense: roundCash(hourExpense),
+    };
+  });
+}
+
+function buildAllTimeRevenue(
+  orders: RevenueOrderRow[],
+  expenses: CashStamp[],
+): RevenuePoint[] {
+  const counted = orders.filter((o) => isCountedRevenueOrder(o.status));
+  let earliest = Number.POSITIVE_INFINITY;
+  for (const o of counted) {
+    const t = new Date(o.created_at).getTime();
+    if (Number.isFinite(t) && t < earliest) earliest = t;
+  }
+  for (const e of expenses) {
+    const t = new Date(e.at).getTime();
+    if (Number.isFinite(t) && t < earliest) earliest = t;
+  }
+
+  if (!Number.isFinite(earliest)) return emptyDailySeries(7);
+
+  const start = startOfLocalDay(new Date(earliest));
+  const end = startOfLocalDay(new Date());
+  const daySpan =
+    Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+
+  // Keep the chart readable: daily under ~90 days, else weekly buckets.
+  if (daySpan <= 90) {
+    return Array.from({ length: daySpan }, (_, i) => {
+      const date = new Date(start);
+      date.setDate(start.getDate() + i);
+      const label = date.toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+      });
+      const dayRevenue = counted
+        .filter(
+          (o) =>
+            startOfLocalDay(new Date(o.created_at)).getTime() ===
+            date.getTime(),
+        )
+        .reduce((sum, o) => sum + Number(o.total), 0);
+      const dayExpense = sumCashStamps(
+        expenses,
+        (d) => startOfLocalDay(d).getTime() === date.getTime(),
+      );
+      return {
+        date: label,
+        revenue: roundCash(dayRevenue),
+        expense: roundCash(dayExpense),
+      };
+    });
+  }
+
+  const weekCount = Math.ceil(daySpan / 7);
+  return Array.from({ length: weekCount }, (_, i) => {
+    const weekStart = new Date(start);
+    weekStart.setDate(start.getDate() + i * 7);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekStart.getDate() + 6);
+    if (weekEnd > end) weekEnd.setTime(end.getTime());
+
+    const label = `${weekStart.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+    })}`;
+    const weekRevenue = counted
+      .filter((o) => {
+        const t = startOfLocalDay(new Date(o.created_at)).getTime();
+        return t >= weekStart.getTime() && t <= weekEnd.getTime();
+      })
+      .reduce((sum, o) => sum + Number(o.total), 0);
+    const weekExpense = sumCashStamps(expenses, (d) => {
+      const t = startOfLocalDay(d).getTime();
+      return t >= weekStart.getTime() && t <= weekEnd.getTime();
+    });
+    return {
+      date: label,
+      revenue: roundCash(weekRevenue),
+      expense: roundCash(weekExpense),
+    };
+  });
+}
+
+export function buildRevenueByRange(
+  orders: RevenueOrderRow[],
+  opts?: {
+    demoFill?: boolean;
+    totalRevenue?: number;
+    expenses?: CashStamp[];
+  },
+): Record<RevenueRangeKey, RevenuePoint[]> {
+  const expenses = opts?.expenses ?? [];
+  const fill7 =
+    opts?.demoFill && (opts.totalRevenue ?? 0) > 0
+      ? {
+          revenue: (i: number) =>
+            roundCash(
+              ((opts.totalRevenue ?? 0) / 7) * (0.7 + (i % 3) * 0.2),
+            ),
+          expense: (i: number) =>
+            roundCash(
+              ((opts.totalRevenue ?? 0) / 7) *
+                (0.7 + (i % 3) * 0.2) *
+                (0.38 + (i % 2) * 0.08),
+            ),
+        }
+      : undefined;
+
+  return {
+    "1d": buildTodayHourlyRevenue(orders, expenses),
+    "7d": buildDailyRevenueSeries(orders, expenses, 7, fill7),
+    "30d": buildDailyRevenueSeries(orders, expenses, 30),
+    all: buildAllTimeRevenue(orders, expenses),
+  };
 }
 
 function buildDemoMetrics(): AdminMetrics {
@@ -596,22 +837,11 @@ function buildDemoMetrics(): AdminMetrics {
     ["submitted", "reviewing", "information_requested", "quoted"].includes(q.status),
   ).length;
 
-  const revenueOverTime = Array.from({ length: 7 }, (_, i) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (6 - i));
-    const label = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    const dayOrders = DEMO_ORDERS.filter((o) => {
-      const od = new Date(o.created_at);
-      return (
-        od.toDateString() === date.toDateString() &&
-        !["cancelled", "refunded"].includes(o.status)
-      );
-    });
-    const dayRevenue =
-      dayOrders.reduce((s, o) => s + o.total, 0) ||
-      Math.round((revenue / 7) * (0.7 + (i % 3) * 0.2) * 100) / 100;
-    return { date: label, revenue: Math.round(dayRevenue * 100) / 100 };
+  const revenueByRange = buildRevenueByRange(DEMO_ORDERS, {
+    demoFill: true,
+    totalRevenue: revenue,
   });
+  const revenueOverTime = revenueByRange["7d"];
 
   const statusCounts = new Map<string, number>();
   for (const o of DEMO_ORDERS) {
@@ -659,6 +889,7 @@ function buildDemoMetrics(): AdminMetrics {
     lowStockCount,
     aov: Math.round(aov * 100) / 100,
     revenueOverTime,
+    revenueByRange,
     ordersByStatus,
     salesByCategory,
     topProducts,
@@ -674,15 +905,12 @@ export async function getAdminMetrics(): Promise<AdminMetrics> {
 
       const [
         { data: orders, error: ordersError },
-        { count: customersCount, error: customersError },
+        { data: profiles, error: customersError },
         { data: quotes, error: quotesError },
         { data: products, error: productsError },
       ] = await Promise.all([
         supabase.from("orders").select("id, status, total, created_at"),
-        supabase
-          .from("profiles")
-          .select("*", { count: "exact", head: true })
-          .eq("role", "customer"),
+        supabase.from("profiles").select("id, role"),
         supabase.from("quotes").select("id, status"),
         supabase
           .from("products")
@@ -695,6 +923,9 @@ export async function getAdminMetrics(): Promise<AdminMetrics> {
       if (customersError) throw customersError;
       if (quotesError) throw quotesError;
       if (productsError) throw productsError;
+
+      const { isCustomerProfile } = await import("@/lib/utils");
+      const customersCount = (profiles ?? []).filter(isCustomerProfile).length;
 
       const orderRows = orders ?? [];
       const productRows = products ?? [];
@@ -727,24 +958,11 @@ export async function getAdminMetrics(): Promise<AdminMetrics> {
         statusCounts.set(o.status, (statusCounts.get(o.status) ?? 0) + 1);
       }
 
-      const revenueOverTime = Array.from({ length: 7 }, (_, i) => {
-        const date = new Date();
-        date.setDate(date.getDate() - (6 - i));
-        const label = date.toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-        });
-        const dayRevenue = orderRows
-          .filter((o) => {
-            const od = new Date(o.created_at);
-            return (
-              od.toDateString() === date.toDateString() &&
-              !["cancelled", "refunded"].includes(o.status)
-            );
-          })
-          .reduce((s, o) => s + Number(o.total), 0);
-        return { date: label, revenue: Math.round(dayRevenue * 100) / 100 };
-      });
+      const revenueByRange =
+        orderRows.length > 0
+          ? buildRevenueByRange(orderRows)
+          : emptyRevenueByRange();
+      const revenueOverTime = revenueByRange["7d"];
 
       let salesByCategory: AdminMetrics["salesByCategory"] = [];
       let topProducts: AdminMetrics["topProducts"] = [];
@@ -811,12 +1029,12 @@ export async function getAdminMetrics(): Promise<AdminMetrics> {
       return {
         revenue: Math.round(revenue * 100) / 100,
         ordersCount: orderRows.length,
-        customersCount: customersCount ?? 0,
+        customersCount,
         pendingQuotes,
         lowStockCount,
         aov: Math.round(aov * 100) / 100,
-        revenueOverTime:
-          orderRows.length > 0 ? revenueOverTime : emptyRevenueOverTime(),
+        revenueOverTime,
+        revenueByRange,
         ordersByStatus: Array.from(statusCounts.entries()).map(
           ([status, count]) => ({ status, count }),
         ),
@@ -1283,6 +1501,28 @@ export async function getAdminOrders(opts?: {
   status?: string;
   q?: string;
 }): Promise<AdminOrder[]> {
+  /** Keep pipeline stages together; delivered always as one contiguous block. */
+  const statusRank: Record<string, number> = {
+    pending: 0,
+    paid: 1,
+    processing: 2,
+    shipped: 3,
+    delivered: 4,
+    cancelled: 5,
+    refunded: 6,
+  };
+
+  function sortOrders(list: AdminOrder[]): AdminOrder[] {
+    return [...list].sort((a, b) => {
+      const ra = statusRank[a.status] ?? 50;
+      const rb = statusRank[b.status] ?? 50;
+      if (ra !== rb) return ra - rb;
+      return (
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+    });
+  }
+
   if (isSupabaseConfigured()) {
     try {
       const { createServiceClient } = await import("@/lib/supabase/admin");
@@ -1328,7 +1568,7 @@ export async function getAdminOrders(opts?: {
             );
           });
         }
-        return orders;
+        return sortOrders(orders);
       }
     } catch {
       // Fall through
@@ -1360,7 +1600,7 @@ export async function getAdminOrders(opts?: {
       );
     });
   }
-  return orders;
+  return sortOrders(orders);
 }
 
 /** Order statuses that mean the goods came back or were never shipped. */
@@ -1459,6 +1699,54 @@ export async function getAdminReturnsSummary(): Promise<AdminReturnsSummary> {
   );
 }
 
+const OPEN_ORDER_STATUSES = [
+  "pending",
+  "paid",
+  "processing",
+  "shipped",
+] as const;
+
+export type AdminOpenOrderCounts = {
+  /** Orders still on the happy path (not delivered / cancelled / refunded). */
+  open: number;
+  /** New orders awaiting payment / intake. */
+  new: number;
+};
+
+/** Lightweight open-order counts for admin nav badges. */
+export async function getAdminOpenOrderCounts(): Promise<AdminOpenOrderCounts> {
+  if (isSupabaseConfigured()) {
+    try {
+      const { createServiceClient } = await import("@/lib/supabase/admin");
+      const supabase = createServiceClient();
+      const [openResult, newResult] = await Promise.all([
+        supabase
+          .from("orders")
+          .select("id", { count: "exact", head: true })
+          .in("status", [...OPEN_ORDER_STATUSES]),
+        supabase
+          .from("orders")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "pending"),
+      ]);
+      if (!openResult.error && !newResult.error) {
+        return {
+          open: openResult.count ?? 0,
+          new: newResult.count ?? 0,
+        };
+      }
+    } catch {
+      // Fall through
+    }
+  }
+
+  const open = DEMO_ORDERS.filter((o) =>
+    (OPEN_ORDER_STATUSES as readonly string[]).includes(o.status),
+  ).length;
+  const neu = DEMO_ORDERS.filter((o) => o.status === "pending").length;
+  return { open, new: neu };
+}
+
 export async function getAdminOrder(id: string): Promise<AdminOrder | null> {
   if (isSupabaseConfigured()) {
     try {
@@ -1479,6 +1767,7 @@ export async function getAdminOrder(id: string): Promise<AdminOrder | null> {
           discount_amount: Number(row.discount_amount),
           total: Number(row.total),
           shipping_address: (row.shipping_address as Record<string, unknown>) ?? null,
+          billing_address: (row.billing_address as Record<string, unknown>) ?? null,
           history: [...(row.history ?? [])].sort(
             (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
           ),
@@ -1761,17 +2050,10 @@ export async function getAdminCustomers(opts?: {
           }
         }
 
-        const { isAdminRole } = await import("@/lib/utils");
+        const { isCustomerProfile } = await import("@/lib/utils");
 
         let customers = profiles
-          .filter((p) => {
-            const role = String(p.role ?? "").toLowerCase();
-            // Customers page = every non-admin / non-support account
-            if (!role || role === "customer") return true;
-            if (isAdminRole(p.role)) return false;
-            if (role === "support" || role === "staff") return false;
-            return true;
-          })
+          .filter(isCustomerProfile)
           .map((p) => {
             const byId = spentByUser.get(p.id);
             const byEmail = spentByEmail.get(String(p.email ?? "").toLowerCase());
@@ -2237,6 +2519,13 @@ export async function getPromoDiscountSettings(): Promise<PromoDiscountSettings>
 }
 
 export async function getSiteSettings(): Promise<SiteSettingsForm> {
+  const {
+    defaultShipFromForm,
+    parseShipFromForm,
+    SHIPENGINE_SHIP_FROM_KEY,
+  } = await import("@/lib/shipengine/config");
+  const shipFromDefault = defaultShipFromForm();
+
   if (isSupabaseConfigured()) {
     try {
       const { createClient } = await import("@/lib/supabase/server");
@@ -2246,12 +2535,15 @@ export async function getSiteSettings(): Promise<SiteSettingsForm> {
         const map = Object.fromEntries(data.map((r) => [r.key, r.value]));
         const siteConfig = (map.site_config ?? {}) as Record<string, unknown>;
         const freeShip = (map.free_shipping_threshold ?? {}) as Record<string, unknown>;
+        const shipFrom =
+          parseShipFromForm(map[SHIPENGINE_SHIP_FROM_KEY]) ?? shipFromDefault;
         return {
           siteName: String(siteConfig.name ?? SITE_CONFIG.name),
           tagline: String(siteConfig.tagline ?? SITE_CONFIG.tagline),
           supportEmail: String(siteConfig.supportEmail ?? SITE_CONFIG.supportEmail),
           phone: String(siteConfig.phone ?? SITE_CONFIG.phone),
           freeShippingThreshold: Number(freeShip.amount ?? 199),
+          shipFrom,
         };
       }
     } catch {
@@ -2264,6 +2556,7 @@ export async function getSiteSettings(): Promise<SiteSettingsForm> {
     supportEmail: SITE_CONFIG.supportEmail,
     phone: SITE_CONFIG.phone,
     freeShippingThreshold: 199,
+    shipFrom: shipFromDefault,
   };
 }
 

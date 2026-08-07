@@ -7,12 +7,18 @@ import { logout } from "@/lib/actions/auth";
 import { cn } from "@/lib/utils";
 import { HomeButton } from "@/components/layout/home-button";
 import { ADMIN_NAV, isAdminNavActive } from "@/components/admin/admin-nav-items";
+import { AdminOrdersNavBadge } from "@/components/admin/admin-orders-nav-badge";
 import {
   designShellAllowed,
   openDevIphonePreview,
 } from "@/components/dev/dev-iphone-shell";
+import type { AdminOpenOrderCounts } from "@/lib/data/admin";
 
-export function AdminSidebar() {
+export function AdminSidebar({
+  openOrderCounts,
+}: {
+  openOrderCounts: AdminOpenOrderCounts;
+}) {
   const pathname = usePathname();
   const showPhonePreview = designShellAllowed();
 
@@ -30,6 +36,7 @@ export function AdminSidebar() {
       <nav className="flex-1 space-y-0.5 overflow-y-auto p-3" aria-label="Admin">
         {ADMIN_NAV.map(({ href, label, icon: Icon }) => {
           const active = isAdminNavActive(href, pathname);
+          const isOrders = href === "/admin/orders";
           return (
             <Link
               key={href}
@@ -43,6 +50,9 @@ export function AdminSidebar() {
             >
               <Icon className="size-4 shrink-0" aria-hidden="true" />
               {label}
+              {isOrders ? (
+                <AdminOrdersNavBadge initial={openOrderCounts} active={active} />
+              ) : null}
             </Link>
           );
         })}

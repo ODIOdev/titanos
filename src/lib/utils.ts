@@ -20,6 +20,17 @@ export function formatDate(date: string | Date): string {
   }).format(typeof date === "string" ? new Date(date) : date);
 }
 
+/** Date + time for admin order timestamps (e.g. Recent orders). */
+export function formatDateTime(date: string | Date): string {
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(typeof date === "string" ? new Date(date) : date);
+}
+
 export function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -59,6 +70,21 @@ export function isAdminRole(role: string | null | undefined): boolean {
   if (!role) return false;
   const normalized = role.trim().toLowerCase();
   return normalized === "admin" || normalized === "administrator";
+}
+
+/**
+ * Profiles shown on /admin/customers — non-admin / non-staff accounts.
+ * Matches empty role + `customer` (and other storefront roles), excludes CRM staff.
+ */
+export function isCustomerProfile(profile: {
+  role?: string | null;
+} | null | undefined): boolean {
+  if (!profile) return false;
+  const role = String(profile.role ?? "").toLowerCase();
+  if (!role || role === "customer") return true;
+  if (isAdminRole(profile.role)) return false;
+  if (role === "support" || role === "staff") return false;
+  return true;
 }
 
 export type CatalogStatus = "active" | "draft" | "archived";

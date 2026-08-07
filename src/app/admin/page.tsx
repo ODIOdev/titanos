@@ -1,5 +1,7 @@
 import Link from "next/link";
 import {
+  Ban,
+  Boxes,
   ClipboardList,
   DollarSign,
   PackageX,
@@ -8,7 +10,7 @@ import {
   TrendingUp,
   Users,
 } from "lucide-react";
-import { AnalyticsRevenueChart } from "@/components/admin/analytics-revenue-chart";
+import { DashboardRevenueOverTime } from "@/components/admin/dashboard-revenue-over-time";
 import { OrderStatusDonut } from "@/components/admin/dashboard-charts";
 import {
   CategorySalesBreakdown,
@@ -16,19 +18,23 @@ import {
 } from "@/components/admin/dashboard-breakdown";
 import { DashboardMobileOverview } from "@/components/admin/dashboard-mobile-overview";
 import { DashboardStatCard } from "@/components/admin/dashboard-stat-card";
-import { Badge } from "@/components/ui/badge";
+import { OrderStatusBadge } from "@/components/admin/order-status-badge";
+import { getSuppliesInventory } from "@/lib/actions/supplies-inventory";
+import { suppliesTotals } from "@/lib/admin/supplies-inventory";
 import { statusColor } from "@/lib/admin/order-status-colors";
 import {
+  buildRevenueByRange,
   getAdminInventory,
   getAdminMetrics,
   getAdminOrders,
   getAdminQuotes,
 } from "@/lib/data/admin";
+import { getWalletLedger } from "@/lib/data/wallet";
 import {
   getProductStockQuantity,
   getProductStockState,
 } from "@/lib/catalog/product-stock";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDateTime } from "@/lib/utils";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 
 const OPEN_QUOTE_STATUSES = [
@@ -39,13 +45,34 @@ const OPEN_QUOTE_STATUSES = [
 ];
 
 export default async function AdminOverviewPage() {
-  const [metrics, orders, inventory, quotes] = await Promise.all([
-    getAdminMetrics(),
-    getAdminOrders(),
-    getAdminInventory(),
-    getAdminQuotes(),
-  ]);
+  const [metrics, orders, inventory, quotes, suppliesInventory, wallet] =
+    await Promise.all([
+      getAdminMetrics(),
+      getAdminOrders(),
+      getAdminInventory(),
+      getAdminQuotes(),
+      getSuppliesInventory(),
+      getWalletLedger("all"),
+    ]);
 
+  const expenseStamps = wallet.transactions
+    .filter((txn) => txn.direction === "debit")
+    .map((txn) => ({ at: txn.date, amount: txn.amount }));
+
+  const revenueByRange = buildRevenueByRange(
+    orders.map((order) => ({
+      created_at: order.created_at,
+      total: order.total,
+      status: order.status,
+    })),
+    {
+      expenses: expenseStamps,
+      demoFill: expenseStamps.length === 0 && !isSupabaseConfigured(),
+      totalRevenue: metrics.revenue,
+    },
+  );
+
+  const supplies = suppliesTotals(suppliesInventory);
   const recentOrders = orders.slice(0, 6);
   const lowStock = inventory
     .filter((p) => getProductStockState(p) !== "ok")
@@ -57,6 +84,9 @@ export default async function AdminOverviewPage() {
   const orderTotal = metrics.ordersByStatus.reduce((s, r) => s + r.count, 0);
   const openOrders = metrics.ordersByStatus
     .filter((r) => ["pending", "paid", "processing"].includes(r.status))
+    .reduce((s, r) => s + r.count, 0);
+  const cancelledOrders = metrics.ordersByStatus
+    .filter((r) => r.status === "cancelled")
     .reduce((s, r) => s + r.count, 0);
   const bestDay = metrics.revenueOverTime.reduce<
     { date: string; revenue: number } | null
@@ -100,6 +130,7 @@ export default async function AdminOverviewPage() {
       label: "Revenue",
       value: formatCurrency(metrics.revenue),
       hint: "Paid & fulfilled",
+      href: "/admin/wallet",
     },
     {
       label: "Orders",
@@ -113,10 +144,10 @@ export default async function AdminOverviewPage() {
       hint: bestDay ? `Best ${bestDay.date}` : "No sales yet",
     },
     {
-      label: "Customers",
+      label: "Users",
       value: String(metrics.customersCount),
       hint: "Registered",
-      href: "/admin/customers",
+      href: "/admin/users",
     },
   ];
 
@@ -155,13 +186,14 @@ export default async function AdminOverviewPage() {
       />
 
       <div className="admin-desktop-overview hidden space-y-6 @5xl:block">
-        <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <section className="grid grid-cols-2 gap-3 xl:grid-cols-5">
           <DashboardStatCard
             label="Revenue"
             value={formatCurrency(metrics.revenue)}
             hint="Paid & fulfilled orders"
             icon={DollarSign}
             tone="green"
+            href="/admin/wallet"
           />
           <DashboardStatCard
             label="Orders"
@@ -179,26 +211,29 @@ export default async function AdminOverviewPage() {
             tone="yellow"
           />
           <DashboardStatCard
-            label="Customers"
+            label="Cancelled"
+            value={String(cancelledOrders)}
+            hint="Cancelled before fulfillment"
+            icon={Ban}
+            tone="red"
+            href="/admin/orders?status=cancelled"
+            alert={cancelledOrders > 0}
+          />
+          <DashboardStatCard
+            label="Users"
             value={String(metrics.customersCount)}
             hint="Registered accounts"
             icon={Users}
             tone="charcoal"
-            href="/admin/customers"
+            href="/admin/users"
           />
         </section>
 
         <section className="grid gap-4 lg:grid-cols-3">
-          <Panel
-            title="Revenue over time"
-            caption="Last 7 days"
+          <DashboardRevenueOverTime
+            seriesByRange={revenueByRange}
             className="lg:col-span-2"
-            action={{ href: "/admin/analytics", label: "Full reports" }}
-          >
-            <div className="px-2 py-4 sm:px-4">
-              <AnalyticsRevenueChart data={metrics.revenueOverTime} />
-            </div>
-          </Panel>
+          />
 
           <Panel
             title="Orders by status"
@@ -246,7 +281,7 @@ export default async function AdminOverviewPage() {
           </Panel>
         </section>
 
-        <section className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <section className="grid grid-cols-2 gap-3 xl:grid-cols-5">
           <DashboardStatCard
             label="Open quotes"
             value={String(metrics.pendingQuotes)}
@@ -272,6 +307,19 @@ export default async function AdminOverviewPage() {
             icon={Receipt}
             tone="blue"
             href="/admin/orders"
+          />
+          <DashboardStatCard
+            label="Supplies"
+            value={String(supplies.units)}
+            hint={
+              supplies.lowOut > 0
+                ? `${supplies.lowOut} low / out · ${formatCurrency(supplies.value)}`
+                : `${formatCurrency(supplies.value)} on hand`
+            }
+            icon={Boxes}
+            tone="charcoal"
+            href="/admin/inventory#supplies"
+            alert={supplies.lowOut > 0}
           />
           <DashboardStatCard
             label="Catalog size"
@@ -302,10 +350,13 @@ export default async function AdminOverviewPage() {
                         {order.order_number}
                       </span>
                       <span className="block truncate text-xs text-medium-gray">
-                        {order.email} · {formatDate(order.created_at)}
+                        {order.email}
+                      </span>
+                      <span className="mt-0.5 block truncate text-[0.65rem] tabular-nums text-medium-gray">
+                        Ordered {formatDateTime(order.created_at)}
                       </span>
                     </span>
-                    <Badge variant="default">{order.status}</Badge>
+                    <OrderStatusBadge status={order.status} />
                     <span className="w-24 text-right text-sm font-medium text-dark-charcoal">
                       {formatCurrency(order.total)}
                     </span>

@@ -166,6 +166,7 @@ export type OrderItem = {
   quantity: number;
   unit_price: number;
   total_price: number;
+  options?: Record<string, unknown> | null;
 };
 
 export type Quote = {

@@ -4,16 +4,20 @@ import {
   MaintenanceAdminBanner,
   MaintenanceScreen,
 } from "@/components/layout/maintenance-screen";
-import { SupportChat } from "@/components/support/support-chat";
+import { SupportChatLazy } from "@/components/support/support-chat-lazy";
 import { getIsMasterAdmin } from "@/lib/auth/session";
 import { getMaintenanceSettings } from "@/lib/data/maintenance";
+import { getSupportChatSettings } from "@/lib/data/support-chat-settings";
 
 export default async function ShopLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const maintenance = await getMaintenanceSettings();
+  const [maintenance, supportChat] = await Promise.all([
+    getMaintenanceSettings(),
+    getSupportChatSettings(),
+  ]);
   // Only pay for the auth lookup while the site is actually offline.
   const adminPreview = maintenance.enabled ? await getIsMasterAdmin() : false;
 
@@ -36,7 +40,7 @@ export default async function ShopLayout({
           {children}
         </main>
         <Footer />
-        <SupportChat />
+        <SupportChatLazy settings={supportChat} />
       </div>
     </div>
   );

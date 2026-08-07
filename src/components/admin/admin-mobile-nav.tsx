@@ -8,13 +8,19 @@ import { logout } from "@/lib/actions/auth";
 import { cn } from "@/lib/utils";
 import { HomeButton } from "@/components/layout/home-button";
 import { ADMIN_NAV, isAdminNavActive } from "@/components/admin/admin-nav-items";
+import { AdminOrdersNavBadge, AdminOrdersMenuBadge } from "@/components/admin/admin-orders-nav-badge";
 import {
   designShellAllowed,
   openDevIphonePreview,
 } from "@/components/dev/dev-iphone-shell";
+import type { AdminOpenOrderCounts } from "@/lib/data/admin";
 
 /** Drawer replacement for the desktop sidebar below `lg`. */
-export function AdminMobileNav() {
+export function AdminMobileNav({
+  openOrderCounts,
+}: {
+  openOrderCounts: AdminOpenOrderCounts;
+}) {
   const pathname = usePathname();
   const [open, setOpen] = React.useState(false);
   const panelRef = React.useRef<HTMLDivElement>(null);
@@ -48,12 +54,13 @@ export function AdminMobileNav() {
         <div className="flex items-center gap-3 border-b border-white/10 px-4 pb-3 pt-[calc(0.75rem+var(--phone-safe-top,0px)+env(safe-area-inset-top,0px))]">
           <button
             type="button"
-            className="inline-flex size-10 shrink-0 items-center justify-center rounded-sm text-white hover:bg-white/10"
+            className="relative inline-flex size-10 shrink-0 items-center justify-center rounded-sm text-white hover:bg-white/10"
             aria-label="Open admin menu"
             aria-expanded={open}
             onClick={() => setOpen(true)}
           >
             <Menu className="size-5" aria-hidden="true" />
+            <AdminOrdersMenuBadge initial={openOrderCounts} />
           </button>
           <Link href="/admin" className="min-w-0">
             <p className="font-heading text-base font-semibold uppercase tracking-wide text-titan-yellow">
@@ -111,6 +118,7 @@ export function AdminMobileNav() {
             >
               {ADMIN_NAV.map(({ href, label, icon: Icon }) => {
                 const active = isAdminNavActive(href, pathname);
+                const isOrders = href === "/admin/orders";
                 return (
                   <Link
                     key={href}
@@ -125,6 +133,12 @@ export function AdminMobileNav() {
                   >
                     <Icon className="size-4 shrink-0" aria-hidden="true" />
                     {label}
+                    {isOrders ? (
+                      <AdminOrdersNavBadge
+                        initial={openOrderCounts}
+                        active={active}
+                      />
+                    ) : null}
                   </Link>
                 );
               })}

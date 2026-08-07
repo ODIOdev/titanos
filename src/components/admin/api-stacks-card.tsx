@@ -328,9 +328,9 @@ export function ApiStacksCard({
         aria-expanded={open}
         aria-controls="api-stacks-panel"
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full flex-wrap items-start justify-between gap-3 border-b border-border-gray bg-light-gray/40 px-5 py-4 text-left transition-colors hover:bg-light-gray/70"
+        className="flex w-full items-start justify-between gap-3 border-b border-border-gray bg-light-gray/40 px-5 py-4 text-left transition-colors hover:bg-light-gray/70"
       >
-        <div className="flex min-w-0 items-start gap-3">
+        <div className="flex min-w-0 flex-1 items-start gap-3">
           <span className="mt-0.5 inline-flex size-8 shrink-0 items-center justify-center rounded-sm bg-dark-charcoal text-white">
             <Activity className="size-4" aria-hidden="true" />
           </span>
@@ -371,7 +371,7 @@ export function ApiStacksCard({
         </div>
         <ChevronDown
           className={cn(
-            "mt-1 size-4 shrink-0 text-medium-gray transition-transform",
+            "mt-1 ml-auto size-4 shrink-0 text-medium-gray transition-transform",
             open && "rotate-180",
           )}
           aria-hidden="true"

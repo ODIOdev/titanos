@@ -9,16 +9,22 @@ import {
 import { AdminInventoryFilterBar } from "@/components/admin/admin-inventory-filter-bar";
 import { AdminInventoryProductsTable } from "@/components/admin/admin-inventory-products-table";
 import {
-  InventoryCategoryCards,
   type InventoryCategoryStat,
   type InventoryStockState,
 } from "@/components/admin/inventory-category-cards";
+import {
+  InventoryDepartmentCarousel,
+  type InventoryDepartmentStat,
+} from "@/components/admin/inventory-department-carousel";
+import { SuppliesInventoryCard } from "@/components/admin/supplies-inventory-card";
 import { Pagination } from "@/components/products/pagination";
 import {
   getAdminBrands,
   getAdminCategories,
+  getAdminDepartments,
   getAdminInventory,
 } from "@/lib/data/admin";
+import { getSuppliesInventory } from "@/lib/actions/supplies-inventory";
 import {
   INVENTORY_DEFAULT_SORT,
   parseInventorySort,
@@ -200,11 +206,14 @@ export default async function AdminInventoryPage({
     Number.parseInt(params.page ?? "1", 10) || 1,
   );
 
-  const [products, categories, brands] = await Promise.all([
-    getAdminInventory(),
-    getAdminCategories(),
-    getAdminBrands(),
-  ]);
+  const [products, categories, brands, departments, suppliesInventory] =
+    await Promise.all([
+      getAdminInventory(),
+      getAdminCategories(),
+      getAdminBrands(),
+      getAdminDepartments(),
+      getSuppliesInventory(),
+    ]);
 
   const totals = products.reduce(
     (acc, p) => {
@@ -218,6 +227,18 @@ export default async function AdminInventoryPage({
   );
 
   const categoryNames = new Map(categories.map((c) => [c.id, c.name]));
+  const categoryDepartments = new Map(
+    categories.map((c) => [
+      c.id,
+      (c.department ?? "").trim() || null,
+    ]),
+  );
+  const offlineDepartments = new Set(
+    departments
+      .filter((d) => d.source === "offline")
+      .map((d) => d.name.toLowerCase()),
+  );
+
   const statsById = new Map<string, InventoryCategoryStat>();
   for (const p of products) {
     const id = p.category_id ?? UNCATEGORIZED;
@@ -264,6 +285,64 @@ export default async function AdminInventoryPage({
   const categoryStats = [...statsById.values()].sort(
     (a, b) => b.skuCount - a.skuCount || a.name.localeCompare(b.name),
   );
+
+  const productDepartmentById = new Map(
+    products.map((p) => [p.id, p.department?.trim() || null] as const),
+  );
+
+  const deptStatsByKey = new Map<string, InventoryDepartmentStat>();
+  for (const cat of categoryStats) {
+    const fromCategory =
+      cat.id === UNCATEGORIZED ? null : categoryDepartments.get(cat.id);
+    const fromProducts = cat.products
+      .map((row) => productDepartmentById.get(row.id) ?? null)
+      .find(Boolean);
+    const deptName = fromCategory || fromProducts || "Unassigned";
+    const key = deptName.toLowerCase();
+    if (offlineDepartments.has(key)) continue;
+
+    let dept = deptStatsByKey.get(key);
+    if (!dept) {
+      dept = {
+        id: key,
+        name: deptName,
+        skuCount: 0,
+        units: 0,
+        value: 0,
+        ok: 0,
+        low: 0,
+        out: 0,
+        categoryCount: 0,
+        categories: [],
+      };
+      deptStatsByKey.set(key, dept);
+    }
+    dept.skuCount += cat.skuCount;
+    dept.units += cat.units;
+    dept.value += cat.value;
+    dept.ok += cat.ok;
+    dept.low += cat.low;
+    dept.out += cat.out;
+    dept.categoryCount += 1;
+    dept.categories.push(cat);
+  }
+
+  // Prefer catalog/custom department display names when available.
+  for (const d of departments) {
+    if (d.source === "offline") continue;
+    const key = d.name.toLowerCase();
+    const existing = deptStatsByKey.get(key);
+    if (existing) existing.name = d.name;
+  }
+
+  const departmentStats = [...deptStatsByKey.values()]
+    .filter((d) => d.skuCount > 0)
+    .sort(
+      (a, b) =>
+        b.units - a.units ||
+        b.skuCount - a.skuCount ||
+        a.name.localeCompare(b.name),
+    );
 
   const skuShare = (count: number) =>
     products.length === 0 ? 0 : (count / products.length) * 100;
@@ -323,6 +402,42 @@ export default async function AdminInventoryPage({
         ? categoryNames.get(categoryId)
         : null;
 
+  function toInventoryRow(p: Product) {
+    const state = stockState(p);
+    const qty = getProductStockQuantity(p);
+    const catalogStatus = getCatalogStatus(p);
+    return {
+      id: p.id,
+      name: p.name,
+      sku: p.sku,
+      imageUrl: productImageUrl(p),
+      brandName: p.brand?.name ?? null,
+      categoryName: p.category?.name ?? null,
+      price: Number(p.price ?? 0),
+      inventoryQuantity: qty,
+      lowStockThreshold: p.low_stock_threshold ?? 0,
+      stockBySize: formatProductStockBySize(p),
+      stockSizes: getProductStockBySize(p),
+      stockValue: stockValue(p),
+      stockState: state,
+      statusLabel:
+        catalogStatus === "active"
+          ? "Active"
+          : catalogStatus === "draft"
+            ? "Draft"
+            : "Archived",
+      statusVariant:
+        catalogStatus === "active"
+          ? ("success" as const)
+          : catalogStatus === "draft"
+            ? ("warning" as const)
+            : ("default" as const),
+      shortDescription: p.short_description,
+      editHref: withAdminReturn(`/admin/products/${p.id}`, "inventory"),
+      showReplenish: true,
+    };
+  }
+
   return (
     <div className="space-y-6">
       <section aria-labelledby="stock-health-heading">
@@ -332,7 +447,7 @@ export default async function AdminInventoryPage({
         <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
           <KpiCell
             href={buildHref({ ...filterState, stock: "all" })}
-            label="In stock"
+            label="Products in stock"
             value={String(totals.ok)}
             hint={`${totals.units.toLocaleString()} units on hand`}
             icon={PackageCheck}
@@ -400,18 +515,18 @@ export default async function AdminInventoryPage({
         </div>
       </section>
 
-      {categoryStats.length > 0 ? (
+      {departmentStats.length > 0 ? (
         <section>
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="font-heading text-base font-semibold uppercase tracking-wide text-dark-charcoal">
-              Stock by category
+              Stock by department
             </h2>
             <p className="text-sm text-medium-gray">
-              Select a card to view its products.
+              Select a department to browse its categories.
             </p>
           </div>
           <div className="mt-3">
-            <InventoryCategoryCards stats={categoryStats} />
+            <InventoryDepartmentCarousel departments={departmentStats} />
           </div>
         </section>
       ) : null}
@@ -441,7 +556,9 @@ export default async function AdminInventoryPage({
               id: c.id,
               name: c.name,
             }))}
-            brands={brands.map((b) => ({ id: b.id, name: b.name }))}
+            brands={brands
+              .filter((b) => b.active)
+              .map((b) => ({ id: b.id, name: b.name }))}
             hasFilters={hasFilters}
             clearHref="/admin/inventory"
           />
@@ -453,41 +570,7 @@ export default async function AdminInventoryPage({
               ? "No inventory rows match these filters."
               : "No inventory records."
           }
-          products={pageItems.map((p) => {
-            const state = stockState(p);
-            const qty = getProductStockQuantity(p);
-            const catalogStatus = getCatalogStatus(p);
-            return {
-              id: p.id,
-              name: p.name,
-              sku: p.sku,
-              imageUrl: productImageUrl(p),
-              brandName: p.brand?.name ?? null,
-              categoryName: p.category?.name ?? null,
-              price: Number(p.price ?? 0),
-              inventoryQuantity: qty,
-              lowStockThreshold: p.low_stock_threshold ?? 0,
-              stockBySize: formatProductStockBySize(p),
-              stockSizes: getProductStockBySize(p),
-              stockValue: stockValue(p),
-              stockState: state,
-              statusLabel:
-                catalogStatus === "active"
-                  ? "Active"
-                  : catalogStatus === "draft"
-                    ? "Draft"
-                    : "Archived",
-              statusVariant:
-                catalogStatus === "active"
-                  ? ("success" as const)
-                  : catalogStatus === "draft"
-                    ? ("warning" as const)
-                    : ("default" as const),
-              shortDescription: p.short_description,
-              editHref: withAdminReturn(`/admin/products/${p.id}`, "inventory"),
-              showReplenish: true,
-            };
-          })}
+          products={pageItems.map(toInventoryRow)}
         />
 
         {totalPages > 1 ? (
@@ -510,6 +593,8 @@ export default async function AdminInventoryPage({
           </div>
         ) : null}
       </section>
+
+      <SuppliesInventoryCard inventory={suppliesInventory} />
     </div>
   );
 }

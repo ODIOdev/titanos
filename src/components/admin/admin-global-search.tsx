@@ -36,8 +36,8 @@ const TYPE_META: Record<
 const QUICK_LINKS = [
   { label: "Products", href: "/admin/products", icon: Package },
   { label: "Orders", href: "/admin/orders", icon: ShoppingBag },
-  { label: "Customers", href: "/admin/customers", icon: Users },
-  { label: "Dept./ Categories", href: "/admin/categories", icon: FolderTree },
+  { label: "Users", href: "/admin/users", icon: Users },
+  { label: "Products/ Categories", href: "/admin/categories", icon: FolderTree },
 ] as const;
 
 /** Global admin header search with live typeahead results. */

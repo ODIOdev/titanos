@@ -2,10 +2,12 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { ShoppingBag, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { QuantitySelector } from "@/components/products/quantity-selector";
+import { PaymentMethodLogos } from "@/components/shared/payment-method-logos";
 import { useCart } from "@/components/providers/cart-provider";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -21,6 +23,7 @@ const STANDARD_SHIPPING = 12.99;
 const TAX_RATE = 0.08;
 
 export default function CartPage() {
+  const router = useRouter();
   const {
     items,
     subtotal,
@@ -30,7 +33,6 @@ export default function CartPage() {
     isHydrated,
     itemCount,
   } = useCart();
-  const [checkingOut, setCheckingOut] = useState(false);
 
   const shipping =
     subtotal <= 0
@@ -42,46 +44,9 @@ export default function CartPage() {
   const total = subtotal + shipping + tax;
   const remaining = getFreeShippingRemaining(subtotal, FREE_SHIPPING_THRESHOLD);
   const progress = useMemo(
-    () =>
-      Math.min(100, (subtotal / FREE_SHIPPING_THRESHOLD) * 100),
+    () => Math.min(100, (subtotal / FREE_SHIPPING_THRESHOLD) * 100),
     [subtotal],
   );
-
-  async function handleCheckout() {
-    if (items.length === 0) return;
-    setCheckingOut(true);
-    try {
-      const response = await fetch("/api/checkout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          items: items.map((item) => ({
-            productId: item.product_id,
-            quantity: item.quantity,
-          })),
-        }),
-      });
-
-      const data = (await response.json().catch(() => null)) as {
-        url?: string;
-        error?: string;
-        message?: string;
-      } | null;
-
-      if (!response.ok || !data?.url) {
-        toast.error(
-          data?.error ?? data?.message ?? "Checkout failed. Please try again.",
-        );
-        return;
-      }
-
-      window.location.href = data.url;
-    } catch {
-      toast.error("Checkout failed. Please try again.");
-    } finally {
-      setCheckingOut(false);
-    }
-  }
 
   if (!isHydrated) {
     return (
@@ -139,7 +104,7 @@ export default function CartPage() {
               </button>
             </div>
 
-            <ul className="divide-y divide-border-gray border border-border-gray rounded-sm bg-white">
+            <ul className="divide-y divide-border-gray rounded-sm border border-border-gray bg-white">
               {items.map((item) => {
                 const product = item.product;
                 const image =
@@ -280,11 +245,17 @@ export default function CartPage() {
               variant="primary"
               size="lg"
               className="w-full"
-              disabled={checkingOut}
-              onClick={handleCheckout}
+              onClick={() => router.push("/checkout")}
             >
-              {checkingOut ? "Redirecting…" : "Checkout"}
+              Checkout
             </Button>
+
+            <div>
+              <p className="mb-2 text-center text-[0.65rem] font-semibold uppercase tracking-wide text-medium-gray">
+                We accept
+              </p>
+              <PaymentMethodLogos className="justify-center" />
+            </div>
 
             <Link
               href="/shop"

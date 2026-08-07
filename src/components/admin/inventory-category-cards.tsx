@@ -384,3 +384,34 @@ export function InventoryCategoryCards({
     </>
   );
 }
+
+/** Category grid for embedding (e.g. department popup). */
+export function InventoryCategoryCardsGrid({
+  stats,
+  onOpenCategory,
+}: {
+  stats: InventoryCategoryStat[];
+  onOpenCategory: (stat: InventoryCategoryStat) => void;
+}) {
+  if (stats.length === 0) {
+    return (
+      <p className="py-8 text-center text-sm text-medium-gray">
+        No categories in this department.
+      </p>
+    );
+  }
+
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {stats.map((stat) => (
+        <CategoryCard
+          key={stat.id}
+          stat={stat}
+          onOpen={() => onOpenCategory(stat)}
+        />
+      ))}
+    </div>
+  );
+}
+
+export { CategoryProductsDialog };

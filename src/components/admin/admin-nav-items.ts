@@ -1,32 +1,28 @@
 import {
-  BadgePercent,
   ChartColumnBig,
   ClipboardList,
-  FileText,
   FolderTree,
   LayoutDashboard,
-  Package,
   Settings,
   ShoppingBag,
   Tags,
-  UserCog,
+  Truck,
   Users,
+  Wallet,
   Warehouse,
 } from "lucide-react";
 
 /** Shared by the desktop sidebar and the mobile drawer. */
 export const ADMIN_NAV = [
   { href: "/admin", label: "Overview", icon: LayoutDashboard },
-  { href: "/admin/products", label: "Products", icon: Package },
-  { href: "/admin/categories", label: "Dept./ Categories", icon: FolderTree },
+  { href: "/admin/wallet", label: "Wallet", icon: Wallet },
+  { href: "/admin/categories", label: "Products/ Categories", icon: FolderTree },
   { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
-  { href: "/admin/customers", label: "Customers", icon: Users },
-  { href: "/admin/members", label: "Members", icon: UserCog },
-  { href: "/admin/affiliates", label: "Affiliates", icon: BadgePercent },
+  { href: "/admin/users", label: "Users", icon: Users },
   { href: "/admin/quotes", label: "Quotes", icon: ClipboardList },
   { href: "/admin/inventory", label: "Inventory", icon: Warehouse },
   { href: "/admin/brands", label: "Brands", icon: Tags },
-  { href: "/admin/resources", label: "Resources", icon: FileText },
+  { href: "/admin/supplier", label: "Supplier", icon: Truck },
   {
     href: "/admin/analytics",
     label: "Analytics & Reports",
@@ -36,5 +32,22 @@ export const ADMIN_NAV = [
 ] as const;
 
 export function isAdminNavActive(href: string, pathname: string): boolean {
-  return href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
+  if (href === "/admin") return pathname === "/admin";
+  // Products lives under Products/ Categories — keep that nav item active on SKU pages.
+  if (href === "/admin/categories") {
+    return (
+      pathname.startsWith("/admin/categories") ||
+      pathname.startsWith("/admin/products")
+    );
+  }
+  // Users directory covers customers, team members, and affiliates.
+  if (href === "/admin/users") {
+    return (
+      pathname.startsWith("/admin/users") ||
+      pathname.startsWith("/admin/customers") ||
+      pathname.startsWith("/admin/members") ||
+      pathname.startsWith("/admin/affiliates")
+    );
+  }
+  return pathname.startsWith(href);
 }

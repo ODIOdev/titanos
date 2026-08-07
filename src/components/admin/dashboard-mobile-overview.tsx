@@ -10,11 +10,12 @@ import {
   Receipt,
   ShoppingBag,
   Users,
+  Wallet,
   Warehouse,
   type LucideIcon,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { cn, formatCurrency, formatDate } from "@/lib/utils";
+import { OrderStatusBadge } from "@/components/admin/order-status-badge";
+import { cn, formatCurrency, formatDateTime } from "@/lib/utils";
 
 type AttentionTone = "orange" | "red" | "blue";
 type AttentionKind = "quotes" | "stock" | "orders";
@@ -79,12 +80,13 @@ const QUICK_ACTIONS: {
   label: string;
   icon: LucideIcon;
 }[] = [
+  { href: "/admin/wallet", label: "Wallet", icon: Wallet },
   { href: "/admin/orders", label: "Orders", icon: ShoppingBag },
   { href: "/admin/quotes", label: "Quotes", icon: ClipboardList },
   { href: "/admin/inventory", label: "Stock", icon: Warehouse },
   { href: "/admin/products/new", label: "Add SKU", icon: PackagePlus },
   { href: "/admin/products", label: "Catalog", icon: Package },
-  { href: "/admin/customers", label: "Customers", icon: Users },
+  { href: "/admin/users", label: "Users", icon: Users },
 ];
 
 const TONE_STYLES = {
@@ -318,14 +320,15 @@ export function DashboardMobileOverview({
                     </span>
                     <span className="flex min-w-0 items-center justify-between gap-2">
                       <span className="min-w-0 truncate text-[0.65rem] text-medium-gray">
-                        {order.email} · {formatDate(order.created_at)}
+                        {order.email}
                       </span>
-                      <Badge
-                        variant="default"
+                      <OrderStatusBadge
+                        status={order.status}
                         className="max-w-[6.5rem] shrink-0 truncate"
-                      >
-                        {order.status}
-                      </Badge>
+                      />
+                    </span>
+                    <span className="text-[0.65rem] tabular-nums text-medium-gray">
+                      Ordered {formatDateTime(order.created_at)}
                     </span>
                   </Link>
                 </li>

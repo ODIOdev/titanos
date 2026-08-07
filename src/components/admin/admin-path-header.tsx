@@ -52,12 +52,17 @@ const TITLES: RouteMeta[] = [
   },
   {
     match: /^\/admin\/categories$/,
-    title: "Dept./ Categories",
+    title: "Products/ Categories",
+  },
+  {
+    match: /^\/admin\/users$/,
+    title: "Users",
+    description: "Customers, team, and affiliates",
   },
   {
     match: /^\/admin\/members\/new$/,
     title: "New member",
-    back: () => ({ href: "/admin/members", label: "Back to members" }),
+    back: () => ({ href: "/admin/users?tab=members", label: "Back to users" }),
   },
   {
     match: /^\/admin\/members\/([^/]+)\/edit$/,
@@ -66,23 +71,13 @@ const TITLES: RouteMeta[] = [
       const id = pathname.split("/")[3];
       return id
         ? { href: `/admin/members/${id}`, label: "Back to member" }
-        : { href: "/admin/members", label: "Back to members" };
+        : { href: "/admin/users?tab=members", label: "Back to users" };
     },
   },
   {
     match: /^\/admin\/members\/[^/]+$/,
     title: "Member details",
-    back: () => ({ href: "/admin/members", label: "Back to members" }),
-  },
-  {
-    match: /^\/admin\/members$/,
-    title: "Members",
-    description: "Admin team access",
-  },
-  {
-    match: /^\/admin\/affiliates$/,
-    title: "Affiliates",
-    description: "Promo code partners and redemptions",
+    back: () => ({ href: "/admin/users?tab=members", label: "Back to users" }),
   },
   {
     match: /^\/admin\/orders\/new$/,
@@ -108,15 +103,17 @@ const TITLES: RouteMeta[] = [
       const id = pathname.split("/")[3];
       return id
         ? { href: `/admin/customers/${id}`, label: "Back to customer" }
-        : { href: "/admin/customers", label: "Back to customers" };
+        : { href: "/admin/users?tab=customers", label: "Back to users" };
     },
   },
   {
     match: /^\/admin\/customers\/[^/]+$/,
     title: "Customer details",
-    back: () => ({ href: "/admin/customers", label: "Back to customers" }),
+    back: () => ({
+      href: "/admin/users?tab=customers",
+      label: "Back to users",
+    }),
   },
-  { match: /^\/admin\/customers$/, title: "Customers" },
   {
     match: /^\/admin\/quotes\/[^/]+$/,
     title: "Quote review",
@@ -145,9 +142,19 @@ const TITLES: RouteMeta[] = [
   {
     match: /^\/admin\/analytics$/,
     title: "Analytics & reports",
-    description: "Sales performance, product mix, and exports",
+    description: "Revenue pulse, category mix, and exports",
+  },
+  {
+    match: /^\/admin\/wallet$/,
+    title: "Wallet",
+    description: "Budget journal, cash flow, and P&L",
   },
   { match: /^\/admin\/resources$/, title: "Resources" },
+  {
+    match: /^\/admin\/supplier$/,
+    title: "Supplier",
+    description: "Buy products and supplies with wallet balance",
+  },
   { match: /^\/admin\/settings$/, title: "Settings" },
   {
     match: /^\/admin$/,

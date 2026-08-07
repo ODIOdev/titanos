@@ -33,6 +33,8 @@ type AdminProductPreviewDialogProps = {
   product: AdminProductPreview | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Compact overlay for dense surfaces like order line items. */
+  size?: "default" | "sm";
 };
 
 function Detail({
@@ -58,6 +60,7 @@ export function AdminProductPreviewDialog({
   product,
   open,
   onOpenChange,
+  size = "default",
 }: AdminProductPreviewDialogProps) {
   if (!product) return null;
 
@@ -65,6 +68,7 @@ export function AdminProductPreviewDialog({
     product.inventoryQuantity > 0 &&
     product.inventoryQuantity <= product.lowStockThreshold;
   const out = product.inventoryQuantity <= 0;
+  const compact = size === "sm";
 
   return (
     <Dialog
@@ -72,17 +76,22 @@ export function AdminProductPreviewDialog({
       onOpenChange={onOpenChange}
       title={product.name}
       description={[product.sku, product.brandName].filter(Boolean).join(" · ")}
-      className="max-w-xl"
+      className={compact ? "max-w-md" : "max-w-xl"}
     >
-      <div className="space-y-4">
-        <div className="flex gap-4">
-          <div className="relative size-24 shrink-0 overflow-hidden rounded-sm border border-border-gray bg-light-gray sm:size-28">
+      <div className={cn("space-y-4", compact && "space-y-3")}>
+        <div className="flex gap-3 sm:gap-4">
+          <div
+            className={cn(
+              "relative shrink-0 overflow-hidden rounded-sm border border-border-gray bg-light-gray",
+              compact ? "size-20" : "size-24 sm:size-28",
+            )}
+          >
             <Image
               src={product.imageUrl}
               alt=""
               fill
               className="object-cover"
-              sizes="112px"
+              sizes={compact ? "80px" : "112px"}
               unoptimized={
                 product.imageUrl.startsWith("data:") ||
                 product.imageUrl.startsWith("blob:")
@@ -92,14 +101,21 @@ export function AdminProductPreviewDialog({
           <div className="min-w-0 flex-1 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={product.statusVariant}>{product.statusLabel}</Badge>
-              {out ? (
-                <Badge variant="warning">Out of stock</Badge>
-              ) : low ? (
-                <Badge variant="warning">Low stock</Badge>
+              {product.showReplenish !== false ? (
+                out ? (
+                  <Badge variant="warning">Out of stock</Badge>
+                ) : low ? (
+                  <Badge variant="warning">Low stock</Badge>
+                ) : null
               ) : null}
             </div>
             {product.shortDescription ? (
-              <p className="line-clamp-3 text-sm text-medium-gray">
+              <p
+                className={cn(
+                  "text-sm text-medium-gray",
+                  compact ? "line-clamp-2" : "line-clamp-3",
+                )}
+              >
                 {product.shortDescription}
               </p>
             ) : (
@@ -110,7 +126,12 @@ export function AdminProductPreviewDialog({
           </div>
         </div>
 
-        <dl className="grid grid-cols-2 gap-3 rounded-sm border border-border-gray bg-light-gray/40 p-3 sm:grid-cols-3">
+        <dl
+          className={cn(
+            "grid gap-3 rounded-sm border border-border-gray bg-light-gray/40 p-3",
+            compact ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3",
+          )}
+        >
           <Detail label="Price">{formatCurrency(product.price)}</Detail>
           <Detail label="On hand">
             <span
@@ -123,15 +144,17 @@ export function AdminProductPreviewDialog({
               {product.inventoryQuantity.toLocaleString()}
             </span>
           </Detail>
-          <Detail label="Threshold">
-            <span className="tabular-nums">{product.lowStockThreshold}</span>
-          </Detail>
+          {!compact ? (
+            <Detail label="Threshold">
+              <span className="tabular-nums">{product.lowStockThreshold}</span>
+            </Detail>
+          ) : null}
           <Detail label="Category">{product.categoryName ?? "—"}</Detail>
           <Detail label="Brand">{product.brandName ?? "—"}</Detail>
           <Detail label="SKU">
             <span className="font-mono text-xs">{product.sku}</span>
           </Detail>
-          {product.stockSizes && product.stockSizes.length > 0 ? (
+          {!compact && product.stockSizes && product.stockSizes.length > 0 ? (
             <Detail label="By size" className="col-span-2 sm:col-span-3">
               <ul className="flex flex-wrap gap-1.5">
                 {product.stockSizes.map((row) => (
@@ -145,7 +168,7 @@ export function AdminProductPreviewDialog({
                 ))}
               </ul>
             </Detail>
-          ) : product.stockBySize ? (
+          ) : !compact && product.stockBySize ? (
             <Detail label="By size" className="col-span-2 sm:col-span-3">
               <span className="text-xs tabular-nums text-medium-gray">
                 {product.stockBySize}
@@ -154,7 +177,7 @@ export function AdminProductPreviewDialog({
           ) : null}
         </dl>
 
-        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border-gray pt-4">
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border-gray pt-3">
           <Button
             type="button"
             variant="outline"
@@ -170,12 +193,14 @@ export function AdminProductPreviewDialog({
               currentQty={product.inventoryQuantity}
             />
           ) : null}
-          <Link
-            href={product.editHref}
-            className="inline-flex h-8 items-center rounded-sm bg-titan-yellow px-3 text-xs font-semibold uppercase tracking-wide text-dark-charcoal hover:bg-[#e0b400]"
-          >
-            Edit product
-          </Link>
+          {product.editHref ? (
+            <Link
+              href={product.editHref}
+              className="inline-flex h-8 items-center rounded-sm bg-titan-yellow px-3 text-xs font-semibold uppercase tracking-wide text-dark-charcoal hover:bg-[#e0b400]"
+            >
+              Edit product
+            </Link>
+          ) : null}
         </div>
       </div>
     </Dialog>

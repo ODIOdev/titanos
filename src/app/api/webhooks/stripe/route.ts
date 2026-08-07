@@ -1,10 +1,22 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import type Stripe from "stripe";
+import {
+  deductStockForOrder,
+  restoreStockForOrder,
+} from "@/lib/catalog/inventory";
 import { getStripe, isStripeConfigured } from "@/lib/stripe";
 import { createServiceClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 
 export const runtime = "nodejs";
+
+function revalidateInventoryPaths() {
+  revalidatePath("/shop");
+  revalidatePath("/admin/inventory");
+  revalidatePath("/admin/products");
+  revalidatePath("/admin/orders");
+}
 
 async function markOrderPaid(session: Stripe.Checkout.Session) {
   if (!isSupabaseConfigured()) return;
@@ -19,11 +31,6 @@ async function markOrderPaid(session: Stripe.Checkout.Session) {
 
   if (!existing) return;
   if (existing.status === "paid" || existing.status === "processing") return;
-
-  const { data: items } = await supabase
-    .from("order_items")
-    .select("*")
-    .eq("order_id", existing.id);
 
   await supabase
     .from("orders")
@@ -44,27 +51,12 @@ async function markOrderPaid(session: Stripe.Checkout.Session) {
     notes: "Payment confirmed via Stripe webhook",
   });
 
-  for (const item of items ?? []) {
-    if (!item.product_id) continue;
-    const { data: product } = await supabase
-      .from("products")
-      .select("inventory_quantity")
-      .eq("id", item.product_id)
-      .single();
-    if (!product) continue;
-    const nextQty = Math.max(0, Number(product.inventory_quantity) - item.quantity);
-    await supabase
-      .from("products")
-      .update({ inventory_quantity: nextQty })
-      .eq("id", item.product_id);
-    await supabase.from("inventory_movements").insert({
-      product_id: item.product_id,
-      quantity_change: -item.quantity,
-      reason: "sale",
-      reference_type: "order",
-      reference_id: existing.id,
-    });
-  }
+  await deductStockForOrder(
+    supabase,
+    existing.id,
+    "Stripe checkout payment",
+  );
+  revalidateInventoryPaths();
 
   if (existing.user_id) {
     const { data: cart } = await supabase
@@ -111,6 +103,13 @@ async function markOrderRefunded(charge: Stripe.Charge) {
     status: "refunded",
     notes: "Charge refunded via Stripe",
   });
+  await restoreStockForOrder(
+    supabase,
+    order.id,
+    "refund",
+    "Stripe charge refunded",
+  );
+  revalidateInventoryPaths();
 }
 
 export async function POST(request: Request) {
@@ -149,7 +148,7 @@ export async function POST(request: Request) {
         const supabase = createServiceClient();
         await supabase
           .from("orders")
-          .update({ payment_status: "failed" })
+          .update({ payment_status: "declined" })
           .eq("stripe_payment_intent_id", pi.id);
       }
       break;

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
+import { ClearCartOnSuccess } from "@/components/checkout/clear-cart-on-success";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { buttonVariants } from "@/components/ui/button";
 import { SITE_CONFIG } from "@/lib/data/seed-data";
@@ -30,6 +31,7 @@ export default async function CheckoutSuccessPage({
 
   return (
     <div className="container-titan py-8 lg:py-12">
+      <ClearCartOnSuccess />
       <Breadcrumbs
         className="mb-6"
         items={[

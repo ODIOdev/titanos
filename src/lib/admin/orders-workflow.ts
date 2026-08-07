@@ -27,7 +27,7 @@ export const ORDER_PIPELINE: OrderPipelineStage[] = [
     id: "pending",
     label: "New",
     shortLabel: "New",
-    description: "Awaiting payment",
+    description: "Confirmation of order",
     icon: CreditCard,
     statusParam: "pending",
     tone: "bg-orange-100 text-orange-800",
@@ -94,7 +94,7 @@ const NEXT_STATUS: Partial<Record<OrderStatus, OrderStatus>> = {
 };
 
 const NEXT_ACTION_LABEL: Partial<Record<OrderStatus, string>> = {
-  pending: "Mark paid",
+  pending: "Confirm order",
   paid: "Start processing",
   processing: "Mark shipped",
   shipped: "Mark delivered",

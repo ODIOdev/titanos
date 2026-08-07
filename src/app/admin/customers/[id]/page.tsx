@@ -166,13 +166,32 @@ export default async function AdminCustomerDetailPage({
                   <Badge key={`${order.id}-status`} className="capitalize">
                     {order.status}
                   </Badge>,
-                  <span key={`${order.id}-total`}>
+                  <span
+                    key={`${order.id}-total`}
+                    className="font-semibold tabular-nums"
+                  >
                     {formatCurrency(order.total)}
                   </span>,
                   <span key={`${order.id}-date`}>
                     {formatDate(order.created_at)}
                   </span>,
                 ])}
+                footer={
+                  customer.orders.length > 0
+                    ? [
+                        <span key="ft-label" className="uppercase tracking-wide">
+                          Grand total
+                        </span>,
+                        <span key="ft-status" className="text-medium-gray">
+                          {customer.orders_count} counted
+                        </span>,
+                        <span key="ft-total" className="tabular-nums">
+                          {formatCurrency(customer.total_spent)}
+                        </span>,
+                        <span key="ft-date" />,
+                      ]
+                    : null
+                }
               />
             </div>
           </div>

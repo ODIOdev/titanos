@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { AccountNav } from "@/components/account/account-nav";
 import { HomeButton } from "@/components/layout/home-button";
 import { MaintenanceScreen } from "@/components/layout/maintenance-screen";
-import { SupportChat } from "@/components/support/support-chat";
+import { SupportChatLazy } from "@/components/support/support-chat-lazy";
 import { getMaintenanceSettings } from "@/lib/data/maintenance";
+import { getSupportChatSettings } from "@/lib/data/support-chat-settings";
 
 async function getAccountUser() {
   if (!isSupabaseConfigured()) {
@@ -56,7 +57,10 @@ export default async function AccountLayout({
     redirect("/admin");
   }
 
-  const maintenance = await getMaintenanceSettings();
+  const [maintenance, supportChat] = await Promise.all([
+    getMaintenanceSettings(),
+    getSupportChatSettings(),
+  ]);
   if (maintenance.enabled) {
     return <MaintenanceScreen settings={maintenance} />;
   }
@@ -121,7 +125,7 @@ export default async function AccountLayout({
         </div>
       </div>
 
-      <SupportChat />
+      <SupportChatLazy settings={supportChat} />
     </div>
   );
 }

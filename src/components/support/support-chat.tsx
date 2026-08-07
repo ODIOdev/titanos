@@ -2,10 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Headphones, MessageCircle, Send, X } from "lucide-react";
+import { Bot, Headphones, MessageCircle, Send, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { FREE_SHIPPING_THRESHOLD, SITE_CONFIG } from "@/lib/data/seed-data";
-import { SUPPORT_HOURS_LABEL, isSupportOpen } from "@/lib/support/hours";
+import type { SupportChatSettings } from "@/lib/data/support-chat-settings-shared";
+import { DEFAULT_SUPPORT_CHAT } from "@/lib/data/support-chat-settings-shared";
+import { isSupportOpen } from "@/lib/support/hours";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "titan-support-chat";
@@ -17,12 +19,6 @@ type ChatMessage = {
   role: "agent" | "user";
   text: string;
   links?: ChatLink[];
-};
-
-const GREETING: ChatMessage = {
-  id: "greeting",
-  role: "agent",
-  text: `Hi! You're chatting with ${SITE_CONFIG.shortName} support. Pick a topic or send us a message and we'll help you out.`,
 };
 
 const TOPICS: { label: string; reply: string; links?: ChatLink[] }[] = [
@@ -57,48 +53,86 @@ const TOPICS: { label: string; reply: string; links?: ChatLink[] }[] = [
   },
 ];
 
-/** Safe during render: the thread only renders once the panel is opened. */
-function readStoredThread(): ChatMessage[] {
-  if (typeof window === "undefined") return [GREETING];
+function resolveOnline(
+  presence: SupportChatSettings["presence"],
+  scheduleOpen: boolean,
+) {
+  if (presence === "online") return true;
+  if (presence === "offline") return false;
+  return scheduleOpen;
+}
+
+function greetingMessage(text: string): ChatMessage {
+  return { id: "greeting", role: "agent", text };
+}
+
+function readStoredThread(fallback: string): ChatMessage[] {
+  if (typeof window === "undefined") return [greetingMessage(fallback)];
   try {
     const raw = window.sessionStorage.getItem(STORAGE_KEY);
     const parsed = raw ? (JSON.parse(raw) as unknown) : null;
     return Array.isArray(parsed) && parsed.length
       ? (parsed as ChatMessage[])
-      : [GREETING];
+      : [greetingMessage(fallback)];
   } catch {
-    return [GREETING];
+    return [greetingMessage(fallback)];
   }
 }
 
-export function SupportChat() {
-  const [open, setOpen] = useState(false);
-  // Restored from sessionStorage so the conversation survives a refresh.
-  const [messages, setMessages] = useState<ChatMessage[]>(readStoredThread);
+export function SupportChat({
+  initialOpen = false,
+  settings = DEFAULT_SUPPORT_CHAT,
+}: {
+  initialOpen?: boolean;
+  settings?: SupportChatSettings;
+}) {
+  const [open, setOpen] = useState(initialOpen);
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    greetingMessage(settings.greeting),
+  ]);
   const [input, setInput] = useState("");
-  const [online, setOnline] = useState(false);
+  const [online, setOnline] = useState(() =>
+    resolveOnline(settings.presence, false),
+  );
+  const [hydrated, setHydrated] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Sampled off the clock and refreshed each minute so the badge flips when
-  // support opens or closes while the page stays put.
   useEffect(() => {
-    const sync = () => setOnline(isSupportOpen());
-    const first = window.setTimeout(sync, 0);
-    const interval = window.setInterval(sync, 60_000);
-    return () => {
-      window.clearTimeout(first);
-      window.clearInterval(interval);
-    };
-  }, []);
+    if (!open || hydrated) return;
+    setMessages(readStoredThread(settings.greeting));
+    setOnline(
+      resolveOnline(settings.presence, isSupportOpen(new Date(), settings.schedule)),
+    );
+    setHydrated(true);
+  }, [open, hydrated, settings.greeting, settings.presence, settings.schedule]);
 
   useEffect(() => {
+    if (!hydrated) return;
+    if (settings.presence !== "auto") {
+      setOnline(settings.presence === "online");
+      return;
+    }
+    const sync = () =>
+      setOnline(
+        resolveOnline(
+          settings.presence,
+          isSupportOpen(new Date(), settings.schedule),
+        ),
+      );
+    sync();
+    const interval = window.setInterval(sync, 60_000);
+    return () => window.clearInterval(interval);
+  }, [hydrated, settings.presence, settings.schedule]);
+
+  useEffect(() => {
+    if (!hydrated) return;
     try {
       window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(messages));
     } catch {
       // Storage unavailable (private mode) — the chat still works in memory.
     }
-  }, [messages]);
+  }, [messages, hydrated]);
 
   useEffect(() => {
     if (!open) return;
@@ -118,7 +152,6 @@ export function SupportChat() {
     return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [open]);
 
-  /** Ids come from the thread length so they stay stable across re-renders. */
   function exchange(userText: string, reply: Omit<ChatMessage, "id" | "role">) {
     setMessages((prev) => [
       ...prev,
@@ -128,7 +161,10 @@ export function SupportChat() {
   }
 
   function pickTopic(topic: (typeof TOPICS)[number]) {
-    exchange(topic.label, { text: topic.reply, links: topic.links });
+    const text = settings.aiEnabled
+      ? `Here's a quick answer: ${topic.reply}`
+      : topic.reply;
+    exchange(topic.label, { text, links: topic.links });
     inputRef.current?.focus();
   }
 
@@ -137,10 +173,27 @@ export function SupportChat() {
     if (!text) return;
 
     setInput("");
+    if (settings.aiEnabled) {
+      exchange(text, {
+        text: online
+          ? `Got it. Based on what you asked, start with our catalog or quote form — or call ${SITE_CONFIG.phoneDisplay} if you need a specialist on the line.`
+          : `Thanks — I'm offline for live handoff right now (${settings.hoursLabel}). Email ${SITE_CONFIG.supportEmail} and the team will follow up.`,
+        links: [
+          { label: "Browse catalog", href: "/shop" },
+          { label: "Request a quote", href: "/quote" },
+          {
+            label: "Email support",
+            href: `mailto:${SITE_CONFIG.supportEmail}`,
+          },
+        ],
+      });
+      return;
+    }
+
     exchange(text, {
       text: online
         ? `Thanks — a specialist is picking this up now. If you'd rather talk it through, call ${SITE_CONFIG.phoneDisplay}.`
-        : `Thanks! We're offline right now (${SUPPORT_HOURS_LABEL}). Send this to ${SITE_CONFIG.supportEmail} and we'll reply first thing.`,
+        : `Thanks! We're offline right now (${settings.hoursLabel}). Send this to ${SITE_CONFIG.supportEmail} and we'll reply first thing.`,
       links: [
         { label: "Email support", href: `mailto:${SITE_CONFIG.supportEmail}` },
         { label: "Request a quote", href: "/quote" },
@@ -153,6 +206,11 @@ export function SupportChat() {
   const panelBottom =
     "calc(4.25rem + var(--phone-safe-bottom, 0px) + env(safe-area-inset-bottom, 0px))";
 
+  const title = settings.aiEnabled
+    ? `${SITE_CONFIG.shortName} AI Support`
+    : `${SITE_CONFIG.shortName} Support`;
+  const TitleIcon = settings.aiEnabled ? Bot : Headphones;
+
   return (
     <>
       <button
@@ -160,44 +218,19 @@ export function SupportChat() {
         onClick={() => setOpen((prev) => !prev)}
         aria-expanded={open}
         aria-label={open ? "Close support chat" : "Open support chat"}
-        className={cn(
-          "support-chat-launcher fixed z-50 inline-flex size-14 items-center justify-center rounded-full bg-titan-yellow text-dark-charcoal transition-[transform,box-shadow,background-color] duration-200",
-          "hover:bg-[#ffd21f] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-charcoal focus-visible:ring-offset-2",
-          "@3xl:size-16",
-          !open && "support-chat-launcher--float",
-        )}
+        className="support-chat-launcher fixed z-50 inline-flex size-12 items-center justify-center rounded-full bg-titan-yellow text-dark-charcoal shadow-[0_8px_24px_rgba(16,24,32,0.28),0_0_0_3px_rgba(245,196,0,0.35)] transition-[background-color,box-shadow] hover:bg-[#e0b400] hover:shadow-[0_10px_28px_rgba(16,24,32,0.32),0_0_0_4px_rgba(245,196,0,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-dark-charcoal focus-visible:ring-offset-2 @3xl:size-14"
         style={{ bottom: safeBottom }}
       >
-        {!open ? (
-          <>
-            <span className="support-chat-launcher-ring" aria-hidden="true" />
-            <span
-              className="support-chat-launcher-ring support-chat-launcher-ring--delay"
-              aria-hidden="true"
-            />
-          </>
-        ) : null}
-        <span className="relative z-10 inline-flex items-center justify-center">
-          {open ? (
-            <X className="size-6 @3xl:size-7" aria-hidden="true" />
-          ) : (
-            <MessageCircle className="size-6 @3xl:size-7" aria-hidden="true" />
-          )}
-        </span>
+        {open ? (
+          <X className="size-5 @3xl:size-6" aria-hidden="true" />
+        ) : (
+          <MessageCircle className="size-5 @3xl:size-6" aria-hidden="true" />
+        )}
         {!open && online ? (
           <span
-            className="absolute top-1 right-1 z-10 size-3.5 rounded-full border-2 border-white bg-success-green shadow-[0_0_0_3px_rgba(245,196,0,0.55)]"
+            className="absolute top-1 right-1 size-3 rounded-full border-2 border-white bg-success-green"
             aria-hidden="true"
           />
-        ) : null}
-        {!open ? (
-          <span className="pointer-events-none absolute -top-9 right-0 hidden whitespace-nowrap rounded-sm bg-dark-charcoal px-2.5 py-1 text-[10px] font-semibold tracking-wide text-white uppercase shadow-md @3xl:inline-block">
-            Need help?
-            <span
-              className="absolute top-full right-4 border-4 border-transparent border-t-dark-charcoal"
-              aria-hidden="true"
-            />
-          </span>
         ) : null}
       </button>
 
@@ -210,21 +243,23 @@ export function SupportChat() {
         >
           <header className="flex items-start gap-3 border-b border-white/10 bg-dark-charcoal px-4 py-3.5">
             <span className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-titan-yellow text-dark-charcoal">
-              <Headphones className="size-4.5" aria-hidden="true" />
+              <TitleIcon className="size-4.5" aria-hidden="true" />
             </span>
             <div className="min-w-0 flex-1">
               <p className="font-heading text-sm font-semibold uppercase tracking-wide text-white">
-                {SITE_CONFIG.shortName} Support
+                {title}
               </p>
               <p className="mt-0.5 flex items-center gap-1.5 text-xs text-white/70">
                 <span
                   className={cn(
-                    "size-2 rounded-full",
+                    "size-2 shrink-0 rounded-full",
                     online ? "bg-success-green" : "bg-medium-gray",
                   )}
                   aria-hidden="true"
                 />
-                {online ? "Online now" : "Offline"} · {SUPPORT_HOURS_LABEL}
+                <span>
+                  {online ? "Online now" : "Offline"} · {settings.hoursLabel}
+                </span>
               </p>
             </div>
             <button
@@ -259,15 +294,15 @@ export function SupportChat() {
                         {link.href.startsWith("mailto:") ? (
                           <a
                             href={link.href}
-                            className="inline-flex rounded-sm border border-border-gray bg-light-gray px-2 py-1 text-xs font-medium text-dark-charcoal transition-colors hover:border-dark-charcoal"
+                            className="inline-flex rounded-sm border border-border-gray bg-light-gray px-2 py-0.5 text-xs font-medium text-dark-charcoal hover:border-dark-charcoal"
                           >
                             {link.label}
                           </a>
                         ) : (
                           <Link
                             href={link.href}
+                            className="inline-flex rounded-sm border border-border-gray bg-light-gray px-2 py-0.5 text-xs font-medium text-dark-charcoal hover:border-dark-charcoal"
                             onClick={() => setOpen(false)}
-                            className="inline-flex rounded-sm border border-border-gray bg-light-gray px-2 py-1 text-xs font-medium text-dark-charcoal transition-colors hover:border-dark-charcoal"
                           >
                             {link.label}
                           </Link>
@@ -280,62 +315,43 @@ export function SupportChat() {
             ))}
           </div>
 
-          <div className="border-t border-border-gray bg-white px-4 py-3">
-            <ul className="flex flex-wrap gap-1.5">
+          {messages.length <= 1 ? (
+            <div className="flex flex-wrap gap-1.5 border-t border-border-gray bg-white px-3 py-2.5">
               {TOPICS.map((topic) => (
-                <li key={topic.label}>
-                  <button
-                    type="button"
-                    onClick={() => pickTopic(topic)}
-                    className="rounded-full border border-border-gray px-2.5 py-1 text-xs font-medium text-dark-charcoal transition-colors hover:border-dark-charcoal"
-                  >
-                    {topic.label}
-                  </button>
-                </li>
+                <button
+                  key={topic.label}
+                  type="button"
+                  onClick={() => pickTopic(topic)}
+                  className="rounded-sm border border-border-gray bg-light-gray px-2.5 py-1 text-xs font-medium text-dark-charcoal hover:border-dark-charcoal"
+                >
+                  {topic.label}
+                </button>
               ))}
-            </ul>
+            </div>
+          ) : null}
 
-            <form
-              className="mt-3 flex items-center gap-2"
-              onSubmit={(event) => {
-                event.preventDefault();
-                send();
-              }}
-            >
-              <label htmlFor="support-chat-input" className="sr-only">
-                Message customer service
-              </label>
-              <input
-                id="support-chat-input"
-                ref={inputRef}
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                placeholder="Type your question…"
-                autoComplete="off"
-                className="h-10 w-full rounded-sm border border-border-gray bg-white px-3 text-sm text-near-black placeholder:text-medium-gray focus-visible:border-dark-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow/40"
-              />
-              <Button
-                type="submit"
-                variant="primary"
-                size="sm"
-                className="h-10 shrink-0 px-3"
-                disabled={!input.trim()}
-                aria-label="Send message"
-              >
-                <Send className="size-4" aria-hidden="true" />
-              </Button>
-            </form>
-
-            <p className="mt-2 text-[11px] text-medium-gray">
-              Prefer the phone?{" "}
-              <a
-                href={`tel:${SITE_CONFIG.phone.replace(/[^+\d]/g, "")}`}
-                className="font-medium text-dark-charcoal underline-offset-2 hover:underline"
-              >
-                {SITE_CONFIG.phoneDisplay}
-              </a>
-            </p>
-          </div>
+          <form
+            className="flex gap-2 border-t border-border-gray bg-white p-3"
+            onSubmit={(event) => {
+              event.preventDefault();
+              send();
+            }}
+          >
+            <label htmlFor="support-chat-input" className="sr-only">
+              Message
+            </label>
+            <input
+              ref={inputRef}
+              id="support-chat-input"
+              value={input}
+              onChange={(event) => setInput(event.target.value)}
+              placeholder="Type a message…"
+              className="h-10 min-w-0 flex-1 rounded-sm border border-border-gray bg-white px-3 text-sm text-dark-charcoal placeholder:text-medium-gray focus-visible:border-dark-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow/40"
+            />
+            <Button type="submit" size="md" aria-label="Send message">
+              <Send className="size-4" aria-hidden="true" />
+            </Button>
+          </form>
         </section>
       ) : null}
     </>

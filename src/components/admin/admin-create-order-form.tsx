@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { AdminProductLineSearch } from "@/components/admin/admin-product-line-search";
 import { formatCurrency } from "@/lib/utils";
 
 type ProductOption = {
@@ -69,17 +70,6 @@ export function AdminCreateOrderForm({
   const [postalCode, setPostalCode] = useState("");
   const [phone, setPhone] = useState("");
   const [lines, setLines] = useState<LineDraft[]>([blankLine()]);
-
-  const productOptions = useMemo(
-    () => [
-      { label: "Custom line (no catalog SKU)", value: "" },
-      ...products.map((p) => ({
-        label: `${p.name} · ${p.sku} · ${formatCurrency(p.price)}`,
-        value: p.id,
-      })),
-    ],
-    [products],
-  );
 
   const subtotal = lines.reduce((sum, line) => {
     const qty = Number(line.quantity) || 0;
@@ -227,11 +217,10 @@ export function AdminCreateOrderForm({
                     ) : null}
                   </div>
                   <div className="grid gap-3">
-                    <Select
-                      label="Catalog product"
+                    <AdminProductLineSearch
+                      products={products}
                       value={line.productId}
-                      onChange={(e) => pickProduct(line.key, e.target.value)}
-                      options={productOptions}
+                      onSelect={(productId) => pickProduct(line.key, productId)}
                     />
                     <div className="grid gap-3 @3xl:grid-cols-[minmax(0,1fr)_8rem]">
                       <Input

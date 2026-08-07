@@ -134,7 +134,7 @@ export function AdminMemberForm({
         return;
       }
       toast.success(result.message);
-      router.push("/admin/members");
+      router.push("/admin/users?tab=members");
       router.refresh();
     });
   });
@@ -329,7 +329,7 @@ export function AdminMemberForm({
           type="button"
           variant="secondary"
           disabled={pending}
-          onClick={() => router.push("/admin/members")}
+          onClick={() => router.push("/admin/users?tab=members")}
         >
           Cancel
         </Button>

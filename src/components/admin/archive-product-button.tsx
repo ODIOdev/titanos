@@ -21,6 +21,7 @@ export function ArchiveProductButton({
       type="button"
       size="sm"
       variant={active ? "outline" : "secondary"}
+      className="h-8 shrink-0 px-2.5"
       disabled={pending}
       onClick={() => {
         startTransition(async () => {

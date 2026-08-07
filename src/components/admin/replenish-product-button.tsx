@@ -33,6 +33,7 @@ export function ReplenishProductButton({
         type="button"
         size="sm"
         variant="outline"
+        className="h-8 shrink-0 px-2.5"
         onClick={() => handleOpenChange(true)}
       >
         Replenish

@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { getProductById } from "@/lib/data/products";
-import { FREE_SHIPPING_THRESHOLD } from "@/lib/data/seed-data";
+import {
+  computeCheckoutTotals,
+  orderItemOptionsFromLine,
+  resolveCheckoutLineItems,
+} from "@/lib/checkout/pricing";
 import { absoluteUrl, generateOrderNumber } from "@/lib/utils";
 import { checkoutSchema } from "@/lib/validations";
 import { isStripeConfigured, getStripe } from "@/lib/stripe";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
-
-const STANDARD_SHIPPING = 12.99;
-const TAX_RATE = 0.08;
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -25,54 +25,30 @@ export async function POST(request: Request) {
     );
   }
 
-  const lineItems: {
-    productId: string;
-    name: string;
-    sku: string;
-    quantity: number;
-    unitPrice: number;
-    totalPrice: number;
-    imageUrl: string | null;
-  }[] = [];
-
-  for (const item of parsed.data.items) {
-    const product = await getProductById(item.productId);
-    if (!product || !product.active) {
-      return NextResponse.json(
-        { error: `Product not found: ${item.productId}` },
-        { status: 400 },
-      );
-    }
-    if (product.inventory_quantity < item.quantity) {
-      return NextResponse.json(
-        { error: `Insufficient stock for ${product.name}` },
-        { status: 400 },
-      );
-    }
-
-    const unitPrice = Number(product.price);
-    lineItems.push({
-      productId: product.id,
-      name: product.name,
-      sku: product.sku,
-      quantity: item.quantity,
-      unitPrice,
-      totalPrice: unitPrice * item.quantity,
-      imageUrl:
-        product.image_url ??
-        product.images?.find((img) => img.is_primary)?.url ??
-        product.images?.[0]?.url ??
-        null,
-    });
+  const uiMode = parsed.data.uiMode ?? "embedded";
+  const resolved = await resolveCheckoutLineItems(parsed.data.items);
+  if ("error" in resolved) {
+    return NextResponse.json(
+      { error: resolved.error },
+      { status: resolved.status },
+    );
   }
 
-  const subtotal = lineItems.reduce((sum, item) => sum + item.totalPrice, 0);
-  const shippingAmount =
-    subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : STANDARD_SHIPPING;
-  const taxAmount = Number((subtotal * TAX_RATE).toFixed(2));
-  const total = Number((subtotal + shippingAmount + taxAmount).toFixed(2));
+  const { lineItems } = resolved;
+  const { subtotal, shippingAmount, taxAmount, total } =
+    computeCheckoutTotals(lineItems);
   const orderNumber = generateOrderNumber();
   const email = parsed.data.email ?? "guest@titansafetyco.com";
+
+  // No real Stripe keys → local test checkout (address + card form). Do not
+  // create an order yet; /api/checkout/demo creates a paid order on submit.
+  if (!isStripeConfigured()) {
+    return NextResponse.json({
+      demo: true,
+      orderNumberPreview: orderNumber,
+      totals: { subtotal, shippingAmount, taxAmount, total },
+    });
+  }
 
   let orderId: string | null = null;
 
@@ -80,7 +56,6 @@ export async function POST(request: Request) {
     try {
       const { createServiceClient } = await import("@/lib/supabase/admin");
       const supabase = createServiceClient();
-      // Database Insert typings are incomplete in local schema stubs.
       const { data: order, error } = await supabase
         .from("orders")
         .insert({
@@ -110,6 +85,7 @@ export async function POST(request: Request) {
             quantity: item.quantity,
             unit_price: item.unitPrice,
             total_price: item.totalPrice,
+            options: orderItemOptionsFromLine(item),
           })) as never,
         );
       }
@@ -118,90 +94,114 @@ export async function POST(request: Request) {
     }
   }
 
-  if (isStripeConfigured()) {
-    try {
-      const stripe = getStripe();
-      const session = await stripe.checkout.sessions.create({
-        mode: "payment",
-        success_url: absoluteUrl(
-          `/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
-        ),
-        cancel_url: absoluteUrl("/checkout/cancel"),
-        customer_email: parsed.data.email,
-        line_items: [
-          ...lineItems.map((item) => ({
-            quantity: item.quantity,
-            price_data: {
-              currency: "usd",
-              unit_amount: Math.round(item.unitPrice * 100),
-              product_data: {
-                name: item.name,
-                metadata: { sku: item.sku, productId: item.productId },
-                images: item.imageUrl
-                  ? [absoluteUrl(item.imageUrl)]
-                  : undefined,
+  try {
+    const stripe = getStripe();
+    const stripeLineItems = [
+      ...lineItems.map((item) => ({
+        quantity: item.quantity,
+        price_data: {
+          currency: "usd",
+          unit_amount: Math.round(item.unitPrice * 100),
+          product_data: {
+            name: item.name,
+            metadata: { sku: item.sku, productId: item.productId },
+            images: item.imageUrl ? [absoluteUrl(item.imageUrl)] : undefined,
+          },
+        },
+      })),
+      ...(shippingAmount > 0
+        ? [
+            {
+              quantity: 1,
+              price_data: {
+                currency: "usd",
+                unit_amount: Math.round(shippingAmount * 100),
+                product_data: { name: "Standard shipping" },
               },
             },
-          })),
-          ...(shippingAmount > 0
-            ? [
-                {
-                  quantity: 1,
-                  price_data: {
-                    currency: "usd",
-                    unit_amount: Math.round(shippingAmount * 100),
-                    product_data: { name: "Standard shipping" },
-                  },
-                },
-              ]
-            : []),
-          {
-            quantity: 1,
-            price_data: {
-              currency: "usd",
-              unit_amount: Math.round(taxAmount * 100),
-              product_data: { name: "Estimated tax" },
-            },
-          },
-        ],
-        metadata: {
-          orderNumber,
-          orderId: orderId ?? "",
+          ]
+        : []),
+      {
+        quantity: 1,
+        price_data: {
+          currency: "usd",
+          unit_amount: Math.round(taxAmount * 100),
+          product_data: { name: "Estimated tax" },
         },
-      });
+      },
+    ];
 
-      if (orderId && isSupabaseConfigured() && session.id) {
-        try {
-          const { createServiceClient } = await import("@/lib/supabase/admin");
-          const supabase = createServiceClient();
-          await supabase
-            .from("orders")
-            .update({ stripe_checkout_session_id: session.id } as never)
-            .eq("id", orderId);
-        } catch {
-          // Non-fatal
-        }
+    const shared = {
+      mode: "payment" as const,
+      line_items: stripeLineItems,
+      customer_email: parsed.data.email,
+      shipping_address_collection: {
+        allowed_countries: ["US" as const],
+      },
+      billing_address_collection: "required" as const,
+      phone_number_collection: { enabled: true },
+      payment_method_types: ["card", "link"] as ("card" | "link")[],
+      metadata: {
+        orderNumber,
+        orderId: orderId ?? "",
+      },
+    };
+
+    const session =
+      uiMode === "hosted"
+        ? await stripe.checkout.sessions.create({
+            ...shared,
+            success_url: absoluteUrl(
+              `/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+            ),
+            cancel_url: absoluteUrl("/checkout/cancel"),
+          })
+        : await stripe.checkout.sessions.create({
+            ...shared,
+            ui_mode: "embedded",
+            return_url: absoluteUrl(
+              `/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
+            ),
+          });
+
+    if (orderId && isSupabaseConfigured() && session.id) {
+      try {
+        const { createServiceClient } = await import("@/lib/supabase/admin");
+        const supabase = createServiceClient();
+        await supabase
+          .from("orders")
+          .update({ stripe_checkout_session_id: session.id } as never)
+          .eq("id", orderId);
+      } catch {
+        // Non-fatal
       }
+    }
 
+    if (uiMode === "hosted") {
       if (!session.url) {
         return NextResponse.json(
           { error: "Stripe did not return a checkout URL" },
           { status: 500 },
         );
       }
-
       return NextResponse.json({ url: session.url, orderNumber });
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Stripe checkout failed";
-      return NextResponse.json({ error: message }, { status: 500 });
     }
-  }
 
-  const demoSessionId = `demo_${orderNumber}`;
-  return NextResponse.json({
-    url: absoluteUrl(`/checkout/success?session_id=${demoSessionId}`),
-    orderNumber,
-    demo: true,
-  });
+    if (!session.client_secret) {
+      return NextResponse.json(
+        { error: "Stripe did not return a client secret" },
+        { status: 500 },
+      );
+    }
+
+    return NextResponse.json({
+      clientSecret: session.client_secret,
+      orderNumber,
+      sessionId: session.id,
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Stripe checkout failed";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

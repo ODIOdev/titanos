@@ -61,7 +61,7 @@ export function CustomerDetailActions({
       }
       toast.success(result.message);
       setConfirmOpen(false);
-      router.push("/admin/customers");
+      router.push("/admin/users?tab=customers");
       router.refresh();
     });
   }

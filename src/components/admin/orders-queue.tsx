@@ -1,6 +1,12 @@
+"use client";
+
+import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { ChevronRight, Package } from "lucide-react";
+import { AdminOrderPreviewDialog } from "@/components/admin/admin-order-preview-dialog";
 import { OrderStatusBadge } from "@/components/admin/order-status-badge";
+import { OrderQueueRowActions } from "@/components/admin/order-queue-row-actions";
 import { DataTable } from "@/components/admin/data-table";
 import type { AdminOrder } from "@/lib/data/admin";
 import {
@@ -13,20 +19,30 @@ function itemCount(order: AdminOrder) {
   return (order.items ?? []).reduce((sum, item) => sum + item.quantity, 0);
 }
 
-function OrderCard({ order }: { order: AdminOrder }) {
+function isDelivered(order: AdminOrder) {
+  return order.status === "delivered";
+}
+
+function OrderCard({
+  order,
+  onPreview,
+}: {
+  order: AdminOrder;
+  onPreview: (order: AdminOrder) => void;
+}) {
   const nextLabel = nextOrderActionLabel(order.status);
   const attention = orderNeedsAttention(order.status);
+  const delivered = isDelivered(order);
 
-  return (
-    <Link
-      href={`/admin/orders/${order.id}`}
-      className={cn(
-        "block rounded-sm border bg-white p-3 transition-colors",
-        attention
-          ? "border-titan-yellow/70 hover:border-titan-yellow"
-          : "border-border-gray hover:border-dark-charcoal/30",
-      )}
-    >
+  const className = cn(
+    "block w-full rounded-sm border bg-white p-3 text-left transition-colors",
+    attention
+      ? "border-titan-yellow/70 hover:border-titan-yellow"
+      : "border-border-gray hover:border-dark-charcoal/30",
+  );
+
+  const body = (
+    <>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="font-heading text-sm font-semibold uppercase tracking-wide text-dark-charcoal">
@@ -53,9 +69,31 @@ function OrderCard({ order }: { order: AdminOrder }) {
               {nextLabel}
               <ChevronRight className="size-3" aria-hidden="true" />
             </p>
+          ) : delivered ? (
+            <p className="mt-0.5 text-[0.65rem] font-semibold uppercase tracking-wide text-medium-gray">
+              View summary
+            </p>
           ) : null}
         </div>
       </div>
+    </>
+  );
+
+  if (delivered) {
+    return (
+      <button
+        type="button"
+        className={className}
+        onClick={() => onPreview(order)}
+      >
+        {body}
+      </button>
+    );
+  }
+
+  return (
+    <Link href={`/admin/orders/${order.id}`} className={className}>
+      {body}
     </Link>
   );
 }
@@ -67,6 +105,20 @@ export function OrdersQueue({
   orders: AdminOrder[];
   emptyMessage: string;
 }) {
+  const router = useRouter();
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const preview = orders.find((o) => o.id === previewId) ?? null;
+
+  function openOrderRow(index: number) {
+    const order = orders[index];
+    if (!order) return;
+    if (isDelivered(order)) {
+      setPreviewId(order.id);
+      return;
+    }
+    router.push(`/admin/orders/${order.id}`);
+  }
+
   return (
     <>
       {/* Mobile cards */}
@@ -79,7 +131,10 @@ export function OrdersQueue({
           <ul className="space-y-2">
             {orders.map((order) => (
               <li key={order.id}>
-                <OrderCard order={order} />
+                <OrderCard
+                  order={order}
+                  onPreview={(o) => setPreviewId(o.id)}
+                />
               </li>
             ))}
           </ul>
@@ -100,16 +155,16 @@ export function OrdersQueue({
             { key: "actions", header: "", className: "text-right" },
           ]}
           emptyMessage={emptyMessage}
+          onRowActivate={openOrderRow}
           rows={orders.map((o) => {
             const nextLabel = nextOrderActionLabel(o.status);
             return [
-              <Link
+              <span
                 key={`${o.id}-num`}
-                href={`/admin/orders/${o.id}`}
-                className="font-medium hover:text-titan-yellow"
+                className="font-medium text-dark-charcoal"
               >
                 {o.order_number}
-              </Link>,
+              </span>,
               <span key={`${o.id}-email`} className="text-sm">
                 {o.email}
               </span>,
@@ -127,20 +182,21 @@ export function OrdersQueue({
                 key={`${o.id}-next`}
                 className="text-xs font-semibold uppercase tracking-wide text-medium-gray"
               >
-                {nextLabel ?? "—"}
+                {isDelivered(o) ? "Summary" : (nextLabel ?? "—")}
               </span>,
-              <div key={`${o.id}-actions`} className="text-right">
-                <Link
-                  href={`/admin/orders/${o.id}`}
-                  className="inline-flex h-8 items-center rounded-sm border border-border-gray px-3 text-xs font-semibold uppercase tracking-wide hover:bg-light-gray"
-                >
-                  Open
-                </Link>
-              </div>,
+              <OrderQueueRowActions key={`${o.id}-actions`} orderId={o.id} />,
             ];
           })}
         />
       </div>
+
+      <AdminOrderPreviewDialog
+        order={preview}
+        open={previewId != null}
+        onOpenChange={(open) => {
+          if (!open) setPreviewId(null);
+        }}
+      />
     </>
   );
 }

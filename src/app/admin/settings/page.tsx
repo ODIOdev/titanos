@@ -4,17 +4,21 @@ import { CsvImportExportCard } from "@/components/admin/csv-import-export-card";
 import { MaintenanceModeCard } from "@/components/admin/maintenance-mode-card";
 import { PromoDiscountCard } from "@/components/admin/promo-discount-card";
 import { ResetPlatformCard } from "@/components/admin/reset-platform-card";
+import { SupportChatSettingsCard } from "@/components/admin/support-chat-settings-card";
 import { getPromoDiscountSettings, getSiteSettings } from "@/lib/data/admin";
 import { getApiStackReports } from "@/lib/data/api-stacks";
 import { getMaintenanceSettings } from "@/lib/data/maintenance";
+import { getSupportChatSettings } from "@/lib/data/support-chat-settings";
 
 export default async function AdminSettingsPage() {
-  const [settings, promoDiscounts, maintenance, apiStacks] = await Promise.all([
-    getSiteSettings(),
-    getPromoDiscountSettings(),
-    getMaintenanceSettings(),
-    getApiStackReports(),
-  ]);
+  const [settings, promoDiscounts, maintenance, apiStacks, supportChat] =
+    await Promise.all([
+      getSiteSettings(),
+      getPromoDiscountSettings(),
+      getMaintenanceSettings(),
+      getApiStackReports(),
+      getSupportChatSettings(),
+    ]);
 
   return (
     <div className="space-y-6">
@@ -31,6 +35,7 @@ export default async function AdminSettingsPage() {
           <div className="space-y-4">
             <SiteSettingsFormClient defaults={settings} />
             <MaintenanceModeCard settings={maintenance} />
+            <SupportChatSettingsCard settings={supportChat} />
           </div>
           <div className="space-y-4">
             <PromoDiscountCard settings={promoDiscounts} />

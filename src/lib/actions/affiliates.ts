@@ -98,6 +98,7 @@ export async function submitAffiliateApplication(
 
     revalidatePath("/affiliates");
     revalidatePath("/admin/affiliates");
+    revalidatePath("/admin/users");
 
     return {
       success: true,

@@ -4,6 +4,7 @@ import { useId, useState } from "react";
 import { ShoppingCart } from "lucide-react";
 import { toast } from "sonner";
 import { Button, type ButtonProps } from "@/components/ui/button";
+import { AddedToCartDialog } from "@/components/products/added-to-cart-dialog";
 import { useCart } from "@/components/providers/cart-provider";
 import type { Product } from "@/types";
 import { cn } from "@/lib/utils";
@@ -42,6 +43,8 @@ export function AddToCartButton({
   const { addItem } = useCart();
   const liveId = useId();
   const [liveMessage, setLiveMessage] = useState("");
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [addedQty, setAddedQty] = useState(quantity);
   const outOfStock = product.inventory_quantity <= 0;
 
   function handleAdd() {
@@ -67,7 +70,8 @@ export function AddToCartButton({
 
     const message = `Added ${quantity} × ${product.name} to cart.`;
     setLiveMessage(message);
-    toast.success(message);
+    setAddedQty(quantity);
+    setConfirmOpen(true);
   }
 
   return (
@@ -87,6 +91,12 @@ export function AddToCartButton({
       <span id={liveId} className="sr-only" role="status" aria-live="polite">
         {liveMessage}
       </span>
+      <AddedToCartDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        product={product}
+        quantity={addedQty}
+      />
     </>
   );
 }

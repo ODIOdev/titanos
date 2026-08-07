@@ -1,5 +1,7 @@
 import { ProfileForm } from "@/components/account/profile-form";
+import { ProfileShippingAddressCard } from "@/components/account/profile-shipping-address-card";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
+import type { Address } from "@/types";
 
 async function getProfile() {
   if (!isSupabaseConfigured()) {
@@ -80,8 +82,35 @@ async function getProfile() {
   }
 }
 
+async function getShippingAddresses(): Promise<Address[]> {
+  if (!isSupabaseConfigured()) return [];
+
+  try {
+    const { createClient } = await import("@/lib/supabase/server");
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return [];
+
+    const { data } = await supabase
+      .from("addresses")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("type", "shipping")
+      .order("is_default", { ascending: false });
+
+    return (data ?? []) as Address[];
+  } catch {
+    return [];
+  }
+}
+
 export default async function ProfilePage() {
-  const profile = await getProfile();
+  const [profile, addresses] = await Promise.all([
+    getProfile(),
+    getShippingAddresses(),
+  ]);
 
   return (
     <div>
@@ -89,13 +118,23 @@ export default async function ProfilePage() {
         Profile
       </h1>
       <p className="mt-2 text-sm text-medium-gray">
-        Update your photo and contact details for orders and quotes.
+        Update your photo, contact details, and default shipping address.
       </p>
-      <div className="mt-8 rounded-sm border border-border-gray bg-white p-6">
+      <div className="mt-6 grid items-stretch gap-4 lg:grid-cols-2">
         <ProfileForm
           email={profile.email}
           avatarUrl={profile.avatarUrl}
           defaultValues={{
+            firstName: profile.firstName,
+            lastName: profile.lastName,
+            company: profile.company,
+            phone: profile.phone,
+          }}
+        />
+
+        <ProfileShippingAddressCard
+          addresses={addresses}
+          profile={{
             firstName: profile.firstName,
             lastName: profile.lastName,
             company: profile.company,
