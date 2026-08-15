@@ -1,7 +1,6 @@
-import Image from "next/image";
 import { cn } from "@/lib/utils";
 
-/** Intrinsic pixel sizes of files in /public/images/payments (for aspect ratio). */
+/** Intrinsic sizes of files in /public/images/payments (for aspect ratio). */
 export const PAYMENT_LOGOS = [
   {
     name: "Visa",
@@ -11,15 +10,15 @@ export const PAYMENT_LOGOS = [
   },
   {
     name: "Mastercard",
-    src: "/images/payments/mastercard.svg",
-    width: 100,
-    height: 78,
+    src: "/images/payments/mastercard.png",
+    width: 96,
+    height: 60,
   },
   {
     name: "American Express",
-    src: "/images/payments/amex.svg",
-    width: 100,
-    height: 28,
+    src: "/images/payments/amex.png",
+    width: 200,
+    height: 56,
   },
   {
     name: "Discover",
@@ -35,10 +34,10 @@ export const PAYMENT_LOGOS = [
   },
 ] as const;
 
-/** Uniform badge size so every mark sits in the same footprint. */
-const SLOT = "inline-flex h-9 w-[4.5rem] shrink-0 items-center justify-center";
+const SLOT =
+  "inline-flex h-8 w-[4.5rem] shrink-0 items-center justify-center";
 const MARK =
-  "h-auto max-h-[1.15rem] w-auto max-w-[3.65rem] object-contain object-center";
+  "block h-[1.125rem] w-auto max-w-[3.75rem] object-contain object-center";
 
 export function PaymentMethodLogos({
   className,
@@ -48,7 +47,7 @@ export function PaymentMethodLogos({
   itemClassName?: string;
 }) {
   return (
-    <ul className={cn("flex flex-wrap items-center gap-2", className)}>
+    <ul className={cn("flex flex-wrap items-center gap-1.5", className)}>
       {PAYMENT_LOGOS.map((logo) => (
         <li
           key={logo.name}
@@ -58,14 +57,15 @@ export function PaymentMethodLogos({
             itemClassName,
           )}
         >
-          <Image
+          {/* Plain img avoids Next/Image soft-clipping small brand marks. */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
             src={logo.src}
             alt={logo.name}
             width={logo.width}
             height={logo.height}
             className={MARK}
-            // Skip optimizer — small brand PNGs/SVGs get soft when resized twice.
-            unoptimized
+            decoding="async"
           />
         </li>
       ))}

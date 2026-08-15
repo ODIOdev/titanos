@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { Loader2, Search } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
@@ -22,6 +23,8 @@ export type PlacesFilledAddress = {
 
 /**
  * Compact Google Places street-address search for checkout / ship-to forms.
+ * Suggestions only appear while the user is typing — never for a prefilled
+ * or already-selected address.
  */
 export function AddressPlacesSearch({
   value,
@@ -42,22 +45,26 @@ export function AddressPlacesSearch({
 }) {
   const listId = useId();
   const inputId = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchAbort = useRef<AbortController | null>(null);
+  const searchSeq = useRef(0);
+  const pickSeq = useRef(0);
+
   const [configured, setConfigured] = useState<boolean | null>(null);
   const [suggestions, setSuggestions] = useState<PlacesSuggestion[]>([]);
-  const [open, setOpen] = useState(false);
   const [searching, setSearching] = useState(false);
-  /** After a place pick, ignore autocomplete until the user types again. */
-  const [selectionLocked, setSelectionLocked] = useState(false);
+  /** True only after the user types; false after a pick or on mount. */
+  const [typing, setTyping] = useState(false);
 
-  function closeMenu() {
-    setOpen(false);
-    setSuggestions([]);
-    setSearching(false);
+  const open = typing && suggestions.length > 0;
+
+  function clearSuggestions() {
+    searchSeq.current += 1;
     searchAbort.current?.abort();
     searchAbort.current = null;
+    setSuggestions([]);
+    setSearching(false);
   }
 
   useEffect(() => {
@@ -65,11 +72,7 @@ export function AddressPlacesSearch({
     fetch("/api/places?q=")
       .then(async (res) => {
         if (cancelled) return;
-        if (res.status === 503) {
-          setConfigured(false);
-          return;
-        }
-        setConfigured(true);
+        setConfigured(res.status !== 503);
       })
       .catch(() => {
         if (!cancelled) setConfigured(false);
@@ -79,19 +82,20 @@ export function AddressPlacesSearch({
     };
   }, []);
 
+  // Autocomplete only while the user is actively typing.
   useEffect(() => {
-    if (configured === false) return;
-    if (selectionLocked) {
-      closeMenu();
+    if (!typing || configured === false) {
       return;
     }
 
     const q = value.trim();
     if (q.length < 3) {
-      closeMenu();
+      setSuggestions([]);
+      setSearching(false);
       return;
     }
 
+    const seq = ++searchSeq.current;
     const handle = window.setTimeout(() => {
       searchAbort.current?.abort();
       const controller = new AbortController();
@@ -107,21 +111,18 @@ export function AddressPlacesSearch({
             suggestions?: PlacesSuggestion[];
             configured?: boolean;
           };
-          if (controller.signal.aborted) return;
+          if (seq !== searchSeq.current || controller.signal.aborted) return;
           if (data.configured === false) {
             setConfigured(false);
-            closeMenu();
+            setSuggestions([]);
             return;
           }
           setConfigured(true);
-          const next = data.suggestions ?? [];
-          setSuggestions(next);
-          setOpen(next.length > 0);
+          setSuggestions(data.suggestions ?? []);
         } catch (err) {
           if (err instanceof DOMException && err.name === "AbortError") return;
-          // keep typing; manual entry still works
         } finally {
-          if (!controller.signal.aborted) setSearching(false);
+          if (seq === searchSeq.current) setSearching(false);
         }
       })();
     }, 250);
@@ -130,19 +131,32 @@ export function AddressPlacesSearch({
       window.clearTimeout(handle);
       searchAbort.current?.abort();
     };
-    // closeMenu is stable enough via refs; include selectionLocked intentionally
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- lock gates search
-  }, [value, configured, selectionLocked]);
+  }, [value, typing, configured]);
+
+  // Click outside closes the list without clearing the field.
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: PointerEvent) {
+      if (!rootRef.current?.contains(e.target as Node)) {
+        setTyping(false);
+        clearSuggestions();
+      }
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [open]);
 
   async function applyPlace(placeId: string) {
-    if (blurTimer.current) {
-      clearTimeout(blurTimer.current);
-      blurTimer.current = null;
-    }
-    setSelectionLocked(true);
-    closeMenu();
+    const myPick = ++pickSeq.current;
+
+    // Hide list immediately — do not wait on the place details request.
+    flushSync(() => {
+      setTyping(false);
+      clearSuggestions();
+    });
     inputRef.current?.blur();
     setSearching(true);
+
     try {
       const res = await fetch(
         `/api/places?placeId=${encodeURIComponent(placeId)}`,
@@ -151,11 +165,9 @@ export function AddressPlacesSearch({
         address?: PlacesFilledAddress;
         error?: string;
       };
-      if (!res.ok || !data.address) {
-        setSelectionLocked(false);
-        setSearching(false);
-        return;
-      }
+      if (myPick !== pickSeq.current) return;
+      if (!res.ok || !data.address) return;
+
       onAddressSelect({
         line1: data.address.line1,
         line2: data.address.line2 || "",
@@ -164,14 +176,17 @@ export function AddressPlacesSearch({
         postalCode: data.address.postalCode,
         country: data.address.country || "US",
       });
-      closeMenu();
     } finally {
-      setSearching(false);
+      if (myPick === pickSeq.current) {
+        setSearching(false);
+        setTyping(false);
+        setSuggestions([]);
+      }
     }
   }
 
   return (
-    <div className={cn("relative w-full", className)}>
+    <div ref={rootRef} className={cn("relative w-full", className)}>
       <Label htmlFor={inputId}>
         {label}
         {required ? (
@@ -192,7 +207,7 @@ export function AddressPlacesSearch({
           value={value}
           required={required}
           disabled={disabled}
-          autoComplete="shipping address-line1"
+          autoComplete="off"
           placeholder={
             configured === false
               ? "Street address"
@@ -200,17 +215,17 @@ export function AddressPlacesSearch({
           }
           aria-autocomplete="list"
           aria-controls={listId}
-          aria-expanded={open && suggestions.length > 0}
+          aria-expanded={open}
           className="flex h-9 w-full rounded-sm border border-border-gray bg-white py-2 pl-8 pr-8 text-sm text-near-black placeholder:text-medium-gray transition-colors focus-visible:border-dark-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow/40 disabled:cursor-not-allowed disabled:bg-light-gray disabled:opacity-60"
           onChange={(e) => {
-            setSelectionLocked(false);
+            setTyping(true);
             onChange(e.target.value);
           }}
-          onFocus={() => {
-            if (!selectionLocked && suggestions.length) setOpen(true);
-          }}
-          onBlur={() => {
-            blurTimer.current = setTimeout(() => setOpen(false), 150);
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setTyping(false);
+              clearSuggestions();
+            }
           }}
         />
         {searching ? (
@@ -230,19 +245,20 @@ export function AddressPlacesSearch({
         </p>
       ) : null}
 
-      {open && suggestions.length > 0 ? (
+      {open ? (
         <ul
           id={listId}
           role="listbox"
           className="absolute z-30 mt-1 max-h-48 w-full overflow-y-auto rounded-sm border border-border-gray bg-white shadow-md"
         >
           {suggestions.map((item) => (
-            <li key={item.placeId}>
+            <li key={item.placeId} role="option">
               <button
                 type="button"
                 className="flex w-full flex-col items-start gap-0.5 px-3 py-2 text-left text-sm hover:bg-light-gray"
-                onMouseDown={(e) => {
+                onPointerDown={(e) => {
                   e.preventDefault();
+                  e.stopPropagation();
                   void applyPlace(item.placeId);
                 }}
               >

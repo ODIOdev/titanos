@@ -95,8 +95,11 @@ export function SupportChat({
     resolveOnline(settings.presence, false),
   );
   const [hydrated, setHydrated] = useState(false);
+  const [sending, setSending] = useState(false);
   const threadRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
 
   useEffect(() => {
     if (!open || hydrated) return;
@@ -138,7 +141,7 @@ export function SupportChat({
     if (!open) return;
     const thread = threadRef.current;
     if (thread) thread.scrollTop = thread.scrollHeight;
-  }, [open, messages]);
+  }, [open, messages, sending]);
 
   useEffect(() => {
     if (!open) return;
@@ -168,37 +171,100 @@ export function SupportChat({
     inputRef.current?.focus();
   }
 
-  function send() {
+  function fallbackAiReply(): Omit<ChatMessage, "id" | "role"> {
+    return {
+      text: online
+        ? `Sorry — I couldn't reach AI support just now. Browse the catalog or quote form, or call ${SITE_CONFIG.phoneDisplay}.`
+        : `Sorry — I couldn't reach AI support just now (${settings.hoursLabel}). Email ${SITE_CONFIG.supportEmail} and the team will follow up.`,
+      links: [
+        { label: "Browse catalog", href: "/shop" },
+        { label: "Request a quote", href: "/quote" },
+        {
+          label: "Email support",
+          href: `mailto:${SITE_CONFIG.supportEmail}`,
+        },
+      ],
+    };
+  }
+
+  async function send() {
     const text = input.trim();
-    if (!text) return;
+    if (!text || sending) return;
 
     setInput("");
-    if (settings.aiEnabled) {
+    if (!settings.aiEnabled) {
       exchange(text, {
         text: online
-          ? `Got it. Based on what you asked, start with our catalog or quote form — or call ${SITE_CONFIG.phoneDisplay} if you need a specialist on the line.`
-          : `Thanks — I'm offline for live handoff right now (${settings.hoursLabel}). Email ${SITE_CONFIG.supportEmail} and the team will follow up.`,
+          ? `Thanks — a specialist is picking this up now. If you'd rather talk it through, call ${SITE_CONFIG.phoneDisplay}.`
+          : `Thanks! We're offline right now (${settings.hoursLabel}). Send this to ${SITE_CONFIG.supportEmail} and we'll reply first thing.`,
         links: [
-          { label: "Browse catalog", href: "/shop" },
-          { label: "Request a quote", href: "/quote" },
           {
             label: "Email support",
             href: `mailto:${SITE_CONFIG.supportEmail}`,
           },
+          { label: "Request a quote", href: "/quote" },
         ],
       });
       return;
     }
 
-    exchange(text, {
-      text: online
-        ? `Thanks — a specialist is picking this up now. If you'd rather talk it through, call ${SITE_CONFIG.phoneDisplay}.`
-        : `Thanks! We're offline right now (${settings.hoursLabel}). Send this to ${SITE_CONFIG.supportEmail} and we'll reply first thing.`,
-      links: [
-        { label: "Email support", href: `mailto:${SITE_CONFIG.supportEmail}` },
-        { label: "Request a quote", href: "/quote" },
-      ],
-    });
+    const prior = messagesRef.current;
+    const userMessage: ChatMessage = {
+      id: `u-${prior.length}`,
+      role: "user",
+      text,
+    };
+    const thread = [...prior, userMessage];
+    setMessages(thread);
+    setSending(true);
+
+    try {
+      const res = await fetch("/api/support/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          messages: thread.slice(-12).map(({ role, text: messageText }) => ({
+            role,
+            text:
+              messageText.length > 1500
+                ? `${messageText.slice(0, 1499)}…`
+                : messageText,
+          })),
+          online,
+          hoursLabel: settings.hoursLabel,
+        }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        text?: string;
+        links?: ChatLink[];
+      } | null;
+
+      if (!res.ok || !data?.text) {
+        setMessages((prev) => [
+          ...prev,
+          { id: `a-${prev.length}`, role: "agent", ...fallbackAiReply() },
+        ]);
+        return;
+      }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `a-${prev.length}`,
+          role: "agent",
+          text: data.text!,
+          links: data.links,
+        },
+      ]);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { id: `a-${prev.length}`, role: "agent", ...fallbackAiReply() },
+      ]);
+    } finally {
+      setSending(false);
+      inputRef.current?.focus();
+    }
   }
 
   const safeBottom =
@@ -280,28 +346,30 @@ export function SupportChat({
               <div
                 key={message.id}
                 className={cn(
-                  "max-w-[85%] rounded-sm px-3 py-2 text-sm",
+                  "min-w-0 max-w-[85%] rounded-sm px-3 py-2 text-sm",
                   message.role === "agent"
                     ? "border border-border-gray bg-white text-dark-charcoal"
                     : "ml-auto bg-dark-charcoal text-white",
                 )}
               >
-                <p>{message.text}</p>
+                <p className="whitespace-pre-line break-words [overflow-wrap:anywhere]">
+                  {message.text}
+                </p>
                 {message.links?.length ? (
-                  <ul className="mt-2 flex flex-wrap gap-1.5">
+                  <ul className="mt-2 flex min-w-0 flex-wrap gap-1.5">
                     {message.links.map((link) => (
-                      <li key={link.href}>
+                      <li key={link.href} className="min-w-0 max-w-full">
                         {link.href.startsWith("mailto:") ? (
                           <a
                             href={link.href}
-                            className="inline-flex rounded-sm border border-border-gray bg-light-gray px-2 py-0.5 text-xs font-medium text-dark-charcoal hover:border-dark-charcoal"
+                            className="inline-flex max-w-full truncate rounded-sm border border-border-gray bg-light-gray px-2 py-0.5 text-xs font-medium text-dark-charcoal hover:border-dark-charcoal"
                           >
                             {link.label}
                           </a>
                         ) : (
                           <Link
                             href={link.href}
-                            className="inline-flex rounded-sm border border-border-gray bg-light-gray px-2 py-0.5 text-xs font-medium text-dark-charcoal hover:border-dark-charcoal"
+                            className="inline-flex max-w-full truncate rounded-sm border border-border-gray bg-light-gray px-2 py-0.5 text-xs font-medium text-dark-charcoal hover:border-dark-charcoal"
                             onClick={() => setOpen(false)}
                           >
                             {link.label}
@@ -313,9 +381,17 @@ export function SupportChat({
                 ) : null}
               </div>
             ))}
+            {sending ? (
+              <div
+                className="max-w-[85%] rounded-sm border border-border-gray bg-white px-3 py-2 text-sm text-medium-gray"
+                aria-live="polite"
+              >
+                Typing…
+              </div>
+            ) : null}
           </div>
 
-          {messages.length <= 1 ? (
+          {messages.length <= 1 && !sending ? (
             <div className="flex flex-wrap gap-1.5 border-t border-border-gray bg-white px-3 py-2.5">
               {TOPICS.map((topic) => (
                 <button
@@ -334,7 +410,7 @@ export function SupportChat({
             className="flex gap-2 border-t border-border-gray bg-white p-3"
             onSubmit={(event) => {
               event.preventDefault();
-              send();
+              void send();
             }}
           >
             <label htmlFor="support-chat-input" className="sr-only">
@@ -346,9 +422,15 @@ export function SupportChat({
               value={input}
               onChange={(event) => setInput(event.target.value)}
               placeholder="Type a message…"
-              className="h-10 min-w-0 flex-1 rounded-sm border border-border-gray bg-white px-3 text-sm text-dark-charcoal placeholder:text-medium-gray focus-visible:border-dark-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow/40"
+              disabled={sending}
+              className="h-10 min-w-0 flex-1 rounded-sm border border-border-gray bg-white px-3 text-sm text-dark-charcoal placeholder:text-medium-gray focus-visible:border-dark-charcoal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-titan-yellow/40 disabled:opacity-60"
             />
-            <Button type="submit" size="md" aria-label="Send message">
+            <Button
+              type="submit"
+              size="md"
+              aria-label="Send message"
+              disabled={sending || !input.trim()}
+            >
               <Send className="size-4" aria-hidden="true" />
             </Button>
           </form>

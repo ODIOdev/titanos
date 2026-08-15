@@ -240,19 +240,20 @@ export async function Footer() {
               ))}
             </ul>
 
-            <ul className="hidden items-center gap-2 @5xl:flex @5xl:justify-end">
+            <ul className="hidden items-center gap-1.5 @5xl:flex @5xl:justify-end">
               {PAYMENT_LOGOS.map((logo) => (
                 <li
                   key={logo.name}
-                  className="inline-flex h-9 w-[4.5rem] shrink-0 items-center justify-center rounded-sm border border-white/15 bg-white px-1.5"
+                  className="inline-flex h-8 w-[4.5rem] shrink-0 items-center justify-center overflow-visible rounded-sm border border-white/15 bg-white px-1.5"
                 >
-                  <Image
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
                     src={logo.src}
                     alt={logo.name}
                     width={logo.width}
                     height={logo.height}
-                    className="h-auto max-h-[1.15rem] w-auto max-w-[3.65rem] object-contain object-center"
-                    unoptimized
+                    className="block h-[1.125rem] w-auto max-w-[3.75rem] object-contain object-center"
+                    decoding="async"
                   />
                 </li>
               ))}

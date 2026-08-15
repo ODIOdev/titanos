@@ -370,20 +370,20 @@ function ProductsMetricCard({
           </span>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-2">
-          <div className="rounded-sm border border-white/10 bg-white/5 px-2 py-1.5">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-white/55">
+        <div className="mt-4 space-y-1.5">
+          <div className="flex items-baseline justify-between gap-2 rounded-sm border border-white/10 bg-white/5 px-2 py-1.5">
+            <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-white/55">
               Active
             </p>
-            <p className="mt-0.5 truncate text-sm font-semibold tabular-nums text-white">
+            <p className="text-right text-sm font-semibold tabular-nums text-white">
               {activeCount}
             </p>
           </div>
-          <div className="rounded-sm border border-white/10 bg-white/5 px-2 py-1.5">
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-white/55">
+          <div className="flex items-baseline justify-between gap-2 rounded-sm border border-white/10 bg-white/5 px-2 py-1.5">
+            <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-white/55">
               Sales
             </p>
-            <p className="mt-0.5 truncate text-sm font-semibold tabular-nums text-titan-yellow">
+            <p className="text-right text-sm font-semibold tabular-nums text-titan-yellow">
               {formatCurrency(sales)}
             </p>
           </div>
@@ -493,16 +493,16 @@ function CategoryMetricCard({
           </span>
         </div>
 
-        <div className="mt-4 grid grid-cols-2 gap-2">
+        <div className="mt-4 space-y-1.5">
           {spark.map((item) => (
             <div
               key={item.label}
-              className="rounded-sm bg-light-gray/70 px-2 py-1.5"
+              className="flex items-baseline justify-between gap-2 rounded-sm bg-light-gray/70 px-2 py-1.5"
             >
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-medium-gray">
+              <p className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-medium-gray">
                 {item.label}
               </p>
-              <p className="mt-0.5 truncate text-sm font-semibold tabular-nums text-dark-charcoal">
+              <p className="text-right text-sm font-semibold tabular-nums text-dark-charcoal">
                 {item.value}
               </p>
             </div>

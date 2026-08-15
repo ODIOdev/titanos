@@ -347,17 +347,26 @@ export default async function AdminInventoryPage({
   const skuShare = (count: number) =>
     products.length === 0 ? 0 : (count / products.length) * 100;
 
-  const filtered = products
-    .filter((p) => {
-      if (categoryId) {
-        const id = p.category_id ?? UNCATEGORIZED;
-        if (id !== categoryId) return false;
-      }
-      if (brandId && p.brand_id !== brandId) return false;
-      if (stock !== "all" && stockState(p) !== stock) return false;
-      if (q.trim() && productSearchScore(p, q) <= 0) return false;
-      return true;
-    })
+  const filteredSansStock = products.filter((p) => {
+    if (categoryId) {
+      const id = p.category_id ?? UNCATEGORIZED;
+      if (id !== categoryId) return false;
+    }
+    if (brandId && p.brand_id !== brandId) return false;
+    if (q.trim() && productSearchScore(p, q) <= 0) return false;
+    return true;
+  });
+  const stockCounts = filteredSansStock.reduce(
+    (acc, p) => {
+      acc[stockState(p)] += 1;
+      acc.all += 1;
+      return acc;
+    },
+    { all: 0, ok: 0, low: 0, out: 0 },
+  );
+
+  const filtered = filteredSansStock
+    .filter((p) => (stock === "all" ? true : stockState(p) === stock))
     .sort((a, b) => {
       if (sort === "stock-desc") {
         return (
@@ -531,37 +540,63 @@ export default async function AdminInventoryPage({
         </section>
       ) : null}
 
-      <section className="overflow-hidden rounded-sm border border-border-gray bg-white">
-        <div className="space-y-3 border-b border-border-gray px-4 py-4 sm:px-5">
-          <div>
-            <h2 className="font-heading text-lg font-semibold uppercase tracking-wide text-dark-charcoal">
-              {activeCategoryName ?? "All products"}
-            </h2>
-            <p className="mt-0.5 text-sm text-medium-gray">
-              Rows at or below their low-stock threshold are flagged.
-              <span className="ml-1.5 tabular-nums text-dark-charcoal">
-                · {filtered.length} item{filtered.length === 1 ? "" : "s"}
-                {filtered.length > 0 ? ` · showing ${rangeStart}–${rangeEnd}` : ""}
+      <section className="overflow-hidden rounded-sm border border-border-gray bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)]">
+        <div className="border-b border-border-gray bg-[linear-gradient(180deg,rgba(245,196,0,0.08)_0%,transparent_100%)] px-4 py-4 sm:px-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-medium-gray">
+                Catalog stock
+              </p>
+              <h2 className="mt-0.5 font-heading text-lg font-semibold tracking-tight text-dark-charcoal">
+                {activeCategoryName ?? "All products"}
+              </h2>
+              <p className="mt-1 text-xs text-medium-gray">
+                Low and out rows are flagged against each SKU’s threshold.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="inline-flex items-center gap-1.5 rounded-sm border border-border-gray bg-white px-2.5 py-1 text-[11px] tabular-nums text-dark-charcoal">
+                <span className="font-bold">{filtered.length}</span>
+                <span className="text-medium-gray">
+                  item{filtered.length === 1 ? "" : "s"}
+                </span>
               </span>
-            </p>
+              {filtered.length > 0 ? (
+                <span className="inline-flex items-center rounded-sm border border-border-gray bg-white px-2.5 py-1 text-[11px] tabular-nums text-medium-gray">
+                  {rangeStart}–{rangeEnd}
+                </span>
+              ) : null}
+              {(stockCounts.low > 0 || stockCounts.out > 0) ? (
+                <span className="inline-flex items-center gap-1 rounded-sm border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-amber-900">
+                  {stockCounts.low + stockCounts.out} need attention
+                </span>
+              ) : (
+                <span className="inline-flex items-center rounded-sm border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
+                  Stock healthy
+                </span>
+              )}
+            </div>
           </div>
 
-          <AdminInventoryFilterBar
-            q={q}
-            category={categoryId}
-            brand={brandId}
-            stock={stock}
-            sort={sort}
-            categories={categoryStats.map((c) => ({
-              id: c.id,
-              name: c.name,
-            }))}
-            brands={brands
-              .filter((b) => b.active)
-              .map((b) => ({ id: b.id, name: b.name }))}
-            hasFilters={hasFilters}
-            clearHref="/admin/inventory"
-          />
+          <div className="mt-3">
+            <AdminInventoryFilterBar
+              q={q}
+              category={categoryId}
+              brand={brandId}
+              stock={stock}
+              sort={sort}
+              categories={categoryStats.map((c) => ({
+                id: c.id,
+                name: c.name,
+              }))}
+              brands={brands
+                .filter((b) => b.active)
+                .map((b) => ({ id: b.id, name: b.name }))}
+              hasFilters={hasFilters}
+              clearHref="/admin/inventory"
+              counts={stockCounts}
+            />
+          </div>
         </div>
 
         <AdminInventoryProductsTable

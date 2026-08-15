@@ -2031,6 +2031,10 @@ export async function saveSiteSettings(formData: FormData): Promise<ActionResult
 
     revalidatePath("/admin/settings");
     revalidatePath("/admin/orders");
+    revalidatePath("/", "layout");
+    revalidatePath("/cart");
+    revalidatePath("/checkout");
+    revalidatePath("/shipping");
     return { success: true, message: "Settings saved." };
   } catch (err) {
     return {

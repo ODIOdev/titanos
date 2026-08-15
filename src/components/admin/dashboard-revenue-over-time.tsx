@@ -16,15 +16,31 @@ const RANGES: { id: RevenueRangeKey; label: string; caption: string }[] = [
 export function DashboardRevenueOverTime({
   seriesByRange,
   className,
+  compact = false,
+  title = "Cash pulse",
+  actionHref = "/admin/analytics",
+  actionLabel = "Reports",
+  chartHeight,
+  defaultRange = "7d",
 }: {
   seriesByRange: Record<RevenueRangeKey, RevenuePoint[]>;
   className?: string;
+  compact?: boolean;
+  title?: string;
+  actionHref?: string;
+  actionLabel?: string;
+  chartHeight?: number;
+  defaultRange?: RevenueRangeKey;
 }) {
-  const [range, setRange] = useState<RevenueRangeKey>("7d");
+  const [range, setRange] = useState<RevenueRangeKey>(defaultRange);
   const active = RANGES.find((r) => r.id === range) ?? RANGES[1]!;
   const data = seriesByRange[range] ?? [];
   const revenueTotal = data.reduce((sum, point) => sum + point.revenue, 0);
-  const expenseTotal = data.reduce((sum, point) => sum + (point.expense ?? 0), 0);
+  const expenseTotal = data.reduce(
+    (sum, point) => sum + (point.expense ?? 0),
+    0,
+  );
+  const height = chartHeight ?? (compact ? 180 : 280);
 
   return (
     <section
@@ -33,19 +49,46 @@ export function DashboardRevenueOverTime({
         className,
       )}
     >
-      <div className="flex flex-col gap-3 border-b border-border-gray px-3 py-3.5 sm:px-5 @5xl:flex-row @5xl:items-start @5xl:justify-between">
+      <div
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-2 border-b border-border-gray",
+          compact ? "px-3 py-2" : "px-4 py-3 @5xl:px-5",
+        )}
+      >
         <div className="min-w-0">
-          <h2 className="font-heading text-sm font-semibold uppercase tracking-wide text-dark-charcoal">
-            Revenue over time
+          <h2
+            className={cn(
+              "font-heading font-semibold uppercase tracking-wide text-dark-charcoal",
+              compact ? "text-xs" : "text-sm",
+            )}
+          >
+            {title}
           </h2>
-          <p className="mt-0.5 text-xs text-medium-gray">
-            {active.caption} · {formatCurrency(revenueTotal)} revenue
-            {expenseTotal > 0 ? ` · ${formatCurrency(expenseTotal)} expense` : ""}
+          <p
+            className={cn(
+              "text-medium-gray",
+              compact ? "text-[10px]" : "text-xs",
+            )}
+          >
+            {active.caption} ·{" "}
+            <span className="text-dark-charcoal">
+              {formatCurrency(revenueTotal)}
+            </span>{" "}
+            revenue
+            {expenseTotal > 0 ? (
+              <>
+                {" · "}
+                <span className="text-red-600">
+                  {formatCurrency(expenseTotal)}
+                </span>{" "}
+                expense
+              </>
+            ) : null}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
           <div
-            className="inline-flex rounded-sm border border-border-gray bg-light-gray/60 p-0.5"
+            className="inline-flex rounded-sm border border-white/70 bg-white/55 p-0.5 shadow-[inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-md"
             role="group"
             aria-label="Revenue time range"
           >
@@ -56,9 +99,9 @@ export function DashboardRevenueOverTime({
                 onClick={() => setRange(option.id)}
                 aria-pressed={range === option.id}
                 className={cn(
-                  "rounded-sm px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide",
+                  "rounded-sm px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition-colors",
                   range === option.id
-                    ? "bg-white text-dark-charcoal shadow-sm"
+                    ? "bg-dark-charcoal text-white"
                     : "text-medium-gray hover:text-dark-charcoal",
                 )}
               >
@@ -67,15 +110,27 @@ export function DashboardRevenueOverTime({
             ))}
           </div>
           <Link
-            href="/admin/analytics"
-            className="shrink-0 text-xs font-semibold uppercase tracking-wide text-medium-gray transition-colors hover:text-dark-charcoal"
+            href={actionHref}
+            className={cn(
+              "shrink-0 font-semibold uppercase tracking-wide text-medium-gray hover:text-dark-charcoal",
+              compact ? "text-[10px]" : "text-xs",
+            )}
           >
-            Full reports
+            {actionLabel}
           </Link>
         </div>
       </div>
-      <div className="px-2 py-4 sm:px-4">
-        <AnalyticsRevenueChart data={data} showExpense />
+      <div
+        className={cn(
+          compact ? "px-2 py-2" : "px-2 py-4 @5xl:px-4 @5xl:py-5",
+        )}
+      >
+        <AnalyticsRevenueChart
+          data={data}
+          showExpense
+          height={height}
+          compact={compact}
+        />
       </div>
     </section>
   );

@@ -836,6 +836,296 @@ const probes: ApiStackProbe[] = [
       }
     },
   },
+  {
+    id: "shipengine",
+    name: "ShipEngine",
+    description: "Carrier rates and shipping labels",
+    docsUrl: "https://www.shipengine.com/docs/",
+    logoUrl: "/images/integrations/shipengine.svg",
+    async check() {
+      const {
+        isShipEngineDirectConfigured,
+        getConfiguredCarrierIds,
+      } = await import("@/lib/shipengine/config");
+      const apiKey = process.env.SHIPENGINE_API_KEY?.trim() || "";
+      const pinnedCarriers = getConfiguredCarrierIds();
+      const supabaseReady = Boolean(
+        process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() &&
+          process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim(),
+      );
+
+      if (!isShipEngineDirectConfigured()) {
+        return {
+          light: "red",
+          statusLabel: "Error",
+          detail: supabaseReady
+            ? "SHIPENGINE_API_KEY is missing for direct probes. Edge function path may still work if the key is in Supabase secrets."
+            : "ShipEngine API key is not configured.",
+          metrics: [
+            { label: "API key", value: "Missing" },
+            {
+              label: "Path",
+              value: supabaseReady ? "Edge only" : "None",
+            },
+            {
+              label: "Carriers",
+              value: pinnedCarriers.length
+                ? `${pinnedCarriers.length} pinned`
+                : "Auto",
+            },
+          ],
+          fixSteps: [
+            "Create an API key in ShipEngine / ShipStation → API management.",
+            "Set SHIPENGINE_API_KEY in .env.local (and Vercel env) or `supabase secrets set SHIPENGINE_API_KEY=…`.",
+            "Optionally set SHIPENGINE_CARRIER_IDS to pin rate-shopping accounts.",
+            "Restart the server and recheck this stack.",
+          ],
+        };
+      }
+
+      try {
+        const started = Date.now();
+        const response = await fetch(
+          "https://api.shipengine.com/v1/carriers",
+          {
+            headers: {
+              "API-Key": apiKey,
+              Accept: "application/json",
+            },
+            cache: "no-store",
+            signal: AbortSignal.timeout(6000),
+          },
+        );
+        const latencyMs = Date.now() - started;
+        const body = (await response.json().catch(() => null)) as {
+          carriers?: unknown[];
+          message?: string;
+          errors?: Array<{ message?: string }>;
+        } | null;
+        const carrierCount = Array.isArray(body?.carriers)
+          ? body.carriers.length
+          : null;
+
+        if (!response.ok) {
+          const errMsg =
+            body?.errors?.[0]?.message ||
+            body?.message ||
+            `ShipEngine responded with ${response.status}.`;
+          return {
+            light: response.status === 401 ? "red" : "yellow",
+            statusLabel: response.status === 401 ? "Error" : "Problem",
+            detail: errMsg,
+            metrics: [
+              { label: "API key", value: maskTail(apiKey) },
+              { label: "Latency", value: `${latencyMs} ms` },
+              {
+                label: "Carriers",
+                value: pinnedCarriers.length
+                  ? `${pinnedCarriers.length} pinned`
+                  : "—",
+              },
+            ],
+            fixSteps: [
+              "Confirm SHIPENGINE_API_KEY is a valid production/sandbox key.",
+              "Rotate the key in ShipEngine if it was revoked or copied incompletely.",
+              "Restart the app and recheck.",
+            ],
+          };
+        }
+
+        const degraded =
+          carrierCount === 0 ||
+          (pinnedCarriers.length > 0 &&
+            carrierCount != null &&
+            carrierCount < pinnedCarriers.length);
+
+        return {
+          light: degraded ? "yellow" : "green",
+          statusLabel: degraded ? "Problem" : "Active",
+          detail: degraded
+            ? carrierCount === 0
+              ? "Authenticated, but no carriers are connected in ShipEngine."
+              : "Authenticated, but fewer carriers returned than SHIPENGINE_CARRIER_IDS."
+            : "ShipEngine API authenticated and carriers reachable.",
+          metrics: [
+            { label: "API key", value: maskTail(apiKey) },
+            { label: "Latency", value: `${latencyMs} ms` },
+            {
+              label: "Carriers",
+              value:
+                carrierCount != null
+                  ? pinnedCarriers.length
+                    ? `${carrierCount} · ${pinnedCarriers.length} pinned`
+                    : String(carrierCount)
+                  : pinnedCarriers.length
+                    ? `${pinnedCarriers.length} pinned`
+                    : "—",
+            },
+          ],
+          fixSteps: degraded
+            ? [
+                "Connect UPS / USPS / FedEx (or other) accounts in the ShipEngine dashboard.",
+                "Update SHIPENGINE_CARRIER_IDS to match active carrier_id values.",
+                "Recheck this stack after carriers are linked.",
+              ]
+            : undefined,
+        };
+      } catch (err) {
+        return {
+          light: "red",
+          statusLabel: "Error",
+          detail:
+            err instanceof Error
+              ? err.message
+              : "ShipEngine API probe failed.",
+          metrics: [
+            { label: "API key", value: maskTail(apiKey) },
+            { label: "Host", value: "api.shipengine.com" },
+            {
+              label: "Carriers",
+              value: pinnedCarriers.length
+                ? `${pinnedCarriers.length} pinned`
+                : "Auto",
+            },
+          ],
+          fixSteps: [
+            "Check network access to api.shipengine.com from this runtime.",
+            "Retry after connectivity is restored.",
+          ],
+        };
+      }
+    },
+  },
+  {
+    id: "google-places",
+    name: "Google Places",
+    description: "Maps / Places address autocomplete",
+    docsUrl: "https://console.cloud.google.com/google/maps-apis",
+    logoUrl: "/images/integrations/google-maps.svg",
+    async check() {
+      const {
+        getGooglePlacesApiKey,
+        isGooglePlacesConfigured,
+      } = await import("@/lib/google/places");
+      const apiKey = getGooglePlacesApiKey();
+      const keySource = process.env.GOOGLE_PLACES_API_KEY?.trim()
+        ? "GOOGLE_PLACES_API_KEY"
+        : process.env.GOOGLE_MAPS_API_KEY?.trim()
+          ? "GOOGLE_MAPS_API_KEY"
+          : process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY?.trim()
+            ? "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY"
+            : "—";
+
+      if (!isGooglePlacesConfigured()) {
+        return {
+          light: "red",
+          statusLabel: "Error",
+          detail: "Google Places / Maps API key is not configured.",
+          metrics: [
+            { label: "API key", value: "Missing" },
+            { label: "Source", value: "—" },
+            { label: "API", value: "Places (New)" },
+          ],
+          fixSteps: [
+            "Enable Places API (New) in Google Cloud Console.",
+            "Create an API key restricted to Places Autocomplete + Place Details.",
+            "Set GOOGLE_PLACES_API_KEY (preferred) or GOOGLE_MAPS_API_KEY in .env.local / Vercel.",
+            "Restart the server and recheck this stack.",
+          ],
+        };
+      }
+
+      try {
+        const started = Date.now();
+        const response = await fetch(
+          "https://places.googleapis.com/v1/places:autocomplete",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Goog-Api-Key": apiKey,
+            },
+            body: JSON.stringify({
+              input: "Houston TX",
+              includedRegionCodes: ["us"],
+            }),
+            cache: "no-store",
+            signal: AbortSignal.timeout(6000),
+          },
+        );
+        const latencyMs = Date.now() - started;
+        const body = (await response.json().catch(() => null)) as {
+          suggestions?: unknown[];
+          error?: { message?: string; status?: string };
+        } | null;
+        const suggestionCount = Array.isArray(body?.suggestions)
+          ? body.suggestions.length
+          : 0;
+
+        if (!response.ok) {
+          const errMsg =
+            body?.error?.message ||
+            `Places API responded with ${response.status}.`;
+          const unauthorized = response.status === 401 || response.status === 403;
+          return {
+            light: unauthorized ? "red" : "yellow",
+            statusLabel: unauthorized ? "Error" : "Problem",
+            detail: errMsg,
+            metrics: [
+              { label: "API key", value: maskTail(apiKey) },
+              { label: "Source", value: keySource },
+              { label: "Latency", value: `${latencyMs} ms` },
+            ],
+            fixSteps: [
+              "Confirm Places API (New) is enabled for this Google Cloud project.",
+              "Check API key restrictions (HTTP referrers / IP / API allowlist).",
+              "Billing must be enabled on the Google Cloud project.",
+              "Restart and recheck after updating the key.",
+            ],
+          };
+        }
+
+        return {
+          light: suggestionCount > 0 ? "green" : "yellow",
+          statusLabel: suggestionCount > 0 ? "Active" : "Problem",
+          detail:
+            suggestionCount > 0
+              ? "Places Autocomplete authenticated and returning suggestions."
+              : "Places Autocomplete reachable, but the probe query returned no suggestions.",
+          metrics: [
+            { label: "API key", value: maskTail(apiKey) },
+            { label: "Source", value: keySource },
+            { label: "Latency", value: `${latencyMs} ms` },
+          ],
+          fixSteps:
+            suggestionCount > 0
+              ? undefined
+              : [
+                  "Verify Places API (New) quota and region settings.",
+                  "Try the admin ship-to address search and watch for client errors.",
+                ],
+        };
+      } catch (err) {
+        return {
+          light: "red",
+          statusLabel: "Error",
+          detail:
+            err instanceof Error
+              ? err.message
+              : "Google Places API probe failed.",
+          metrics: [
+            { label: "API key", value: maskTail(apiKey) },
+            { label: "Source", value: keySource },
+            { label: "Host", value: "places.googleapis.com" },
+          ],
+          fixSteps: [
+            "Check network access to places.googleapis.com from this runtime.",
+            "Retry after connectivity is restored.",
+          ],
+        };
+      }
+    },
+  },
 ];
 
 /** Register another stack probe — new stacks automatically appear in the card. */

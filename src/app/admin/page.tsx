@@ -1,27 +1,15 @@
 import Link from "next/link";
-import {
-  Ban,
-  Boxes,
-  ClipboardList,
-  DollarSign,
-  PackageX,
-  Receipt,
-  ShoppingBag,
-  TrendingUp,
-  Users,
-} from "lucide-react";
 import { DashboardRevenueOverTime } from "@/components/admin/dashboard-revenue-over-time";
-import { OrderStatusDonut } from "@/components/admin/dashboard-charts";
 import {
   CategorySalesBreakdown,
   TopProductsBreakdown,
 } from "@/components/admin/dashboard-breakdown";
 import { DashboardMobileOverview } from "@/components/admin/dashboard-mobile-overview";
-import { DashboardStatCard } from "@/components/admin/dashboard-stat-card";
-import { OrderStatusBadge } from "@/components/admin/order-status-badge";
+import { DashboardMetricRibbon } from "@/components/admin/dashboard-metric-ribbon";
+import { DashboardOrderPipeline } from "@/components/admin/dashboard-order-pipeline";
+import { DashboardRecentOrders } from "@/components/admin/dashboard-recent-orders";
 import { getSuppliesInventory } from "@/lib/actions/supplies-inventory";
 import { suppliesTotals } from "@/lib/admin/supplies-inventory";
-import { statusColor } from "@/lib/admin/order-status-colors";
 import {
   buildRevenueByRange,
   getAdminInventory,
@@ -34,7 +22,7 @@ import {
   getProductStockQuantity,
   getProductStockState,
 } from "@/lib/catalog/product-stock";
-import { formatCurrency, formatDateTime } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 
 const OPEN_QUOTE_STATUSES = [
@@ -73,13 +61,13 @@ export default async function AdminOverviewPage() {
   );
 
   const supplies = suppliesTotals(suppliesInventory);
-  const recentOrders = orders.slice(0, 6);
+  const recentOrders = orders.slice(0, 5);
   const lowStock = inventory
     .filter((p) => getProductStockState(p) !== "ok")
-    .slice(0, 6);
+    .slice(0, 5);
   const openQuotes = quotes
     .filter((q) => OPEN_QUOTE_STATUSES.includes(q.status))
-    .slice(0, 6);
+    .slice(0, 5);
 
   const orderTotal = metrics.ordersByStatus.reduce((s, r) => s + r.count, 0);
   const openOrders = metrics.ordersByStatus
@@ -135,7 +123,7 @@ export default async function AdminOverviewPage() {
     {
       label: "Orders",
       value: String(metrics.ordersCount),
-      hint: `${openOrders} still open`,
+      hint: `${openOrders} open`,
       href: "/admin/orders",
     },
     {
@@ -154,9 +142,8 @@ export default async function AdminOverviewPage() {
   return (
     <>
       {!isSupabaseConfigured() ? (
-        <p className="mb-5 rounded-sm border border-titan-yellow/40 bg-titan-yellow/10 px-4 py-3 text-sm text-dark-charcoal lg:mb-6">
-          Demo mode — metrics are derived from seed catalog data. Connect
-          Supabase for live admin data.
+        <p className="mb-3 rounded-sm border border-titan-yellow/40 bg-titan-yellow/10 px-3 py-2 text-xs text-dark-charcoal">
+          Demo mode — seed metrics. Connect Supabase for live data.
         </p>
       ) : null}
 
@@ -185,252 +172,135 @@ export default async function AdminOverviewPage() {
         }))}
       />
 
-      <div className="admin-desktop-overview hidden space-y-6 @5xl:block">
-        <section className="grid grid-cols-2 gap-3 xl:grid-cols-5">
-          <DashboardStatCard
-            label="Revenue"
-            value={formatCurrency(metrics.revenue)}
-            hint="Paid & fulfilled orders"
-            icon={DollarSign}
-            tone="green"
-            href="/admin/wallet"
-          />
-          <DashboardStatCard
-            label="Orders"
-            value={String(metrics.ordersCount)}
-            hint={`${openOrders} still open`}
-            icon={ShoppingBag}
-            tone="blue"
-            href="/admin/orders"
-          />
-          <DashboardStatCard
-            label="Average order"
-            value={formatCurrency(metrics.aov)}
-            hint={bestDay ? `Best day ${bestDay.date}` : "No sales yet"}
-            icon={TrendingUp}
-            tone="yellow"
-          />
-          <DashboardStatCard
-            label="Cancelled"
-            value={String(cancelledOrders)}
-            hint="Cancelled before fulfillment"
-            icon={Ban}
-            tone="red"
-            href="/admin/orders?status=cancelled"
-            alert={cancelledOrders > 0}
-          />
-          <DashboardStatCard
-            label="Users"
-            value={String(metrics.customersCount)}
-            hint="Registered accounts"
-            icon={Users}
-            tone="charcoal"
-            href="/admin/users"
-          />
-        </section>
+      <div className="admin-desktop-overview hidden space-y-3 @5xl:block">
+        <DashboardMetricRibbon
+          revenue={metrics.revenue}
+          ordersCount={metrics.ordersCount}
+          openOrders={openOrders}
+          aov={metrics.aov}
+          bestDayLabel={bestDay?.date ?? null}
+          usersCount={metrics.customersCount}
+          cancelledOrders={cancelledOrders}
+          pendingQuotes={metrics.pendingQuotes}
+          lowStockCount={metrics.lowStockCount}
+          suppliesUnits={supplies.units}
+          suppliesValue={supplies.value}
+          suppliesAlert={supplies.lowOut > 0}
+          skuCount={inventory.length}
+        />
 
-        <section className="grid gap-4 lg:grid-cols-3">
+        {/* Pulse + pipeline */}
+        <section className="grid gap-3 lg:grid-cols-12">
           <DashboardRevenueOverTime
             seriesByRange={revenueByRange}
-            className="lg:col-span-2"
+            className="lg:col-span-8"
+            compact
           />
 
           <Panel
-            title="Orders by status"
-            caption={`${orderTotal} orders total`}
-            action={{ href: "/admin/orders", label: "Manage" }}
+            title="Pipeline"
+            caption={`${orderTotal} orders`}
+            action={{ href: "/admin/orders", label: "Orders" }}
+            className="lg:col-span-4"
+            dense
           >
-            <div className="px-4 pt-4 sm:px-5">
-              <OrderStatusDonut data={metrics.ordersByStatus} />
-            </div>
-            <ul className="space-y-1.5 px-4 pb-4 sm:px-5">
-              {metrics.ordersByStatus.map((row, index) => (
-                <li
-                  key={row.status}
-                  className="flex items-center gap-2 text-sm text-dark-charcoal"
-                >
-                  <span
-                    className="size-2.5 shrink-0 rounded-full"
-                    style={{ backgroundColor: statusColor(row.status, index) }}
-                    aria-hidden="true"
-                  />
-                  <span className="flex-1 capitalize">
-                    {row.status.replace(/_/g, " ")}
-                  </span>
-                  <span className="text-medium-gray">{row.count}</span>
-                </li>
-              ))}
-            </ul>
+            <DashboardOrderPipeline data={metrics.ordersByStatus} />
           </Panel>
         </section>
 
-        <section className="grid gap-3 lg:grid-cols-2 lg:gap-4">
-          <Panel
-            title="Sales by category"
-            caption="Revenue mix across the catalog"
-          >
-            <CategorySalesBreakdown data={metrics.salesByCategory} />
+        {/* Mix + leaders */}
+        <section className="grid gap-3 lg:grid-cols-2">
+          <Panel title="Category mix" caption="Revenue share" dense>
+            <CategorySalesBreakdown data={metrics.salesByCategory} compact />
           </Panel>
-
           <Panel
             title="Top products"
-            caption="Best performers by revenue"
+            caption="By revenue"
             action={{ href: "/admin/products", label: "Catalog" }}
+            dense
           >
-            <TopProductsBreakdown data={metrics.topProducts} />
+            <TopProductsBreakdown data={metrics.topProducts} compact />
           </Panel>
         </section>
 
-        <section className="grid grid-cols-2 gap-3 xl:grid-cols-5">
-          <DashboardStatCard
-            label="Open quotes"
-            value={String(metrics.pendingQuotes)}
-            hint="Waiting on a response"
-            icon={ClipboardList}
-            tone="orange"
-            href="/admin/quotes"
-            alert={metrics.pendingQuotes > 0}
-          />
-          <DashboardStatCard
-            label="Low stock"
-            value={String(metrics.lowStockCount)}
-            hint="At or below threshold"
-            icon={PackageX}
-            tone="red"
-            href="/admin/inventory"
-            alert={metrics.lowStockCount > 0}
-          />
-          <DashboardStatCard
-            label="Open orders"
-            value={String(openOrders)}
-            hint="Pending, paid, or processing"
-            icon={Receipt}
-            tone="blue"
-            href="/admin/orders"
-          />
-          <DashboardStatCard
-            label="Supplies"
-            value={String(supplies.units)}
-            hint={
-              supplies.lowOut > 0
-                ? `${supplies.lowOut} low / out · ${formatCurrency(supplies.value)}`
-                : `${formatCurrency(supplies.value)} on hand`
-            }
-            icon={Boxes}
-            tone="charcoal"
-            href="/admin/inventory#supplies"
-            alert={supplies.lowOut > 0}
-          />
-          <DashboardStatCard
-            label="Catalog size"
-            value={String(inventory.length)}
-            hint="Active SKUs"
-            icon={ShoppingBag}
-            tone="charcoal"
-            href="/admin/products"
-          />
-        </section>
-
-        <section className="grid gap-4 lg:grid-cols-3">
+        {/* Work queue */}
+        <section className="grid gap-3 lg:grid-cols-12">
           <Panel
             title="Recent orders"
-            caption="Newest first"
-            className="lg:col-span-2"
-            action={{ href: "/admin/orders", label: "All orders" }}
+            caption="Latest 5"
+            className="lg:col-span-7"
+            action={{ href: "/admin/orders", label: "All" }}
+            dense
           >
-            <ul className="divide-y divide-border-gray">
-              {recentOrders.map((order) => (
-                <li key={order.id}>
-                  <Link
-                    href={`/admin/orders/${order.id}`}
-                    className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-light-gray sm:px-5"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium text-dark-charcoal">
-                        {order.order_number}
-                      </span>
-                      <span className="block truncate text-xs text-medium-gray">
-                        {order.email}
-                      </span>
-                      <span className="mt-0.5 block truncate text-[0.65rem] tabular-nums text-medium-gray">
-                        Ordered {formatDateTime(order.created_at)}
-                      </span>
-                    </span>
-                    <OrderStatusBadge status={order.status} />
-                    <span className="w-24 text-right text-sm font-medium text-dark-charcoal">
-                      {formatCurrency(order.total)}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-              {recentOrders.length === 0 ? (
-                <EmptyRow>No orders yet.</EmptyRow>
-              ) : null}
-            </ul>
+            <DashboardRecentOrders orders={recentOrders} compact />
           </Panel>
 
-          <div className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:col-span-5 lg:grid-cols-1">
             <Panel
-              title="Restock soon"
-              caption="At or below threshold"
-              action={{ href: "/admin/inventory", label: "Inventory" }}
+              title="Restock"
+              caption={`${lowStock.length} SKUs`}
+              action={{ href: "/admin/inventory", label: "Stock" }}
+              dense
             >
               <ul className="divide-y divide-border-gray">
-                {lowStock.map((product) => (
-                  <li key={product.id}>
-                    <Link
-                      href={`/admin/products/${product.id}`}
-                      className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-light-gray sm:px-5"
-                    >
-                      <span className="min-w-0 flex-1 truncate text-sm text-dark-charcoal">
-                        {product.name}
-                      </span>
-                      <span
-                        className={
-                          getProductStockQuantity(product) <= 0
-                            ? "text-sm font-semibold text-red-700"
-                            : "text-sm font-semibold text-orange-700"
-                        }
+                {lowStock.map((product) => {
+                  const qty = getProductStockQuantity(product);
+                  return (
+                    <li key={product.id}>
+                      <Link
+                        href={`/admin/products/${product.id}`}
+                        className="flex items-center gap-2 px-3 py-2 hover:bg-light-gray/70"
                       >
-                        {getProductStockQuantity(product)}
-                      </span>
-                    </Link>
-                  </li>
-                ))}
+                        <span className="min-w-0 flex-1 truncate text-xs text-dark-charcoal">
+                          {product.name}
+                        </span>
+                        <span
+                          className={cn(
+                            "shrink-0 text-xs font-bold tabular-nums",
+                            qty <= 0 ? "text-red-700" : "text-orange-700",
+                          )}
+                        >
+                          {qty}
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
                 {lowStock.length === 0 ? (
-                  <EmptyRow>Every SKU is above its threshold.</EmptyRow>
+                  <EmptyRow>Stock looks healthy.</EmptyRow>
                 ) : null}
               </ul>
             </Panel>
 
             <Panel
-              title="Quotes to answer"
-              caption="Open requests"
-              action={{ href: "/admin/quotes", label: "Quotes" }}
+              title="Quotes"
+              caption={`${openQuotes.length} open`}
+              action={{ href: "/admin/quotes", label: "All" }}
+              dense
             >
               <ul className="divide-y divide-border-gray">
                 {openQuotes.map((quote) => (
                   <li key={quote.id}>
                     <Link
                       href={`/admin/quotes/${quote.id}`}
-                      className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-light-gray sm:px-5"
+                      className="flex items-center gap-2 px-3 py-2 hover:bg-light-gray/70"
                     >
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm text-dark-charcoal">
+                        <span className="block truncate text-xs font-medium text-dark-charcoal">
                           {quote.company ?? quote.contact_name}
                         </span>
-                        <span className="block truncate text-xs text-medium-gray">
+                        <span className="block truncate text-[10px] text-medium-gray">
                           {quote.quote_number}
                         </span>
                       </span>
-                      <span className="shrink-0 text-xs font-semibold uppercase tracking-wide text-medium-gray">
+                      <span className="max-w-[4.5rem] shrink-0 truncate text-[10px] font-semibold uppercase tracking-wide text-medium-gray">
                         {quote.status.replace(/_/g, " ")}
                       </span>
                     </Link>
                   </li>
                 ))}
                 {openQuotes.length === 0 ? (
-                  <EmptyRow>No open quote requests.</EmptyRow>
+                  <EmptyRow>No open quotes.</EmptyRow>
                 ) : null}
               </ul>
             </Panel>
@@ -447,30 +317,40 @@ function Panel({
   action,
   className,
   children,
+  dense = false,
 }: {
   title: string;
   caption?: string;
   action?: { href: string; label: string };
   className?: string;
   children: React.ReactNode;
+  dense?: boolean;
 }) {
   return (
     <section
-      className={`min-w-0 overflow-hidden rounded-sm border border-border-gray bg-white ${className ?? ""}`}
+      className={cn(
+        "min-w-0 overflow-hidden rounded-sm border border-border-gray bg-white",
+        className,
+      )}
     >
-      <div className="flex items-start justify-between gap-2 border-b border-border-gray px-3 py-3.5 sm:gap-3 sm:px-5">
+      <div
+        className={cn(
+          "flex items-center justify-between gap-2 border-b border-border-gray",
+          dense ? "px-3 py-2" : "px-3 py-3.5 sm:px-5",
+        )}
+      >
         <div className="min-w-0">
-          <h2 className="font-heading text-sm font-semibold uppercase tracking-wide text-dark-charcoal">
+          <h2 className="font-heading text-xs font-semibold uppercase tracking-wide text-dark-charcoal">
             {title}
           </h2>
           {caption ? (
-            <p className="mt-0.5 text-xs text-medium-gray">{caption}</p>
+            <p className="text-[10px] text-medium-gray">{caption}</p>
           ) : null}
         </div>
         {action ? (
           <Link
             href={action.href}
-            className="shrink-0 text-xs font-semibold uppercase tracking-wide text-medium-gray transition-colors hover:text-dark-charcoal"
+            className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-medium-gray transition-colors hover:text-dark-charcoal"
           >
             {action.label}
           </Link>
@@ -483,7 +363,7 @@ function Panel({
 
 function EmptyRow({ children }: { children: React.ReactNode }) {
   return (
-    <li className="px-4 py-6 text-center text-sm text-medium-gray sm:px-5">
+    <li className="px-3 py-4 text-center text-xs text-medium-gray">
       {children}
     </li>
   );

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FREE_SHIPPING_THRESHOLD, SITE_CONFIG } from "@/lib/data/seed-data";
+import { getFreeShippingThreshold } from "@/lib/data/free-shipping";
+import { SITE_CONFIG } from "@/lib/data/seed-data";
 import { formatCurrency } from "@/lib/utils";
 
 export const metadata: Metadata = {
@@ -8,7 +9,9 @@ export const metadata: Metadata = {
   description: `Shipping policy and freight information for ${SITE_CONFIG.name}.`,
 };
 
-export default function ShippingPage() {
+export default async function ShippingPage() {
+  const freeShippingThreshold = await getFreeShippingThreshold();
+
   return (
     <div className="container-titan max-w-3xl py-10 lg:py-14">
       <h1 className="font-heading text-4xl uppercase tracking-wide text-dark-charcoal md:text-5xl">
@@ -24,7 +27,7 @@ export default function ShippingPage() {
             Free shipping
           </h2>
           <p className="mt-3">
-            Orders totaling {formatCurrency(FREE_SHIPPING_THRESHOLD)} or more before tax
+            Orders totaling {formatCurrency(freeShippingThreshold)} or more before tax
             typically qualify for free small-parcel shipping within the contiguous United
             States. Promotional exclusions and oversized items may apply.
           </p>

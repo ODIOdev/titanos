@@ -4,7 +4,7 @@ import {
   parseVariantKey,
 } from "@/lib/catalog/inventory";
 import { getProductById } from "@/lib/data/products";
-import { FREE_SHIPPING_THRESHOLD } from "@/lib/data/seed-data";
+import { FREE_SHIPPING_THRESHOLD as DEFAULT_FREE_SHIPPING_THRESHOLD } from "@/lib/data/seed-data";
 
 export const CHECKOUT_STANDARD_SHIPPING = 12.99;
 export const CHECKOUT_TAX_RATE = 0.08;
@@ -96,10 +96,11 @@ export async function resolveCheckoutLineItems(
 
 export function computeCheckoutTotals(
   lineItems: CheckoutLineItem[],
+  freeShippingThreshold: number = DEFAULT_FREE_SHIPPING_THRESHOLD,
 ): CheckoutTotals {
   const subtotal = lineItems.reduce((sum, item) => sum + item.totalPrice, 0);
   const shippingAmount =
-    subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : CHECKOUT_STANDARD_SHIPPING;
+    subtotal >= freeShippingThreshold ? 0 : CHECKOUT_STANDARD_SHIPPING;
   const taxAmount = Number((subtotal * CHECKOUT_TAX_RATE).toFixed(2));
   const total = Number((subtotal + shippingAmount + taxAmount).toFixed(2));
   return { subtotal, shippingAmount, taxAmount, total };

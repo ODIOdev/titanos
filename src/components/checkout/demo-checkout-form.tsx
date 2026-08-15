@@ -34,19 +34,14 @@ const compactField =
   "[&_label]:mb-1 [&_label]:text-[0.7rem] [&_input]:h-9 [&_input]:text-sm [&_select]:h-9 [&_select]:text-sm";
 
 function SectionHeading({
-  step,
   icon: Icon,
   title,
 }: {
-  step: number;
   icon: typeof User;
   title: string;
 }) {
   return (
     <div className="mb-2 flex items-center gap-2">
-      <span className="flex size-5 shrink-0 items-center justify-center rounded-sm bg-dark-charcoal font-heading text-[0.6rem] font-semibold text-titan-yellow">
-        {step}
-      </span>
       <Icon className="size-3 text-[#9a8b6e]" aria-hidden="true" />
       <h3 className="font-heading text-[0.7rem] font-semibold uppercase tracking-wide text-dark-charcoal">
         {title}
@@ -153,7 +148,7 @@ export function DemoCheckoutForm({
   return (
     <div className={cn("space-y-3.5", compactField)}>
       <section>
-        <SectionHeading step={1} icon={User} title="Contact" />
+        <SectionHeading icon={User} title="Contact" />
         <Input
           label="Email"
           type="email"
@@ -168,7 +163,7 @@ export function DemoCheckoutForm({
       </section>
 
       <section>
-        <SectionHeading step={2} icon={MapPin} title="Shipping" />
+        <SectionHeading icon={MapPin} title="Shipping" />
         <div className="grid gap-2 sm:grid-cols-2">
           <Input
             label="First name"
@@ -263,7 +258,7 @@ export function DemoCheckoutForm({
       </section>
 
       <section>
-        <SectionHeading step={3} icon={CreditCard} title="Payment" />
+        <SectionHeading icon={CreditCard} title="Payment" />
         <div className="space-y-2 rounded-sm border border-[#eadfce] bg-[#faf6ee] p-2.5">
           <Input
             label="Name on card"
@@ -309,8 +304,8 @@ export function DemoCheckoutForm({
           </div>
           <div className="border-t border-[#eadfce] pt-2">
             <PaymentMethodLogos
-              className="justify-start gap-1"
-              itemClassName="h-7 w-[3.75rem] border-[#eadfce]"
+              className="justify-start"
+              itemClassName="border-[#eadfce]"
             />
             <p className="mt-1.5 text-[0.6rem] leading-snug text-[#8a7d66]">
               Test ·{" "}
@@ -334,9 +329,6 @@ export function DemoCheckoutForm({
           <Lock className="size-3.5" aria-hidden="true" />
           {pending ? "Placing order…" : `Pay ${formatCurrency(total)}`}
         </Button>
-        <p className="text-center text-[0.6rem] text-[#8a7d66]">
-          Saves a paid order to Admin → Orders.
-        </p>
       </div>
     </div>
   );

@@ -191,13 +191,24 @@ export default async function AdminProductsPage({
     archived,
   };
 
-  const visible = lists[tab]
-    .filter((p) => {
-      if (categoryId && p.category_id !== categoryId) return false;
-      if (brandId && p.brand_id !== brandId) return false;
-      if (!matchesStock(p, stock)) return false;
-      return true;
-    })
+  const visibleSansStock = lists[tab].filter((p) => {
+    if (categoryId && p.category_id !== categoryId) return false;
+    if (brandId && p.brand_id !== brandId) return false;
+    return true;
+  });
+
+  const stockCounts = visibleSansStock.reduce(
+    (acc, p) => {
+      const state = getProductStockState(p);
+      acc[state] += 1;
+      acc.all += 1;
+      return acc;
+    },
+    { all: 0, ok: 0, low: 0, out: 0 },
+  );
+
+  const visible = visibleSansStock
+    .filter((p) => matchesStock(p, stock))
     .sort((a, b) => {
       if (!q.trim()) return a.name.localeCompare(b.name);
       const scoreDiff = productSearchScore(b, q) - productSearchScore(a, q);
@@ -366,42 +377,65 @@ export default async function AdminProductsPage({
           />
         </div>
 
-        <div className="rounded-t-sm border border-border-gray bg-white shadow-[0_1px_0_0_rgba(0,0,0,0.04)]">
-          <div className="space-y-3 border-b border-border-gray px-4 py-4 sm:px-5">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="overflow-hidden rounded-t-sm border border-border-gray bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)]">
+          <div className="border-b border-border-gray bg-[linear-gradient(180deg,rgba(245,196,0,0.08)_0%,transparent_100%)] px-4 py-4 sm:px-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="font-heading text-lg font-semibold uppercase tracking-wide text-dark-charcoal">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-medium-gray">
+                  Catalog
+                </p>
+                <h2 className="mt-0.5 font-heading text-lg font-semibold tracking-tight text-dark-charcoal">
                   {tabMeta[tab].title}
                 </h2>
-                <p className="mt-0.5 text-sm text-medium-gray">
+                <p className="mt-1 text-xs text-medium-gray">
                   {tabMeta[tab].description}
-                  <span className="ml-1.5 tabular-nums text-dark-charcoal">
-                    · {visible.length} item{visible.length === 1 ? "" : "s"}
-                    {visible.length > 0
-                      ? ` · showing ${rangeStart}–${rangeEnd}`
-                      : ""}
-                  </span>
                 </p>
               </div>
-              <Link
-                href="/admin/products/new"
-                className="inline-flex h-10 shrink-0 items-center justify-center rounded-sm bg-titan-yellow px-4 font-heading text-sm font-semibold uppercase tracking-wide text-dark-charcoal hover:bg-[#e0b400]"
-              >
-                New product
-              </Link>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="inline-flex items-center gap-1.5 rounded-sm border border-border-gray bg-white px-2.5 py-1 text-[11px] tabular-nums text-dark-charcoal">
+                  <span className="font-bold">{visible.length}</span>
+                  <span className="text-medium-gray">
+                    item{visible.length === 1 ? "" : "s"}
+                  </span>
+                </span>
+                {visible.length > 0 ? (
+                  <span className="inline-flex items-center rounded-sm border border-border-gray bg-white px-2.5 py-1 text-[11px] tabular-nums text-medium-gray">
+                    {rangeStart}–{rangeEnd}
+                  </span>
+                ) : null}
+                {tab === "active" &&
+                (stockCounts.low > 0 || stockCounts.out > 0) ? (
+                  <span className="inline-flex items-center gap-1 rounded-sm border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-amber-900">
+                    {stockCounts.low + stockCounts.out} need attention
+                  </span>
+                ) : tab === "active" ? (
+                  <span className="inline-flex items-center rounded-sm border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-800">
+                    Stock healthy
+                  </span>
+                ) : null}
+                <Link
+                  href="/admin/products/new"
+                  className="inline-flex h-8 shrink-0 items-center justify-center rounded-sm bg-titan-yellow px-3 font-heading text-xs font-semibold uppercase tracking-wide text-dark-charcoal hover:bg-[#e0b400]"
+                >
+                  New product
+                </Link>
+              </div>
             </div>
 
-            <AdminProductsFilterBar
-              tab={tab}
-              q={q}
-              categoryId={categoryId}
-              brandId={brandId}
-              stock={stock}
-              categories={categories.map((c) => ({ id: c.id, name: c.name }))}
-              brands={brands.map((b) => ({ id: b.id, name: b.name }))}
-              hasFilters={hasFilters}
-              clearHref={buildHref({ tab })}
-            />
+            <div className="mt-3">
+              <AdminProductsFilterBar
+                tab={tab}
+                q={q}
+                categoryId={categoryId}
+                brandId={brandId}
+                stock={stock}
+                categories={categories.map((c) => ({ id: c.id, name: c.name }))}
+                brands={brands.map((b) => ({ id: b.id, name: b.name }))}
+                hasFilters={hasFilters}
+                clearHref={buildHref({ tab })}
+                counts={stockCounts}
+              />
+            </div>
           </div>
         </div>
       </div>

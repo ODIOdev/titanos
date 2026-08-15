@@ -4,6 +4,7 @@ import {
   orderItemOptionsFromLine,
   resolveCheckoutLineItems,
 } from "@/lib/checkout/pricing";
+import { getFreeShippingThreshold } from "@/lib/data/free-shipping";
 import { absoluteUrl, generateOrderNumber } from "@/lib/utils";
 import { checkoutSchema } from "@/lib/validations";
 import { isStripeConfigured, getStripe } from "@/lib/stripe";
@@ -35,8 +36,11 @@ export async function POST(request: Request) {
   }
 
   const { lineItems } = resolved;
-  const { subtotal, shippingAmount, taxAmount, total } =
-    computeCheckoutTotals(lineItems);
+  const freeShippingThreshold = await getFreeShippingThreshold();
+  const { subtotal, shippingAmount, taxAmount, total } = computeCheckoutTotals(
+    lineItems,
+    freeShippingThreshold,
+  );
   const orderNumber = generateOrderNumber();
   const email = parsed.data.email ?? "guest@titansafetyco.com";
 

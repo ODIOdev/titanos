@@ -5,6 +5,7 @@ import {
   resolveCheckoutLineItems,
 } from "@/lib/checkout/pricing";
 import { deductStockForOrder } from "@/lib/catalog/inventory";
+import { getFreeShippingThreshold } from "@/lib/data/free-shipping";
 import { phoneDigits } from "@/lib/phone";
 import { isStripeConfigured } from "@/lib/stripe";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
@@ -82,8 +83,11 @@ export async function POST(request: Request) {
   }
 
   const { lineItems } = resolved;
-  const { subtotal, shippingAmount, taxAmount, total } =
-    computeCheckoutTotals(lineItems);
+  const freeShippingThreshold = await getFreeShippingThreshold();
+  const { subtotal, shippingAmount, taxAmount, total } = computeCheckoutTotals(
+    lineItems,
+    freeShippingThreshold,
+  );
   const orderNumber = generateOrderNumber();
   const email = parsed.data.email.trim().toLowerCase();
   const ship = parsed.data.shipping;

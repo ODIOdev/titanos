@@ -1,4 +1,3 @@
-import { Scale } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 
 export function WalletBalanceCard({
@@ -21,25 +20,13 @@ export function WalletBalanceCard({
         className="pointer-events-none absolute -right-8 -top-10 size-36 rounded-full bg-emerald-400/15 blur-2xl"
         aria-hidden="true"
       />
-      <div className="relative flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">
-            Balance
-          </p>
-          <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-medium-gray">
-            Platform wallet
-          </p>
-        </div>
-        <span
-          className={cn(
-            "flex size-10 shrink-0 items-center justify-center rounded-sm",
-            positive
-              ? "bg-emerald-100 text-emerald-800"
-              : "bg-red-100 text-red-800",
-          )}
-        >
-          <Scale className="size-5" aria-hidden="true" />
-        </span>
+      <div className="relative min-w-0">
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-700">
+          Balance
+        </p>
+        <p className="mt-1 text-xs font-semibold uppercase tracking-wide text-medium-gray">
+          Platform wallet
+        </p>
       </div>
 
       <p

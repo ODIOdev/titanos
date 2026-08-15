@@ -9,10 +9,15 @@ import {
   Warehouse,
   type LucideIcon,
 } from "lucide-react";
-import { AnalyticsRevenueChart } from "@/components/admin/analytics-revenue-chart";
+import { DashboardRevenueOverTime } from "@/components/admin/dashboard-revenue-over-time";
 import { buttonVariants } from "@/components/ui/button";
 import { formatOrderStatus } from "@/lib/admin/orders-workflow";
-import { getAdminMetrics } from "@/lib/data/admin";
+import {
+  buildRevenueByRange,
+  getAdminMetrics,
+  getAdminOrders,
+} from "@/lib/data/admin";
+import { getWalletLedger } from "@/lib/data/wallet";
 import { isSupabaseConfigured } from "@/lib/supabase/client";
 import { cn, formatCurrency } from "@/lib/utils";
 
@@ -41,7 +46,29 @@ const CATEGORY_BARS = [
 ];
 
 export default async function AdminAnalyticsPage() {
-  const metrics = await getAdminMetrics();
+  const [metrics, orders, wallet] = await Promise.all([
+    getAdminMetrics(),
+    getAdminOrders(),
+    getWalletLedger("all"),
+  ]);
+
+  const expenseStamps = wallet.transactions
+    .filter((txn) => txn.direction === "debit")
+    .map((txn) => ({ at: txn.date, amount: txn.amount }));
+
+  const revenueByRange = buildRevenueByRange(
+    orders.map((order) => ({
+      created_at: order.created_at,
+      total: order.total,
+      status: order.status,
+    })),
+    {
+      expenses: expenseStamps,
+      demoFill: expenseStamps.length === 0 && !isSupabaseConfigured(),
+      totalRevenue: metrics.revenue,
+    },
+  );
+  const pulseSeries = revenueByRange["7d"];
 
   const categoryTotal = metrics.salesByCategory.reduce(
     (sum, row) => sum + row.sales,
@@ -59,11 +86,8 @@ export default async function AdminAnalyticsPage() {
     (sum, row) => sum + row.count,
     0,
   );
-  const weekRevenue = metrics.revenueOverTime.reduce(
-    (sum, day) => sum + day.revenue,
-    0,
-  );
-  const bestDay = metrics.revenueOverTime.reduce<
+  const weekRevenue = pulseSeries.reduce((sum, day) => sum + day.revenue, 0);
+  const bestDay = pulseSeries.reduce<
     { date: string; revenue: number } | null
   >((best, day) => (!best || day.revenue > best.revenue ? day : best), null);
   const openOrders = metrics.ordersByStatus
@@ -201,31 +225,13 @@ export default async function AdminAnalyticsPage() {
         />
       </section>
 
-      <section className="overflow-hidden rounded-sm border border-border-gray bg-white">
-        <div className="flex flex-col gap-3 border-b border-border-gray px-4 py-3 @5xl:flex-row @5xl:items-end @5xl:justify-between @5xl:px-5">
-          <div className="min-w-0">
-            <h2 className="font-heading text-sm font-semibold uppercase tracking-wide text-dark-charcoal">
-              Revenue pulse
-            </h2>
-            <p className="text-xs text-medium-gray">
-              Last 7 days · {formatCurrency(weekRevenue)} total
-              {bestDay
-                ? ` · peak ${bestDay.date} (${formatCurrency(bestDay.revenue)})`
-                : ""}
-            </p>
-          </div>
-          <Link
-            href="/admin/wallet"
-            className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-medium-gray transition-colors hover:text-dark-charcoal"
-          >
-            Open wallet
-            <ArrowUpRight className="size-3.5" aria-hidden="true" />
-          </Link>
-        </div>
-        <div className="px-2 py-4 @5xl:px-4 @5xl:py-5">
-          <AnalyticsRevenueChart data={metrics.revenueOverTime} height={300} />
-        </div>
-      </section>
+      <DashboardRevenueOverTime
+        seriesByRange={revenueByRange}
+        title="Revenue pulse"
+        actionHref="/admin/wallet"
+        actionLabel="Open wallet"
+        chartHeight={300}
+      />
 
       <section className="grid gap-4 @5xl:grid-cols-5">
         <div className="overflow-hidden rounded-sm border border-border-gray bg-white @5xl:col-span-3">
