@@ -99,8 +99,8 @@ export function AdminInventoryFilterBar({
   }, [state, q, pathname, router]);
 
   const stockChips = [
-    { value: "all", label: "All", count: counts?.all },
-    { value: "ok", label: "In stock", count: counts?.ok },
+    { value: "all", label: "All", count: counts?.all, alert: false },
+    { value: "ok", label: "In stock", count: counts?.ok, alert: false },
     { value: "low", label: "Low", count: counts?.low, alert: (counts?.low ?? 0) > 0 },
     { value: "out", label: "Out", count: counts?.out, alert: (counts?.out ?? 0) > 0 },
   ] as const;
