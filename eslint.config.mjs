@@ -8,6 +8,15 @@ const eslintConfig = defineConfig([
   ...nextTs,
   eslintConfigPrettier,
   globalIgnores([".next/**", "out/**", "build/**", "next-env.d.ts"]),
+  {
+    rules: {
+      // eslint-config-next 16 treats React Compiler findings as errors even
+      // though this app does not enable the compiler. Keep them visible.
+      "react-hooks/set-state-in-effect": "warn",
+      "react-hooks/refs": "warn",
+      "react-hooks/preserve-manual-memoization": "warn",
+    },
+  },
 ]);
 
 export default eslintConfig;

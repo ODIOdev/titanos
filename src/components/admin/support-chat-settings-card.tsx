@@ -157,7 +157,7 @@ export function SupportChatSettingsCard({
   ) {
     setSchedule((prev) => {
       const current = prev[day];
-      let openHour = patch.openHour ?? current.openHour;
+      const openHour = patch.openHour ?? current.openHour;
       let closeHour = patch.closeHour ?? current.closeHour;
       if (closeHour <= openHour) closeHour = Math.min(24, openHour + 1);
       return {

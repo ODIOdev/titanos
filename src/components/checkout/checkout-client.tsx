@@ -124,7 +124,7 @@ export function CheckoutClient({
     } finally {
       setLoading(false);
     }
-  }, [cartPayload, profileDefaults?.email]);
+  }, [cartPayload, profileDefaults]);
 
   useEffect(() => {
     if (!isHydrated) return;
