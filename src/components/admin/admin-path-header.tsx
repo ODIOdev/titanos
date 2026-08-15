@@ -140,6 +140,12 @@ const TITLES: RouteMeta[] = [
   },
   { match: /^\/admin\/brands$/, title: "Brands", description: "Manufacturer catalog partners" },
   {
+    match: /^\/admin\/analytics\/traffic$/,
+    title: "Web analytics",
+    description: "Visitors, pages, and sources",
+    back: () => ({ href: "/admin/analytics", label: "Back to reports" }),
+  },
+  {
     match: /^\/admin\/analytics$/,
     title: "Analytics & reports",
     description: "Revenue pulse, category mix, and exports",

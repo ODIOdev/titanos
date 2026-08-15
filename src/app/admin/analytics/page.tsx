@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   ArrowUpRight,
   Download,
+  Globe,
   Package,
   ShoppingBag,
   Users,
@@ -132,6 +133,16 @@ export default async function AdminAnalyticsPage() {
           >
             <Wallet className="size-3.5" aria-hidden="true" />
             Wallet
+          </Link>
+          <Link
+            href="/admin/analytics/traffic"
+            className={cn(
+              buttonVariants({ variant: "outline", size: "sm" }),
+              "gap-1.5",
+            )}
+          >
+            <Globe className="size-3.5" aria-hidden="true" />
+            Web analytics
           </Link>
           <a
             href="/api/admin/products/export"

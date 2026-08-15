@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Oswald } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import { AppProviders } from "@/components/providers/app-providers";
 import { SitePreloader } from "@/components/layout/site-preloader";
 import { SITE_CONFIG } from "@/lib/data/seed-data";
@@ -80,6 +81,7 @@ export default function RootLayout({
         />
         <SitePreloader />
         <AppProviders>{children}</AppProviders>
+        <Analytics />
       </body>
     </html>
   );
