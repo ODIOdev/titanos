@@ -15,15 +15,15 @@ export function WebTrafficDeviceChart({ data }: { data: TrafficRanked[] }) {
 
   if (data.length === 0 || total === 0) {
     return (
-      <p className="px-4 py-10 text-center text-xs text-medium-gray">
+      <p className="px-3 py-8 text-center text-[11px] text-medium-gray @5xl:px-4 @5xl:py-10 @5xl:text-xs">
         Device mix appears after the first visits.
       </p>
     );
   }
 
   return (
-    <div className="flex items-center gap-4 px-4 py-4 @5xl:px-5">
-      <div className="relative h-[140px] w-[140px] shrink-0">
+    <div className="flex flex-col items-center gap-3 px-3 py-3 @5xl:flex-row @5xl:items-center @5xl:gap-4 @5xl:px-5 @5xl:py-4">
+      <div className="relative h-[108px] w-[108px] shrink-0 @5xl:h-[140px] @5xl:w-[140px]">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
             <Pie
@@ -32,8 +32,8 @@ export function WebTrafficDeviceChart({ data }: { data: TrafficRanked[] }) {
               nameKey="name"
               cx="50%"
               cy="50%"
-              innerRadius={42}
-              outerRadius={64}
+              innerRadius="62%"
+              outerRadius="92%"
               paddingAngle={chartData.length > 1 ? 2 : 0}
               stroke="none"
             >
@@ -55,7 +55,7 @@ export function WebTrafficDeviceChart({ data }: { data: TrafficRanked[] }) {
           </PieChart>
         </ResponsiveContainer>
       </div>
-      <ul className="min-w-0 flex-1 space-y-2">
+      <ul className="w-full min-w-0 flex-1 space-y-2">
         {data.map((row, index) => {
           const share = total > 0 ? Math.round((row.pageviews / total) * 100) : 0;
           return (

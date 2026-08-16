@@ -31,25 +31,27 @@ function RankedList({
 
   return (
     <section className="overflow-hidden rounded-sm border border-border-gray bg-white">
-      <div className="border-b border-border-gray px-4 py-3 @5xl:px-5">
-        <h2 className="font-heading text-sm font-semibold uppercase tracking-wide text-dark-charcoal">
+      <div className="border-b border-border-gray px-3 py-2.5 @5xl:px-5 @5xl:py-3">
+        <h2 className="font-heading text-xs font-semibold uppercase tracking-wide text-dark-charcoal @5xl:text-sm">
           {title}
         </h2>
-        <p className="text-xs text-medium-gray">{caption}</p>
+        <p className="text-[11px] text-medium-gray @5xl:text-xs">{caption}</p>
       </div>
       {rows.length === 0 ? (
-        <p className="px-4 py-10 text-center text-xs text-medium-gray">{empty}</p>
+        <p className="px-3 py-8 text-center text-[11px] text-medium-gray @5xl:px-4 @5xl:py-10 @5xl:text-xs">
+          {empty}
+        </p>
       ) : (
         <ul className="divide-y divide-border-gray">
           {rows.map((row) => (
-            <li key={row.label} className="px-4 py-3 @5xl:px-5">
-              <div className="mb-1.5 flex items-baseline justify-between gap-3">
-                <p className="min-w-0 truncate text-sm font-medium text-dark-charcoal">
+            <li key={row.label} className="px-3 py-2.5 @5xl:px-5 @5xl:py-3">
+              <div className="mb-1 flex items-baseline justify-between gap-2 @5xl:mb-1.5 @5xl:gap-3">
+                <p className="min-w-0 truncate text-[13px] font-medium text-dark-charcoal @5xl:text-sm">
                   {row.label}
                 </p>
-                <p className="shrink-0 text-sm font-semibold tabular-nums text-dark-charcoal">
+                <p className="shrink-0 text-[13px] font-semibold tabular-nums text-dark-charcoal @5xl:text-sm">
                   {formatTrafficCount(row.pageviews)}
-                  <span className="ml-1.5 text-[11px] font-medium text-medium-gray">
+                  <span className="ml-1 text-[10px] font-medium text-medium-gray @5xl:ml-1.5 @5xl:text-[11px]">
                     {share(row.pageviews, total)}%
                   </span>
                 </p>
@@ -75,11 +77,11 @@ export default async function AdminWebTrafficPage() {
   const hasTraffic = report.visitors > 0 || report.pageviews > 0;
 
   return (
-    <div className="space-y-5 @5xl:space-y-6">
+    <div className="min-w-0 space-y-3 overflow-x-hidden @5xl:space-y-6">
       {report.message ? (
         <p
           className={cn(
-            "rounded-sm border px-4 py-3 text-sm text-dark-charcoal",
+            "rounded-sm border px-3 py-2.5 text-[13px] leading-snug text-dark-charcoal @5xl:px-4 @5xl:py-3 @5xl:text-sm",
             report.source === "error"
               ? "border-orange-200 bg-orange-50"
               : "border-titan-yellow/40 bg-titan-yellow/10",
@@ -89,7 +91,7 @@ export default async function AdminWebTrafficPage() {
         </p>
       ) : null}
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <div className="hidden flex-wrap items-end justify-between gap-3 @5xl:flex">
         <div className="min-w-0 max-w-2xl">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-medium-gray">
             Storefront · {report.rangeLabel}
@@ -124,24 +126,28 @@ export default async function AdminWebTrafficPage() {
         </div>
       </div>
 
-      <section className="grid grid-cols-1 gap-3 @5xl:grid-cols-6">
-        <div className="relative overflow-hidden rounded-sm border-2 border-titan-yellow bg-dark-charcoal p-5 text-white shadow-[0_10px_28px_rgba(16,24,32,0.2)] @5xl:col-span-3 @5xl:p-6">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-medium-gray @5xl:hidden">
+        Storefront · {report.rangeLabel}
+      </p>
+
+      <section className="grid grid-cols-2 gap-2 @5xl:grid-cols-6 @5xl:gap-3">
+        <div className="relative col-span-2 overflow-hidden rounded-sm border-2 border-titan-yellow bg-dark-charcoal p-3.5 text-white shadow-[0_10px_28px_rgba(16,24,32,0.2)] @5xl:col-span-3 @5xl:p-6">
           <div
-            className="pointer-events-none absolute -right-10 -top-12 size-40 rounded-full bg-titan-yellow/20 blur-3xl"
+            className="pointer-events-none absolute -right-10 -top-12 size-28 rounded-full bg-titan-yellow/20 blur-3xl @5xl:size-40"
             aria-hidden="true"
           />
           <div className="relative flex items-start justify-between gap-3">
-            <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-titan-yellow">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-titan-yellow @5xl:text-[11px]">
               Visitors
             </p>
-            <span className="flex size-10 shrink-0 items-center justify-center rounded-sm bg-titan-yellow text-dark-charcoal">
-              <Globe className="size-5" aria-hidden="true" />
+            <span className="flex size-8 shrink-0 items-center justify-center rounded-sm bg-titan-yellow text-dark-charcoal @5xl:size-10">
+              <Globe className="size-4 @5xl:size-5" aria-hidden="true" />
             </span>
           </div>
-          <p className="relative mt-4 font-heading text-4xl font-bold tabular-nums tracking-tight text-white @5xl:text-5xl">
+          <p className="relative mt-2 font-heading text-3xl font-bold tabular-nums tracking-tight text-white @5xl:mt-4 @5xl:text-5xl">
             {formatTrafficCount(report.visitors)}
           </p>
-          <p className="relative mt-2 text-xs text-white/60">
+          <p className="relative mt-1 text-[11px] text-white/60 @5xl:mt-2 @5xl:text-xs">
             Unique people · {report.rangeLabel.toLowerCase()}
           </p>
         </div>
@@ -158,6 +164,7 @@ export default async function AdminWebTrafficPage() {
           hint="How deep people browse"
         />
         <StatTile
+          className="col-span-2 @5xl:col-span-1"
           label="Top source"
           value={report.sources[0]?.label ?? "—"}
           hint={
@@ -168,28 +175,34 @@ export default async function AdminWebTrafficPage() {
         />
       </section>
 
-      <section className="overflow-hidden rounded-sm border border-border-gray bg-white">
-        <div className="flex flex-wrap items-end justify-between gap-2 border-b border-border-gray px-4 py-3 @5xl:px-5">
-          <div>
-            <h2 className="font-heading text-sm font-semibold uppercase tracking-wide text-dark-charcoal">
+      <section className="min-w-0 overflow-hidden rounded-sm border border-border-gray bg-white">
+        <div className="flex items-end justify-between gap-2 border-b border-border-gray px-3 py-2.5 @5xl:px-5 @5xl:py-3">
+          <div className="min-w-0">
+            <h2 className="font-heading text-xs font-semibold uppercase tracking-wide text-dark-charcoal @5xl:text-sm">
               Traffic over time
             </h2>
-            <p className="text-xs text-medium-gray">
-              Charcoal is visitors · yellow is page views
+            <p className="text-[11px] text-medium-gray @5xl:text-xs">
+              <span className="@5xl:hidden">Visitors · views</span>
+              <span className="hidden @5xl:inline">
+                Charcoal is visitors · yellow is page views
+              </span>
             </p>
           </div>
-          <p className="text-xs tabular-nums text-medium-gray">
+          <p className="shrink-0 text-[11px] tabular-nums text-medium-gray @5xl:text-xs">
             {hasTraffic
               ? `${formatTrafficCount(report.pageviews)} views`
               : "No visits yet"}
           </p>
         </div>
-        <div className="px-2 py-3 @5xl:px-4 @5xl:py-4">
+        <div className="min-w-0 px-1 py-2 @5xl:hidden">
+          <WebTrafficChart data={report.series} height={176} compact />
+        </div>
+        <div className="hidden min-w-0 px-2 py-3 @5xl:block @5xl:px-4 @5xl:py-4">
           <WebTrafficChart data={report.series} />
         </div>
       </section>
 
-      <section className="grid gap-4 @5xl:grid-cols-2">
+      <section className="grid gap-3 @5xl:grid-cols-2 @5xl:gap-4">
         <RankedList
           title="Top pages"
           caption="Where people spend time"
@@ -204,13 +217,15 @@ export default async function AdminWebTrafficPage() {
         />
       </section>
 
-      <section className="grid gap-4 @5xl:grid-cols-2">
+      <section className="grid gap-3 @5xl:grid-cols-2 @5xl:gap-4">
         <div className="overflow-hidden rounded-sm border border-border-gray bg-white">
-          <div className="border-b border-border-gray px-4 py-3 @5xl:px-5">
-            <h2 className="font-heading text-sm font-semibold uppercase tracking-wide text-dark-charcoal">
+          <div className="border-b border-border-gray px-3 py-2.5 @5xl:px-5 @5xl:py-3">
+            <h2 className="font-heading text-xs font-semibold uppercase tracking-wide text-dark-charcoal @5xl:text-sm">
               Devices
             </h2>
-            <p className="text-xs text-medium-gray">Phone, desktop, tablet</p>
+            <p className="text-[11px] text-medium-gray @5xl:text-xs">
+              Phone, desktop, tablet
+            </p>
           </div>
           <WebTrafficDeviceChart data={report.devices} />
         </div>
@@ -229,20 +244,29 @@ function StatTile({
   label,
   value,
   hint,
+  className,
 }: {
   label: string;
   value: string;
   hint: string;
+  className?: string;
 }) {
   return (
-    <div className="rounded-sm border border-border-gray bg-white px-4 py-4 @5xl:px-5 @5xl:py-5">
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-medium-gray">
+    <div
+      className={cn(
+        "min-w-0 rounded-sm border border-border-gray bg-white px-3 py-2.5 @5xl:px-5 @5xl:py-5",
+        className,
+      )}
+    >
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-medium-gray @5xl:text-[11px]">
         {label}
       </p>
-      <p className="mt-3 truncate font-heading text-2xl font-semibold tabular-nums text-dark-charcoal @5xl:text-3xl">
+      <p className="mt-1.5 truncate font-heading text-lg font-semibold tabular-nums text-dark-charcoal @5xl:mt-3 @5xl:text-3xl">
         {value}
       </p>
-      <p className="mt-1 text-xs text-medium-gray">{hint}</p>
+      <p className="mt-0.5 truncate text-[11px] text-medium-gray @5xl:mt-1 @5xl:text-xs">
+        {hint}
+      </p>
     </div>
   );
 }
