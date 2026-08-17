@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
@@ -59,7 +59,7 @@ export function CookieConsentBanner() {
             working. With your permission, we also use analytics cookies to measure
             traffic. See our{" "}
             <Link
-              href="/privacy"
+              href="/privacy#cookies"
               className="text-white underline underline-offset-2 hover:text-titan-yellow"
             >
               Privacy Policy
@@ -92,11 +92,17 @@ export function CookieConsentBanner() {
   );
 }
 
-export function CookieSettingsButton({ className }: { className?: string }) {
+export function CookieSettingsButton({
+  className,
+  children = "Cookies",
+}: {
+  className?: string;
+  children?: ReactNode;
+}) {
   const { openPreferences } = useCookieConsent();
   return (
     <button type="button" className={className} onClick={openPreferences}>
-      Cookies
+      {children}
     </button>
   );
 }
