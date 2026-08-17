@@ -20,6 +20,7 @@
   --color-titan-yellow: var(--titan-yellow);
   --color-dark-charcoal: var(--dark-charcoal);
   --color-near-black: var(--near-black);
+  --color-white: var(--white);
   --color-light-gray: var(--light-gray);
   --color-muted-gray: var(--muted-gray);
   --color-medium-gray: var(--medium-gray);
@@ -40,6 +41,15 @@
   &::-webkit-scrollbar {
     display: none;
   }
+}
+
+/* Admin: slightly warmer paper so the dashboard isn’t a cold #fff. */
+.admin-shell {
+  --white: #f7f4ef;
+  --light-gray: #efebe4;
+  --muted-gray: #e6e0d6;
+  --border-gray: #e2dcd2;
+  --background: var(--white);
 }
 
 /* Dashboard on small screens: content still swipes, no scrollbar takes up space. */
