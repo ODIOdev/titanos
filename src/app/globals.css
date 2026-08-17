@@ -400,6 +400,33 @@
   left: calc(var(--support-chat-gutter) + var(--support-chat-inset));
 }
 
+.cookie-consent-banner {
+  --cookie-gutter: max(
+    0px,
+    calc((100vw - var(--storefront-shell-max, 80rem)) / 2)
+  );
+  left: var(--cookie-gutter);
+  right: var(--cookie-gutter);
+  bottom: 0;
+  padding-bottom: calc(
+    env(safe-area-inset-bottom, 0px) + var(--phone-safe-bottom, 0px)
+  );
+}
+
+html.cookie-banner-open .support-chat-launcher {
+  bottom: calc(
+    var(--cookie-banner-offset, 8.5rem) + 0.75rem +
+      var(--phone-safe-bottom, 0px) + env(safe-area-inset-bottom, 0px)
+  );
+}
+
+html.cookie-banner-open .support-chat-panel {
+  bottom: calc(
+    var(--cookie-banner-offset, 8.5rem) + 4.25rem +
+      var(--phone-safe-bottom, 0px) + env(safe-area-inset-bottom, 0px)
+  );
+}
+
 @media (min-width: 48rem) {
   .support-chat-launcher,
   .support-chat-panel {
@@ -561,6 +588,13 @@ html.phone-sim .support-chat-panel {
   --support-chat-gutter: 0px;
   max-width: 100%;
   right: var(--support-chat-inset, 0.75rem);
+}
+
+html.phone-sim .cookie-consent-banner {
+  --cookie-gutter: 0px;
+  left: 0;
+  right: 0;
+  max-width: 100%;
 }
 
 html.phone-sim .support-chat-panel {

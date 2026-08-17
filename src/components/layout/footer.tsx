@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import { CookieSettingsButton } from "@/components/layout/cookie-consent-banner";
 import { FooterBrandLink } from "@/components/layout/footer-brand-link";
 import { FooterMobileSection } from "@/components/layout/footer-mobile-section";
 import { PAYMENT_LOGOS } from "@/components/shared/payment-method-logos";
@@ -38,6 +39,7 @@ const FOOTER_COLUMNS = [
       { label: "Brands", href: "/brands" },
       { label: "Privacy", href: "/privacy" },
       { label: "Terms", href: "/terms" },
+      { label: "Cookies", href: "#cookies" },
     ],
   },
 ] as const;
@@ -132,9 +134,13 @@ function ColumnLinks({
     <ul className="space-y-2.5">
       {links.map((link) => (
         <li key={link.href}>
-          <Link href={link.href} className={linkClass}>
-            {link.label}
-          </Link>
+          {link.href === "#cookies" ? (
+            <CookieSettingsButton className={linkClass} />
+          ) : (
+            <Link href={link.href} className={linkClass}>
+              {link.label}
+            </Link>
+          )}
         </li>
       ))}
     </ul>

@@ -12,7 +12,7 @@ export default function PrivacyPage() {
       <h1 className="font-heading text-4xl uppercase tracking-wide text-dark-charcoal md:text-5xl">
         Privacy policy
       </h1>
-      <p className="mt-4 text-sm text-medium-gray">Last updated: July 30, 2026</p>
+      <p className="mt-4 text-sm text-medium-gray">Last updated: August 16, 2026</p>
 
       <div className="mt-10 space-y-8 text-sm leading-relaxed text-medium-gray">
         <section>
@@ -47,6 +47,29 @@ export default function PrivacyPage() {
             requests, improve our site, prevent fraud, and — with your consent — send
             product updates and promotional emails. You can unsubscribe at any time.
           </p>
+        </section>
+
+        <section>
+          <h2 className="font-heading text-2xl uppercase tracking-wide text-dark-charcoal">
+            Cookies
+          </h2>
+          <p className="mt-3">
+            We use cookies and similar storage to run the storefront. You can accept or
+            decline optional cookies from the prompt at the bottom of the site, or from
+            the Cookies link in the footer.
+          </p>
+          <ul className="mt-3 list-disc space-y-2 pl-5">
+            <li>
+              <span className="text-dark-charcoal">Necessary</span> — cart, sign-in
+              session, security, and cookie-preference cookies. These stay on so the
+              site can function.
+            </li>
+            <li>
+              <span className="text-dark-charcoal">Analytics</span> — Vercel Web
+              Analytics, used only after you tap Accept, to measure visits and page
+              views. Decline keeps the store working without this tracking.
+            </li>
+          </ul>
         </section>
 
         <section>
