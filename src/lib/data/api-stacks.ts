@@ -61,6 +61,113 @@ function parseGithubRemote(remote: string): { owner: string; repo: string } | nu
   return { owner: match[1]!, repo: match[2]! };
 }
 
+type GithubApiResponse = {
+  ok: boolean;
+  status: number;
+  latencyMs: number;
+  remaining: string | null;
+  limit: string | null;
+  json: Record<string, unknown> | null;
+};
+
+function isRetryableGithubError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  return (
+    err.name === "AbortError" ||
+    err.name === "TimeoutError" ||
+    /timeout|aborted|ECONNRESET|ETIMEDOUT|ENETUNREACH|EAI_AGAIN/i.test(
+      err.message,
+    )
+  );
+}
+
+function headerValue(value: string | string[] | undefined): string | null {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
+/** IPv4 GitHub GET that bypasses Next.js fetch (avoids patched-fetch / AAAA hangs). */
+function githubHttpsGet(
+  url: string,
+  headers: Record<string, string>,
+  timeoutMs: number,
+): Promise<GithubApiResponse> {
+  return new Promise((resolve, reject) => {
+    void (async () => {
+      try {
+        const https = await import("node:https");
+        const started = Date.now();
+        const parsed = new URL(url);
+        const req = https.request(
+          {
+            protocol: "https:",
+            hostname: parsed.hostname,
+            path: `${parsed.pathname}${parsed.search}`,
+            method: "GET",
+            family: 4,
+            headers,
+            timeout: timeoutMs,
+          },
+          (res) => {
+            const chunks: Buffer[] = [];
+            res.on("data", (chunk: Buffer) => {
+              chunks.push(chunk);
+            });
+            res.on("end", () => {
+              const raw = Buffer.concat(chunks).toString("utf8");
+              let json: Record<string, unknown> | null = null;
+              try {
+                json = raw ? (JSON.parse(raw) as Record<string, unknown>) : null;
+              } catch {
+                json = null;
+              }
+              const status = res.statusCode ?? 0;
+              resolve({
+                ok: status >= 200 && status < 300,
+                status,
+                latencyMs: Date.now() - started,
+                remaining: headerValue(res.headers["x-ratelimit-remaining"]),
+                limit: headerValue(res.headers["x-ratelimit-limit"]),
+                json,
+              });
+            });
+          },
+        );
+        req.on("timeout", () => {
+          req.destroy();
+          reject(new Error("The operation was aborted due to timeout"));
+        });
+        req.on("error", reject);
+        req.end();
+      } catch (err) {
+        reject(err);
+      }
+    })();
+  });
+}
+
+async function githubApiGet(
+  url: string,
+  headers: Record<string, string>,
+): Promise<GithubApiResponse> {
+  const timeoutMs = 10000;
+  const attempts = 2;
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      return await githubHttpsGet(url, headers, timeoutMs);
+    } catch (err) {
+      lastError = err;
+      if (!isRetryableGithubError(err) || attempt === attempts - 1) {
+        throw err;
+      }
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("GitHub API probe failed.");
+}
+
 async function resolveGithubRepoMeta(): Promise<{
   owner: string | null;
   repo: string | null;
@@ -344,11 +451,6 @@ const probes: ApiStackProbe[] = [
       const commit = meta.commit;
       const repoLabel =
         owner && repo ? `${owner}/${repo}` : owner || repo || "Not linked";
-      const headers: HeadersInit = {
-        Accept: "application/vnd.github+json",
-        "User-Agent": "titan-safety-admin-status",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      };
 
       if (!token && !owner && !repo) {
         return {
@@ -369,19 +471,18 @@ const probes: ApiStackProbe[] = [
       }
 
       try {
-        const started = Date.now();
         const endpoint =
           owner && repo
             ? `https://api.github.com/repos/${owner}/${repo}`
             : "https://api.github.com/rate_limit";
-        const response = await fetch(endpoint, {
-          headers,
-          cache: "no-store",
-          signal: AbortSignal.timeout(5000),
-        });
-        const latencyMs = Date.now() - started;
-        const remaining = response.headers.get("x-ratelimit-remaining");
-        const limit = response.headers.get("x-ratelimit-limit");
+        const headerMap: Record<string, string> = {
+          Accept: "application/vnd.github+json",
+          "User-Agent": "titan-safety-admin-status",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+        const response = await githubApiGet(endpoint, headerMap);
+        const remaining = response.remaining;
+        const limit = response.limit;
 
         if (!response.ok) {
           return {
@@ -394,7 +495,7 @@ const probes: ApiStackProbe[] = [
             metrics: [
               { label: "Repo", value: repoLabel },
               { label: "Token", value: token ? maskTail(token) : "Missing" },
-              { label: "Latency", value: `${latencyMs} ms` },
+              { label: "Latency", value: `${response.latencyMs} ms` },
             ],
             fixSteps: [
               token
@@ -406,7 +507,7 @@ const probes: ApiStackProbe[] = [
           };
         }
 
-        const body = (await response.json().catch(() => null)) as {
+        const body = response.json as {
           private?: boolean;
           default_branch?: string;
           rate?: { remaining?: number; limit?: number };
