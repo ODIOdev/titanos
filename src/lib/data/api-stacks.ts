@@ -331,6 +331,68 @@ async function resolveVercelProjectMeta(): Promise<{
   return { projectId: null, orgId: null, name: null, source: "none" };
 }
 
+function vercelPublicBaseUrls(): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const add = (raw?: string | null) => {
+    const value = raw?.trim();
+    if (!value) return;
+    const withProtocol = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+    try {
+      const parsed = new URL(withProtocol);
+      if (parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1") {
+        return;
+      }
+      const base = `${parsed.protocol}//${parsed.host}`;
+      if (seen.has(base)) return;
+      seen.add(base);
+      out.push(base);
+    } catch {
+      // Ignore unparsable candidates.
+    }
+  };
+
+  add(process.env.VERCEL_PROJECT_PRODUCTION_URL);
+  add(process.env.NEXT_PUBLIC_SITE_URL);
+  add("https://www.titansafetystore.com");
+  add("https://titanos-over-drive0s-projects.vercel.app");
+  return out;
+}
+
+async function probeVercelHost(url: string): Promise<{
+  ok: boolean;
+  status: number;
+  latencyMs: number;
+  isVercelHost: boolean;
+}> {
+  const started = Date.now();
+  const headers = { "User-Agent": "titan-safety-admin-status" };
+  let response = await fetch(url, {
+    method: "HEAD",
+    redirect: "follow",
+    cache: "no-store",
+    headers,
+    signal: AbortSignal.timeout(10000),
+  });
+  if (response.status === 405 || response.status === 501) {
+    response = await fetch(url, {
+      method: "GET",
+      redirect: "follow",
+      cache: "no-store",
+      headers,
+      signal: AbortSignal.timeout(10000),
+    });
+  }
+  const vercelId = response.headers.get("x-vercel-id");
+  const server = response.headers.get("server");
+  return {
+    ok: response.ok,
+    status: response.status,
+    latencyMs: Date.now() - started,
+    isVercelHost: Boolean(vercelId) || (server != null && /vercel/i.test(server)),
+  };
+}
+
 const probes: ApiStackProbe[] = [
   {
     id: "supabase",
@@ -591,10 +653,12 @@ const probes: ApiStackProbe[] = [
           const response = await fetch(endpoint, {
             headers: { Authorization: `Bearer ${token}` },
             cache: "no-store",
-            signal: AbortSignal.timeout(5000),
+            signal: AbortSignal.timeout(10000),
           });
           const latencyMs = Date.now() - started;
-          if (!response.ok) {
+          if (response.status === 401 || response.status === 403) {
+            // Stale or wrong-account token — prove the deployment instead.
+          } else if (!response.ok) {
             return {
               light: "yellow",
               statusLabel: "Problem",
@@ -610,131 +674,133 @@ const probes: ApiStackProbe[] = [
                 "Recheck this stack after credentials are updated.",
               ],
             };
+          } else {
+            const body = (await response.json().catch(() => null)) as {
+              name?: string;
+              accountId?: string;
+              targets?: { production?: { alias?: string[] } };
+              user?: { username?: string };
+            } | null;
+            const resolvedName = body?.name || project.name || projectLabel;
+            const productionAlias =
+              body?.targets?.production?.alias?.[0] ||
+              process.env.VERCEL_PROJECT_PRODUCTION_URL ||
+              null;
+
+            return {
+              light: "green",
+              statusLabel: "Active",
+              detail: project.projectId
+                ? `Vercel project ${resolvedName} reachable via API (${project.source}).`
+                : "Vercel API authenticated.",
+              metrics: [
+                { label: "Project", value: resolvedName },
+                {
+                  label: "Env",
+                  value: env ?? (onVercel ? "vercel" : "local"),
+                },
+                {
+                  label: "Host",
+                  value:
+                    hostFromUrl(productionAlias ?? undefined) ||
+                    hostFromUrl(url) ||
+                    "—",
+                },
+              ],
+            };
           }
-
-          const body = (await response.json().catch(() => null)) as {
-            name?: string;
-            accountId?: string;
-            targets?: { production?: { alias?: string[] } };
-            user?: { username?: string };
-          } | null;
-          const resolvedName = body?.name || project.name || projectLabel;
-          const productionAlias =
-            body?.targets?.production?.alias?.[0] ||
-            process.env.VERCEL_PROJECT_PRODUCTION_URL ||
-            null;
-
-          return {
-            light: "green",
-            statusLabel: "Active",
-            detail: project.projectId
-              ? `Vercel project ${resolvedName} reachable via API (${project.source}).`
-              : "Vercel API authenticated.",
-            metrics: [
-              { label: "Project", value: resolvedName },
-              {
-                label: "Env",
-                value: env ?? (onVercel ? "vercel" : "local"),
-              },
-              {
-                label: "Host",
-                value:
-                  hostFromUrl(productionAlias ?? undefined) ||
-                  hostFromUrl(url) ||
-                  "—",
-              },
-            ],
-          };
         } catch (err) {
-          return {
-            light: onVercel ? "yellow" : "red",
-            statusLabel: onVercel ? "Problem" : "Error",
-            detail:
-              err instanceof Error
-                ? err.message
-                : "Vercel API probe failed.",
-            metrics: [
-              { label: "Project", value: projectLabel },
-              { label: "Runtime", value: runtimeLabel },
-              { label: "Host", value: hostFromUrl(url) ?? "—" },
-            ],
-            fixSteps: [
-              "Check network access to api.vercel.com from this runtime.",
-              "Retry after connectivity is restored.",
-            ],
-          };
+          if (onVercel) {
+            return {
+              light: "yellow",
+              statusLabel: "Problem",
+              detail:
+                err instanceof Error
+                  ? err.message
+                  : "Vercel API probe failed.",
+              metrics: [
+                { label: "Project", value: projectLabel },
+                { label: "Runtime", value: runtimeLabel },
+                { label: "Host", value: hostFromUrl(url) ?? "—" },
+              ],
+              fixSteps: [
+                "Check network access to api.vercel.com from this runtime.",
+                "Retry after connectivity is restored.",
+              ],
+            };
+          }
+          // Local: ignore API transport errors and probe the live host.
         }
       }
 
-      // Local / no token: prove the configured production deployment is live.
-      const productionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL || null;
+      const productionUrls = vercelPublicBaseUrls();
+      let lastFailure: {
+        url: string;
+        status: number;
+        latencyMs: number;
+        isVercelHost: boolean;
+        error?: string;
+      } | null = null;
 
-      if (!onVercel && productionUrl) {
+      for (const productionUrl of productionUrls) {
         try {
-          const started = Date.now();
-          const response = await fetch(productionUrl, {
-            method: "HEAD",
-            redirect: "follow",
-            cache: "no-store",
-            signal: AbortSignal.timeout(5000),
-          });
-          const latencyMs = Date.now() - started;
-          const vercelId = response.headers.get("x-vercel-id");
-          const server = response.headers.get("server");
-          const isVercelHost =
-            Boolean(vercelId) ||
-            (server != null && /vercel/i.test(server));
-
-          if (response.ok && isVercelHost) {
+          const probed = await probeVercelHost(productionUrl);
+          if (probed.ok && probed.isVercelHost) {
             return {
               light: "green",
               statusLabel: "Active",
               detail: `Production deployment reachable at ${hostFromUrl(productionUrl)} (${project.source || "url"}).`,
               metrics: [
                 { label: "Project", value: projectLabel },
-                { label: "Runtime", value: "Local" },
-                { label: "Latency", value: `${latencyMs} ms` },
+                { label: "Runtime", value: runtimeLabel },
+                { label: "Latency", value: `${probed.latencyMs} ms` },
               ],
             };
           }
-
-          return {
-            light: "yellow",
-            statusLabel: "Problem",
-            detail: isVercelHost
-              ? `Production URL responded with ${response.status}.`
-              : "Production URL did not look like a Vercel deployment.",
-            metrics: [
-              { label: "Project", value: projectLabel },
-              { label: "Host", value: hostFromUrl(productionUrl) ?? "—" },
-              { label: "Latency", value: `${latencyMs} ms` },
-            ],
-            fixSteps: [
-              "Confirm the production deployment is Ready in the Vercel dashboard.",
-              "Set VERCEL_PROJECT_PRODUCTION_URL to your production alias if it differs from {project}.vercel.app.",
-              "Optionally add VERCEL_TOKEN for authenticated project API checks.",
-            ],
+          lastFailure = {
+            url: productionUrl,
+            status: probed.status,
+            latencyMs: probed.latencyMs,
+            isVercelHost: probed.isVercelHost,
           };
         } catch (err) {
-          return {
-            light: "yellow",
-            statusLabel: "Problem",
-            detail:
-              err instanceof Error
-                ? err.message
-                : "Could not reach the Vercel production URL.",
-            metrics: [
-              { label: "Project", value: projectLabel },
-              { label: "Host", value: hostFromUrl(productionUrl) ?? "—" },
-              { label: "Token", value: "Missing" },
-            ],
-            fixSteps: [
-              "Add VERCEL_TOKEN for API-level health checks while developing locally.",
-              "Set VERCEL_PROJECT_PRODUCTION_URL to your production deployment URL.",
-              "Confirm network access to the production host.",
-            ],
+          lastFailure = {
+            url: productionUrl,
+            status: 0,
+            latencyMs: 0,
+            isVercelHost: false,
+            error: err instanceof Error ? err.message : "request failed",
           };
         }
+      }
+
+      if (lastFailure) {
+        return {
+          light: "yellow",
+          statusLabel: "Problem",
+          detail: lastFailure.error
+            ? lastFailure.error
+            : lastFailure.isVercelHost
+              ? `Production URL responded with ${lastFailure.status}.`
+              : "Production URL did not look like a Vercel deployment.",
+          metrics: [
+            { label: "Project", value: projectLabel },
+            { label: "Host", value: hostFromUrl(lastFailure.url) ?? "—" },
+            {
+              label: lastFailure.error ? "Token" : "Latency",
+              value: lastFailure.error
+                ? token
+                  ? "Unauthorized"
+                  : "Missing"
+                : `${lastFailure.latencyMs} ms`,
+            },
+          ],
+          fixSteps: [
+            "Confirm the production deployment is Ready in the Vercel dashboard.",
+            "Set VERCEL_PROJECT_PRODUCTION_URL to your live alias (not an expired deployment URL).",
+            "Replace VERCEL_TOKEN if it is stale or belongs to another Vercel account.",
+          ],
+        };
       }
 
       if (onVercel || env) {
