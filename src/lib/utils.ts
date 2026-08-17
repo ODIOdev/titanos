@@ -40,8 +40,17 @@ export function slugify(text: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+const PRODUCTION_SITE_URL = "https://www.titansafetystore.com";
+
 export function absoluteUrl(path = ""): string {
-  const base = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+  const configured = process.env.NEXT_PUBLIC_SITE_URL?.trim() ?? "";
+  const host = configured.replace(/^https?:\/\//, "").split("/")[0]?.toLowerCase() ?? "";
+  const staleProductionHost =
+    process.env.VERCEL_ENV === "production" &&
+    (!host || host.includes("localhost") || host.endsWith(".vercel.app"));
+  const base = staleProductionHost
+    ? PRODUCTION_SITE_URL
+    : configured || "http://localhost:3000";
   return `${base.replace(/\/$/, "")}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
