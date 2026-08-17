@@ -15,6 +15,7 @@ import {
   parseProductTags,
   sortCatalogSizes,
   sortDepartmentNames,
+  applyDepartmentOrder,
   toDepartmentOption,
   type CatalogOption,
   type DepartmentOption,
@@ -233,6 +234,8 @@ let demoPrimaryCatalogDepartments: string[] = [...DEFAULT_PRIMARY_DEPARTMENTS];
 let demoOfflineCatalogDepartments: string[] = [];
 /** Built-in / custom departments removed from the catalog in demo mode. */
 let demoRemovedCatalogDepartments: string[] = [];
+/** Manual display order for the departments table / shop rail (demo). */
+let demoCatalogDepartmentOrder: string[] = [];
 
 export function getDemoCatalogDepartments(): string[] {
   return [...demoCatalogDepartments];
@@ -264,6 +267,14 @@ export function getDemoRemovedCatalogDepartments(): string[] {
 
 export function setDemoRemovedCatalogDepartments(departments: string[]) {
   demoRemovedCatalogDepartments = sortDepartmentNames(departments);
+}
+
+export function getDemoCatalogDepartmentOrder(): string[] {
+  return [...demoCatalogDepartmentOrder];
+}
+
+export function setDemoCatalogDepartmentOrder(departments: string[]) {
+  demoCatalogDepartmentOrder = [...departments];
 }
 
 /** In-memory category SKU prefix overrides for demo mode (no Supabase). */
@@ -2756,6 +2767,29 @@ async function getRemovedCatalogDepartments(): Promise<string[]> {
   return getDemoRemovedCatalogDepartments();
 }
 
+async function getStoredCatalogDepartmentOrder(): Promise<string[]> {
+  if (isSupabaseConfigured()) {
+    try {
+      const { createClient } = await import("@/lib/supabase/server");
+      const supabase = await createClient();
+      const { data } = await supabase
+        .from("site_settings")
+        .select("value")
+        .eq("key", "catalog_department_order")
+        .maybeSingle();
+      const value = data?.value as { departments?: unknown } | null;
+      if (Array.isArray(value?.departments)) {
+        return value.departments
+          .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+          .map((d) => d.trim());
+      }
+    } catch {
+      // Fall through
+    }
+  }
+  return getDemoCatalogDepartmentOrder();
+}
+
 /**
  * Department options for the product form and shop filters —
  * canonical + admin-added + departments already in use on products.
@@ -2764,14 +2798,21 @@ async function getRemovedCatalogDepartments(): Promise<string[]> {
 export async function getCatalogDepartmentOptions(opts?: {
   liveOnly?: boolean;
 }): Promise<DepartmentOption[]> {
-  const [products, customDepartments, primaryDepartments, offlineDepartments, removed] =
-    await Promise.all([
-      getAdminProducts({ active: "all" }),
-      getStoredCatalogDepartments(),
-      getStoredPrimaryCatalogDepartments(),
-      getStoredOfflineCatalogDepartments(),
-      getRemovedCatalogDepartments(),
-    ]);
+  const [
+    products,
+    customDepartments,
+    primaryDepartments,
+    offlineDepartments,
+    removed,
+    order,
+  ] = await Promise.all([
+    getAdminProducts({ active: "all" }),
+    getStoredCatalogDepartments(),
+    getStoredPrimaryCatalogDepartments(),
+    getStoredOfflineCatalogDepartments(),
+    getRemovedCatalogDepartments(),
+    getStoredCatalogDepartmentOrder(),
+  ]);
   const removedKeys = new Set(removed.map((d) => d.toLowerCase()));
   const offlineKeys = new Set(offlineDepartments.map((d) => d.toLowerCase()));
 
@@ -2795,21 +2836,26 @@ export async function getCatalogDepartmentOptions(opts?: {
     if (opts?.liveOnly && offlineKeys.has(key)) continue;
     merged.set(key, toDepartmentOption(name));
   }
-  return Array.from(merged.values()).sort((a, b) =>
-    a.label.localeCompare(b.label),
-  );
+  return applyDepartmentOrder(Array.from(merged.values()), order, (item) => item.label);
 }
 
 /** Department management rows for the Categories page. */
 export async function getAdminDepartments(): Promise<AdminDepartment[]> {
-  const [products, customDepartments, primaryDepartments, offlineDepartments, removed] =
-    await Promise.all([
-      getAdminProducts({ active: "all" }),
-      getStoredCatalogDepartments(),
-      getStoredPrimaryCatalogDepartments(),
-      getStoredOfflineCatalogDepartments(),
-      getRemovedCatalogDepartments(),
-    ]);
+  const [
+    products,
+    customDepartments,
+    primaryDepartments,
+    offlineDepartments,
+    removed,
+    order,
+  ] = await Promise.all([
+    getAdminProducts({ active: "all" }),
+    getStoredCatalogDepartments(),
+    getStoredPrimaryCatalogDepartments(),
+    getStoredOfflineCatalogDepartments(),
+    getRemovedCatalogDepartments(),
+    getStoredCatalogDepartmentOrder(),
+  ]);
   const removedKeys = new Set(removed.map((d) => d.toLowerCase()));
   const offlineKeys = new Set(offlineDepartments.map((d) => d.toLowerCase()));
 
@@ -2863,8 +2909,8 @@ export async function getAdminDepartments(): Promise<AdminDepartment[]> {
     names.set(key, toDepartmentOption(department));
   }
 
-  return Array.from(names.entries())
-    .map(([key, option]) => {
+  return applyDepartmentOrder(
+    Array.from(names.entries()).map(([key, option]) => {
       let source: AdminDepartment["source"] = "product";
       if (offlineKeys.has(key) || offline.has(key)) source = "offline";
       else if (canonical.has(key)) source = "catalog";
@@ -2875,8 +2921,10 @@ export async function getAdminDepartments(): Promise<AdminDepartment[]> {
         productCount: counts.get(key) ?? 0,
         source,
       };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
+    }),
+    order,
+    (department) => department.name,
+  );
 }
 
 /** Every size a product already uses, from the size field and the variant matrix. */

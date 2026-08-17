@@ -2,17 +2,23 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Trash2 } from "lucide-react";
+import { GripVertical, Pencil, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   deleteCatalogDepartment,
   renameCatalogDepartment,
+  reorderCatalogDepartments,
 } from "@/lib/actions/admin";
 import type { AdminDepartment } from "@/lib/data/admin";
+import {
+  applyDepartmentOrder,
+  moveDepartmentName,
+} from "@/lib/data/catalog-options";
 import { AddDepartmentButton } from "@/components/admin/add-department-button";
 import { Badge } from "@/components/ui/badge";
 import { LoadMoreDataTable } from "@/components/admin/load-more-data-table";
 import { ConfirmDeleteDialog } from "@/components/admin/confirm-delete-dialog";
+import { cn } from "@/lib/utils";
 
 type DepartmentsManagementCardProps = {
   departments: AdminDepartment[];
@@ -59,6 +65,33 @@ export function DepartmentsManagementCard({
   const [pending, startTransition] = useTransition();
 
   const [mobileVisible, setMobileVisible] = useState(8);
+  const [localOrder, setLocalOrder] = useState<string[] | null>(null);
+  const [mobileDrag, setMobileDrag] = useState<number | null>(null);
+  const [mobileOver, setMobileOver] = useState<number | null>(null);
+
+  const ordered = applyDepartmentOrder(
+    departments,
+    localOrder ?? departments.map((department) => department.name),
+    (department) => department.name,
+  );
+
+  function handleReorder(fromIndex: number, toIndex: number) {
+    const names = moveDepartmentName(
+      ordered.map((department) => department.name),
+      fromIndex,
+      toIndex,
+    );
+    setLocalOrder(names);
+    startTransition(async () => {
+      const result = await reorderCatalogDepartments(names);
+      if (!result.success) {
+        toast.error(result.message);
+        setLocalOrder(null);
+        return;
+      }
+      router.refresh();
+    });
+  }
 
   function startEdit(department: AdminDepartment) {
     setEditing(department.name);
@@ -129,8 +162,47 @@ export function DepartmentsManagementCard({
           </p>
         ) : (
           <ul className="divide-y divide-border-gray">
-            {departments.slice(0, mobileVisible).map((department) => (
-              <li key={department.slug} className="px-3 py-3">
+            {ordered.slice(0, mobileVisible).map((department, index) => (
+              <li
+                key={department.slug}
+                draggable={editing !== department.name}
+                onDragStart={(event) => {
+                  if (editing === department.name) {
+                    event.preventDefault();
+                    return;
+                  }
+                  event.dataTransfer.effectAllowed = "move";
+                  event.dataTransfer.setData("text/plain", String(index));
+                  setMobileDrag(index);
+                  setMobileOver(index);
+                }}
+                onDragOver={(event) => {
+                  if (mobileDrag == null) return;
+                  event.preventDefault();
+                  if (mobileOver !== index) setMobileOver(index);
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  if (mobileDrag != null && mobileDrag !== index) {
+                    handleReorder(mobileDrag, index);
+                  }
+                  setMobileDrag(null);
+                  setMobileOver(null);
+                }}
+                onDragEnd={() => {
+                  setMobileDrag(null);
+                  setMobileOver(null);
+                }}
+                className={cn(
+                  "px-3 py-3",
+                  editing !== department.name && "cursor-grab active:cursor-grabbing",
+                  mobileDrag === index && "opacity-50",
+                  mobileOver === index &&
+                    mobileDrag != null &&
+                    mobileDrag !== index &&
+                    "bg-titan-yellow/15",
+                )}
+              >
                 {editing === department.name ? (
                   <form
                     className="space-y-2.5"
@@ -181,13 +253,19 @@ export function DepartmentsManagementCard({
                 ) : (
                   <div className="space-y-2">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-dark-charcoal">
-                          {department.name}
-                        </p>
-                        <p className="truncate text-[0.65rem] text-medium-gray">
-                          {department.slug} · {department.productCount} products
-                        </p>
+                      <div className="flex min-w-0 items-start gap-2">
+                        <GripVertical
+                          className="mt-0.5 size-4 shrink-0 text-medium-gray"
+                          aria-hidden="true"
+                        />
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-dark-charcoal">
+                            {department.name}
+                          </p>
+                          <p className="truncate text-[0.65rem] text-medium-gray">
+                            {department.slug} · {department.productCount} products
+                          </p>
+                        </div>
                       </div>
                       <Badge
                         variant={sourceBadgeVariant(department.source)}
@@ -222,14 +300,14 @@ export function DepartmentsManagementCard({
             ))}
           </ul>
         )}
-        {departments.length > mobileVisible ? (
+        {ordered.length > mobileVisible ? (
           <div className="border-t border-border-gray px-3 py-3">
             <button
               type="button"
               onClick={() => setMobileVisible((count) => count + 8)}
               className="h-9 w-full rounded-sm border border-border-gray text-xs font-semibold uppercase tracking-wide text-dark-charcoal"
             >
-              Load more · {departments.length - mobileVisible}
+              Load more · {ordered.length - mobileVisible}
             </button>
           </div>
         ) : null}
@@ -239,6 +317,11 @@ export function DepartmentsManagementCard({
         <LoadMoreDataTable
           className="rounded-none border-0"
           compact
+          reorderable
+          onReorder={handleReorder}
+          rowDragDisabled={ordered.map(
+            (department) => editing === department.name,
+          )}
           columns={[
             { key: "name", header: "Name", className: "w-[42%]" },
             { key: "products", header: "Products", className: "w-[14%]" },
@@ -246,7 +329,7 @@ export function DepartmentsManagementCard({
             { key: "actions", header: "Actions", className: "w-[24%] text-right" },
           ]}
           emptyMessage="No departments yet. Add one to organize the catalog."
-          rows={departments.map((department) => [
+          rows={ordered.map((department) => [
             editing === department.name ? (
               <form
                 key={`${department.name}-edit`}

@@ -20,6 +20,9 @@ type LoadMoreDataTableProps = {
   /** Rows shown before the first Load more click. */
   pageSize?: number;
   rowHrefs?: (string | null | undefined)[];
+  reorderable?: boolean;
+  onReorder?: (fromIndex: number, toIndex: number) => void;
+  rowDragDisabled?: boolean[];
 };
 
 /** DataTable that reveals `pageSize` rows at a time on the same page. */
@@ -31,6 +34,9 @@ export function LoadMoreDataTable({
   compact,
   pageSize = DEFAULT_PAGE_SIZE,
   rowHrefs,
+  reorderable,
+  onReorder,
+  rowDragDisabled,
 }: LoadMoreDataTableProps) {
   const router = useRouter();
   const [visibleCount, setVisibleCount] = useState(pageSize);
@@ -48,6 +54,9 @@ export function LoadMoreDataTable({
         compact={compact}
         rowHrefs={shownHrefs}
         onRowNavigate={(href) => router.push(href)}
+        reorderable={reorderable}
+        onReorder={onReorder}
+        rowDragDisabled={rowDragDisabled?.slice(0, visibleCount)}
       />
       {remaining > 0 ? (
         <div className="border-t border-border-gray px-4 py-3 sm:px-5">

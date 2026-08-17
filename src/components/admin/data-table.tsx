@@ -1,6 +1,7 @@
 "use client";
 
-import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
+import { useState, type DragEvent, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type DataTableColumn = {
@@ -27,6 +28,11 @@ type DataTableProps = {
   onRowNavigate?: (href: string) => void;
   /** Click/keyboard activate a row (outside interactive controls). */
   onRowActivate?: (rowIndex: number) => void;
+  /** Drag rows to reorder. Indices match `rows`. */
+  reorderable?: boolean;
+  onReorder?: (fromIndex: number, toIndex: number) => void;
+  /** Skip drag on specific rows (e.g. while inline-editing). */
+  rowDragDisabled?: boolean[];
   /** Optional summary row under the body (same column count as `columns`). */
   footer?: ReactNode[] | null;
 };
@@ -50,9 +56,14 @@ export function DataTable({
   rowHrefs,
   onRowNavigate,
   onRowActivate,
+  reorderable = false,
+  onReorder,
+  rowDragDisabled,
   footer = null,
 }: DataTableProps) {
   const lockWidth = compact || noHorizontalScroll;
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
 
   function navigate(href: string) {
     if (onRowNavigate) {
@@ -91,6 +102,51 @@ export function DataTable({
     activateRow(rowIndex);
   }
 
+  function canDragRow(rowIndex: number) {
+    return Boolean(reorderable && onReorder && !rowDragDisabled?.[rowIndex]);
+  }
+
+  function handleDragStart(
+    event: DragEvent<HTMLTableRowElement>,
+    rowIndex: number,
+  ) {
+    if (!canDragRow(rowIndex) || isInteractiveTarget(event.target)) {
+      event.preventDefault();
+      return;
+    }
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", String(rowIndex));
+    setDraggingIndex(rowIndex);
+    setOverIndex(rowIndex);
+  }
+
+  function handleDragOver(
+    event: DragEvent<HTMLTableRowElement>,
+    rowIndex: number,
+  ) {
+    if (draggingIndex == null || !canDragRow(rowIndex)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    if (overIndex !== rowIndex) setOverIndex(rowIndex);
+  }
+
+  function handleDrop(event: DragEvent<HTMLTableRowElement>, rowIndex: number) {
+    event.preventDefault();
+    if (draggingIndex == null || draggingIndex === rowIndex || !onReorder) {
+      setDraggingIndex(null);
+      setOverIndex(null);
+      return;
+    }
+    onReorder(draggingIndex, rowIndex);
+    setDraggingIndex(null);
+    setOverIndex(null);
+  }
+
+  function handleDragEnd() {
+    setDraggingIndex(null);
+    setOverIndex(null);
+  }
+
   return (
     <div
       className={cn(
@@ -113,6 +169,16 @@ export function DataTable({
         >
           <thead>
             <tr className="border-b border-border-gray bg-light-gray">
+              {reorderable ? (
+                <th
+                  className={cn(
+                    "w-8 font-heading text-xs font-semibold uppercase tracking-wide text-dark-charcoal",
+                    compact ? "px-1.5 py-2.5" : "px-2 py-3",
+                  )}
+                >
+                  <span className="sr-only">Reorder</span>
+                </th>
+              ) : null}
               {columns.map((col) => (
                 <th
                   key={col.key}
@@ -132,7 +198,7 @@ export function DataTable({
             {rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={columns.length}
+                  colSpan={columns.length + (reorderable ? 1 : 0)}
                   className={cn(
                     "text-center text-medium-gray",
                     compact ? "px-2.5 py-8 sm:px-3" : "px-4 py-10",
@@ -146,12 +212,37 @@ export function DataTable({
                 const clickable = Boolean(
                   onRowActivate || rowHrefs?.[rowIndex],
                 );
+                const draggable = canDragRow(rowIndex);
                 return (
                   <tr
                     key={rowIndex}
+                    draggable={draggable}
+                    onDragStart={
+                      draggable
+                        ? (event) => handleDragStart(event, rowIndex)
+                        : undefined
+                    }
+                    onDragOver={
+                      reorderable
+                        ? (event) => handleDragOver(event, rowIndex)
+                        : undefined
+                    }
+                    onDrop={
+                      reorderable
+                        ? (event) => handleDrop(event, rowIndex)
+                        : undefined
+                    }
+                    onDragEnd={reorderable ? handleDragEnd : undefined}
+                    aria-grabbed={draggingIndex === rowIndex}
                     className={cn(
                       "border-b border-border-gray last:border-0 hover:bg-light-gray/60",
                       clickable && "cursor-pointer",
+                      draggable && "cursor-grab active:cursor-grabbing",
+                      draggingIndex === rowIndex && "opacity-50",
+                      overIndex === rowIndex &&
+                        draggingIndex != null &&
+                        draggingIndex !== rowIndex &&
+                        "bg-titan-yellow/15",
                     )}
                     tabIndex={clickable ? 0 : undefined}
                     onClick={
@@ -165,6 +256,22 @@ export function DataTable({
                         : undefined
                     }
                   >
+                    {reorderable ? (
+                      <td
+                        className={cn(
+                          "align-middle text-medium-gray",
+                          compact ? "px-1.5 py-2.5" : "px-2 py-3",
+                        )}
+                      >
+                        <GripVertical
+                          className={cn(
+                            "size-4",
+                            draggable ? "text-medium-gray" : "opacity-30",
+                          )}
+                          aria-hidden="true"
+                        />
+                      </td>
+                    ) : null}
                     {cells.map((cell, cellIndex) => (
                       <td
                         key={cellIndex}
@@ -191,6 +298,13 @@ export function DataTable({
           {footer && footer.length > 0 && rows.length > 0 ? (
             <tfoot>
               <tr className="border-t-2 border-border-gray bg-light-gray/80">
+                {reorderable ? (
+                  <td
+                    className={cn(
+                      compact ? "px-1.5 py-2.5" : "px-2 py-3",
+                    )}
+                  />
+                ) : null}
                 {footer.map((cell, cellIndex) => (
                   <td
                     key={`footer-${cellIndex}`}

@@ -2628,6 +2628,8 @@ export async function addCatalogDepartment(
         setDemoOfflineCatalogDepartments,
         getDemoRemovedCatalogDepartments,
         setDemoRemovedCatalogDepartments,
+        getDemoCatalogDepartmentOrder,
+        setDemoCatalogDepartmentOrder,
       } = await import("@/lib/data/admin");
       setDemoRemovedCatalogDepartments(
         getDemoRemovedCatalogDepartments().filter(
@@ -2648,6 +2650,11 @@ export async function addCatalogDepartment(
       if (exists) {
         // Restoring a previously removed built-in is enough.
         if (isCanonical) {
+          setDemoCatalogDepartmentOrder(
+            patchDepartmentOrder(getDemoCatalogDepartmentOrder(), {
+              append: trimmed,
+            }),
+          );
           revalidatePath("/admin/categories");
           revalidatePath("/admin/products");
           revalidatePath("/shop");
@@ -2665,6 +2672,11 @@ export async function addCatalogDepartment(
       } else {
         setDemoCatalogDepartments([...custom, trimmed]);
       }
+      setDemoCatalogDepartmentOrder(
+        patchDepartmentOrder(getDemoCatalogDepartmentOrder(), {
+          append: trimmed,
+        }),
+      );
       revalidatePath("/admin/categories");
       revalidatePath("/admin/products");
       revalidatePath("/shop");
@@ -2768,6 +2780,13 @@ export async function addCatalogDepartment(
     );
     if (error) throw error;
 
+    await saveDepartmentOrder(
+      supabase,
+      patchDepartmentOrder(await loadDepartmentOrder(supabase), {
+        append: trimmed,
+      }),
+    );
+
     revalidatePath("/admin/categories");
     revalidatePath("/admin/products");
     revalidatePath("/shop");
@@ -2825,6 +2844,8 @@ export async function renameCatalogDepartment(
         setDemoOfflineCatalogDepartments,
         getDemoRemovedCatalogDepartments,
         setDemoRemovedCatalogDepartments,
+        getDemoCatalogDepartmentOrder,
+        setDemoCatalogDepartmentOrder,
       } = await import("@/lib/data/admin");
 
       setDemoRemovedCatalogDepartments(
@@ -2866,6 +2887,12 @@ export async function renameCatalogDepartment(
       setDemoCatalogDepartments(custom);
       setDemoPrimaryCatalogDepartments(primary);
       setDemoOfflineCatalogDepartments(offline);
+      setDemoCatalogDepartmentOrder(
+        patchDepartmentOrder(getDemoCatalogDepartmentOrder(), {
+          rename: { from, to },
+          append: to,
+        }),
+      );
       revalidatePath("/admin/categories");
       revalidatePath("/admin/products");
       revalidatePath("/shop");
@@ -2982,6 +3009,14 @@ export async function renameCatalogDepartment(
       await remapProductDepartments(supabase, from, to);
     }
 
+    await saveDepartmentOrder(
+      supabase,
+      patchDepartmentOrder(await loadDepartmentOrder(supabase), {
+        rename: { from, to },
+        append: to,
+      }),
+    );
+
     revalidatePath("/admin/categories");
     revalidatePath("/admin/products");
     revalidatePath("/shop");
@@ -3022,6 +3057,8 @@ export async function deleteCatalogDepartment(
         setDemoOfflineCatalogDepartments,
         getDemoRemovedCatalogDepartments,
         setDemoRemovedCatalogDepartments,
+        getDemoCatalogDepartmentOrder,
+        setDemoCatalogDepartmentOrder,
       } = await import("@/lib/data/admin");
       setDemoCatalogDepartments(
         getDemoCatalogDepartments().filter(
@@ -3042,6 +3079,11 @@ export async function deleteCatalogDepartment(
       if (!removed.some((d) => d.toLowerCase() === trimmed.toLowerCase())) {
         setDemoRemovedCatalogDepartments([...removed, trimmed]);
       }
+      setDemoCatalogDepartmentOrder(
+        patchDepartmentOrder(getDemoCatalogDepartmentOrder(), {
+          remove: trimmed,
+        }),
+      );
       revalidatePath("/admin/categories");
       revalidatePath("/admin/products");
       revalidatePath("/shop");
@@ -3159,6 +3201,13 @@ export async function deleteCatalogDepartment(
 
     await remapProductDepartments(supabase, trimmed, null);
 
+    await saveDepartmentOrder(
+      supabase,
+      patchDepartmentOrder(await loadDepartmentOrder(supabase), {
+        remove: trimmed,
+      }),
+    );
+
     revalidatePath("/admin/categories");
     revalidatePath("/admin/products");
     revalidatePath("/shop");
@@ -3171,6 +3220,115 @@ export async function deleteCatalogDepartment(
       success: false,
       message:
         err instanceof Error ? err.message : "Failed to remove department.",
+    };
+  }
+}
+
+const DEPARTMENT_ORDER_KEY = "catalog_department_order";
+
+function readDepartmentNameList(value: unknown): string[] {
+  const record = value as { departments?: unknown } | null;
+  if (!Array.isArray(record?.departments)) return [];
+  return record.departments
+    .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+    .map((d) => d.trim());
+}
+
+function patchDepartmentOrder(
+  current: string[],
+  patch: {
+    append?: string;
+    remove?: string;
+    rename?: { from: string; to: string };
+  },
+): string[] {
+  let next = [...current];
+  if (patch.remove) {
+    const key = patch.remove.toLowerCase();
+    next = next.filter((name) => name.toLowerCase() !== key);
+  }
+  if (patch.rename) {
+    const from = patch.rename.from.toLowerCase();
+    next = next.map((name) =>
+      name.toLowerCase() === from ? patch.rename!.to : name,
+    );
+  }
+  if (patch.append) {
+    const key = patch.append.toLowerCase();
+    if (!next.some((name) => name.toLowerCase() === key)) {
+      next.push(patch.append);
+    }
+  }
+  return next;
+}
+
+async function loadDepartmentOrder(
+  supabase: Awaited<
+    ReturnType<typeof import("@/lib/supabase/admin").createServiceClient>
+  >,
+): Promise<string[]> {
+  const { data } = await supabase
+    .from("site_settings")
+    .select("value")
+    .eq("key", DEPARTMENT_ORDER_KEY)
+    .maybeSingle();
+  return readDepartmentNameList(data?.value);
+}
+
+async function saveDepartmentOrder(
+  supabase: Awaited<
+    ReturnType<typeof import("@/lib/supabase/admin").createServiceClient>
+  >,
+  departments: string[],
+): Promise<void> {
+  const { error } = await supabase.from("site_settings").upsert(
+    { key: DEPARTMENT_ORDER_KEY, value: { departments } },
+    { onConflict: "key" },
+  );
+  if (error) throw error;
+}
+
+/** Persists the departments table / shop-rail display order. */
+export async function reorderCatalogDepartments(
+  orderedNames: string[],
+): Promise<ActionResult> {
+  const names = orderedNames
+    .filter((name): name is string => typeof name === "string")
+    .map((name) => name.trim())
+    .filter(Boolean);
+  if (names.length === 0) {
+    return { success: false, message: "Department order is empty." };
+  }
+
+  const auth = await requireAdmin();
+  if (!auth.ok) {
+    if (!isSupabaseConfigured()) {
+      const { setDemoCatalogDepartmentOrder } = await import("@/lib/data/admin");
+      setDemoCatalogDepartmentOrder(names);
+      revalidatePath("/admin/categories");
+      revalidatePath("/admin/products");
+      revalidatePath("/shop");
+      return {
+        success: true,
+        message: "Department order saved (demo). Connect Supabase to persist.",
+      };
+    }
+    return auth.result;
+  }
+
+  try {
+    const { createServiceClient } = await import("@/lib/supabase/admin");
+    const supabase = createServiceClient();
+    await saveDepartmentOrder(supabase, names);
+    revalidatePath("/admin/categories");
+    revalidatePath("/admin/products");
+    revalidatePath("/shop");
+    return { success: true, message: "Department order saved." };
+  } catch (err) {
+    return {
+      success: false,
+      message:
+        err instanceof Error ? err.message : "Failed to save department order.",
     };
   }
 }

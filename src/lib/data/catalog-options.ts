@@ -104,6 +104,53 @@ export function sortDepartmentNames(names: string[]): string[] {
   );
 }
 
+/** Apply a saved display order; unknown names stay at the end, A–Z. */
+export function applyDepartmentOrder<T>(
+  items: T[],
+  order: string[],
+  nameOf: (item: T) => string,
+): T[] {
+  if (order.length === 0) {
+    return [...items].sort((a, b) =>
+      nameOf(a).localeCompare(nameOf(b), undefined, { sensitivity: "base" }),
+    );
+  }
+  const rank = new Map(order.map((name, index) => [name.toLowerCase(), index]));
+  return [...items].sort((a, b) => {
+    const left = rank.get(nameOf(a).toLowerCase());
+    const right = rank.get(nameOf(b).toLowerCase());
+    if (left == null && right == null) {
+      return nameOf(a).localeCompare(nameOf(b), undefined, {
+        sensitivity: "base",
+      });
+    }
+    if (left == null) return 1;
+    if (right == null) return -1;
+    return left - right;
+  });
+}
+
+export function moveDepartmentName(
+  names: string[],
+  fromIndex: number,
+  toIndex: number,
+): string[] {
+  if (
+    fromIndex === toIndex ||
+    fromIndex < 0 ||
+    toIndex < 0 ||
+    fromIndex >= names.length ||
+    toIndex >= names.length
+  ) {
+    return [...names];
+  }
+  const next = [...names];
+  const [moved] = next.splice(fromIndex, 1);
+  if (moved == null) return names;
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
 /** Resolve a URL/query param (slug or display value) to the canonical department value. */
 export function resolveDepartmentParam(
   param: string | null | undefined,
